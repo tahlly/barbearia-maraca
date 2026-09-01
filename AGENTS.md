@@ -43,15 +43,16 @@ Na criacao deste manual, o repositorio possui somente um esqueleto:
 - `frontend/src/main.ts`
 - `frontend/public/assets/`
 - `backend/src/server.ts`
-- `backend/prisma/schema.prisma`
-- `backend/prisma/migrations/`
+- `backend/src/knexfile.ts`
+- `backend/migrations/`
+- `backend/seeds/`
 - `shared/types/index.ts`
 - `.env.example`, `docker-compose.yml` e `README.md`
 
 Os arquivos estao vazios e nao existem manifests, dependencias, testes ou comandos de build configurados. A presenca de um caminho nao confirma uma tecnologia completamente adotada. Em particular:
 
 - Node.js e TypeScript sao obrigatorios, mas framework HTTP e gerenciador de pacotes ainda nao estao definidos.
-- O caminho `backend/prisma/` indica intencao de uso, mas provider, versao e politica de migrations ainda precisam de confirmacao/configuracao.
+- Os caminhos `backend/src/knexfile.ts`, `backend/migrations/` e `backend/seeds/` confirmam o uso de Knex; configuracao e migrations devem seguir o estado real do repositorio.
 - O PRD permite PostgreSQL, MySQL ou SQLite; nenhum deles esta confirmado pelo codigo atual.
 - Estrategia de autenticacao, sessao/token, hashing, upload e armazenamento de imagens nao esta definida.
 - `docker-compose.yml` vazio nao define infraestrutura.
@@ -117,7 +118,7 @@ Essa divisao cobre as tres especialidades exigidas pelo PRD e adiciona separacao
 ## Selecao do agente
 
 - Requisito ambiguo, tarefa multidominio ou conflito: Orquestrador.
-- Entidade, relacionamento, indice, transacao, DDL, Prisma ou migration: Arquiteto e Banco de Dados.
+- Entidade, relacionamento, indice, transacao, DDL, Knex ou migration: Arquiteto e Banco de Dados.
 - Endpoint, DTO de entrada, service, repository de aplicacao, autenticacao ou RBAC: Backend API e Autorizacao.
 - Rota client-side, estado, DOM, formulario, Fetch ou guarda de navegacao: Frontend SPA.
 - CSS, componente visual, asset, responsividade, acessibilidade ou animacao: UI/UX e CSS.
@@ -129,8 +130,8 @@ Uma tarefa multidominio deve ser dividida em entregas com um unico dono por arqu
 
 | Caminho | Dono primario | Regra de colaboracao |
 | --- | --- | --- |
-| `backend/prisma/**` | Arquiteto e Banco de Dados | Backend revisa impacto; QA valida |
-| `backend/src/**` | Backend API e Autorizacao | Banco fornece contratos; QA revisa |
+| `backend/migrations/**`, `backend/seeds/**`, `backend/src/knexfile.ts` | Arquiteto e Banco de Dados | Backend revisa impacto; QA valida |
+| `backend/src/**`, exceto `backend/src/knexfile.ts` | Backend API e Autorizacao | Banco fornece contratos; QA revisa |
 | `frontend/src/**` (logica TS) | Frontend SPA | UI/UX define apresentacao; QA revisa |
 | `frontend/index.html` | Frontend SPA | Mudanca visual/semantica exige coordenacao com UI/UX |
 | `frontend/public/assets/**` | UI/UX e CSS | Frontend referencia; nao duplica assets |
@@ -221,7 +222,7 @@ Uma tarefa nao esta concluida quando ocorrer qualquer item abaixo:
 Antes de implementar a base tecnica, o time precisa confirmar:
 
 - banco SQL e provider;
-- uso efetivo e versao do Prisma;
+- politica de migrations e atualizacao do Knex;
 - framework HTTP do Node;
 - gerenciador de pacotes e comandos padrao;
 - estrategia de autenticacao/sessao e expiracao;

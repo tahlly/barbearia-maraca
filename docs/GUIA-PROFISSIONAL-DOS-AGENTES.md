@@ -242,8 +242,8 @@ Nem toda tarefa precisa passar por todos os agentes. Uma correção exclusivamen
 | Caminho | Dono primário | Participação obrigatória |
 | --- | --- | --- |
 | `AGENTS.md` e `agents/**` | Orquestrador | Alteração somente por tarefa explícita |
-| `backend/prisma/**` | Arquiteto e Banco | Backend revisa impacto; QA valida |
-| `backend/src/**` | Backend API e Autorização | Banco fornece contratos; QA revisa |
+| `backend/migrations/**`, `backend/seeds/**`, `backend/src/knexfile.ts` | Arquiteto e Banco | Backend revisa impacto; QA valida |
+| `backend/src/**`, exceto `backend/src/knexfile.ts` | Backend API e Autorização | Banco fornece contratos; QA revisa |
 | `frontend/src/**` - lógica | Frontend SPA | UI/UX fornece apresentação; QA revisa |
 | `frontend/index.html` | Frontend SPA | Mudança visual exige coordenação com UI/UX |
 | `frontend/public/assets/**` | UI/UX e CSS | Frontend referencia os assets |
@@ -404,7 +404,7 @@ Um handoff incompleto não autoriza o próximo responsável a adivinhar contrato
 Antes de implementar a base técnica, a equipe precisa registrar decisões sobre:
 
 - banco SQL e provider;
-- uso e versão do Prisma;
+- política de migrations e atualização do Knex;
 - framework HTTP do Node;
 - gerenciador de pacotes e comandos padrão;
 - autenticação, sessão ou token e expiração;
