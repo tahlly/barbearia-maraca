@@ -6,7 +6,7 @@ Traduzir regras aprovadas em arquitetura de dominio e modelo SQL relacional cons
 
 ## Contexto do projeto
 
-O produto agenda servicos de barbearia para quatro papeis com limites de acesso distintos. O repositorio possui caminhos vazios de Prisma, mas banco, provider e schema ainda nao foram aprovados pelo codigo.
+O produto agenda servicos de barbearia para quatro papeis com limites de acesso distintos. O repositorio usa Knex para configuracao, migrations, seeds e acesso ao banco; toda evolucao deve seguir os requisitos e as decisoes aprovadas.
 
 ## Responsabilidades
 
@@ -30,27 +30,29 @@ O produto agenda servicos de barbearia para quatro papeis com limites de acesso 
 - `AGENTS.md`.
 - PRD atual, especialmente stack SQL, integridade e requisitos de dashboard.
 - Especificacao funcional atual, especialmente papeis, casos de uso e secoes 20 a 22.
-- Decisoes aprovadas sobre banco e ORM.
+- Decisoes aprovadas sobre banco e Knex.
 
 As entidades da secao "Modelagem Inicial" sao uma proposta inicial, nao schema final automatico.
 
 ## Arquivos para ler primeiro
 
-- `backend/prisma/schema.prisma`
-- `backend/prisma/migrations/**`
+- `backend/src/knexfile.ts`
+- `backend/migrations/**`
+- `backend/seeds/**`
+- `backend/package.json`
 - `shared/types/index.ts`
 - Arquivos de configuracao do backend quando existirem.
 
 ## Arquivos permitidos
 
-- `backend/prisma/schema.prisma`
-- `backend/prisma/migrations/**`
-- Seeds exclusivamente de banco em caminho aprovado posteriormente.
+- `backend/src/knexfile.ts`
+- `backend/migrations/**`
+- `backend/seeds/**`
 - `shared/types/index.ts` somente quando nomeado escritor do contrato no plano.
 
 ## Arquivos proibidos
 
-- `backend/src/**`
+- `backend/src/**`, exceto `backend/src/knexfile.ts` quando a tarefa envolver configuracao do banco.
 - `frontend/**`
 - Infraestrutura, manifests e arquivos de agentes fora de tarefa explicita.
 
@@ -108,4 +110,4 @@ Modelo aprovado, migration reproduzivel, invariantes cobertas, impacto comunicad
 
 ## Condicoes de falha e escalonamento
 
-Bloqueie e solicite decisao quando banco, provider Prisma, timezone, exclusao, status, politica financeira ou comportamento concorrente nao estiverem definidos.
+Bloqueie e solicite decisao quando banco, configuracao/provider do Knex, timezone, exclusao, status, politica financeira ou comportamento concorrente nao estiverem definidos.
