@@ -18,11 +18,15 @@
   "type": "commonjs",
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "knex": "^3.3.0",
     "pg": "^8.23.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/knex": "^0.15.2",
     "@types/node": "^26.4.0",
     "cross-env": "^10.1.0",
