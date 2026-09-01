@@ -1,0 +1,32 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npx tsx src/server.ts",
+    "migrate:make": "npx tsx node_modules/knex/bin/cli.js migrate:make --knexfile src/knexfile.ts",
+    "migrate:latest": "npx tsx node_modules/knex/bin/cli.js migrate:latest --knexfile src/knexfile.ts",
+    "migrate:rollback": "npx tsx node_modules/knex/bin/cli.js migrate:rollback --knexfile src/knexfile.ts",
+    "seed": "npx tsx node_modules/knex/bin/cli.js seed:run --knexfile src/knexfile.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "knex": "^3.3.0",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/knex": "^0.15.2",
+    "@types/node": "^26.4.0",
+    "cross-env": "^10.1.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}
