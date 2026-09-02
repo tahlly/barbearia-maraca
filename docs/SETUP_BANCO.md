@@ -1,0 +1,184 @@
+# Setup do Banco de Dados - Barbearia Maraca
+
+Guia para configurar o PostgreSQL local e rodar as migrations do projeto.
+
+## 1. Clonar o repositório
+
+```bash
+git clone https://github.com/tahlly/barbearia-maraca.git
+cd barbearia-maraca
+```
+
+Se já clonou, atualize:
+
+```bash
+git pull origin main
+```
+
+## 2. Instalar o PostgreSQL
+
+Baixe e instale o PostgreSQL (versão 14 ou superior):
+- **Windows:** https://www.postgresql.org/download/windows/
+- **Mac:** `brew install postgresql@16`
+- **Linux (Ubuntu/Debian):** `sudo apt install postgresql postgresql-contrib`
+
+Durante a instalação, anote:
+- **Usuário:** geralmente `postgres`
+- **Senha:** a que você definir
+- **Porta:** geralmente `5432`
+
+## 3. Criar o banco vazio
+
+Conecte no PostgreSQL e crie o banco:
+
+```bash
+# Usando psql (linha de comando)
+psql -U postgres -c "CREATE DATABASE barbearia_maraca;"
+```
+
+Ou pelo **pgAdmin** (interface gráfica):
+1. Conecte no servidor local
+2. Clique com o botão direito em "Databases"
+3. "Create" > "Database..."
+4. Nome: `barbearia_maraca`
+5. Clique em "Save"
+
+## 4. Instalar dependências do backend
+
+```bash
+cd backend
+npm install
+```
+
+## 5. Configurar o arquivo .env
+
+Copie o exemplo e preencha com suas credenciais:
+
+```bash
+# Windows (PowerShell)
+copy ..\.env.example .env
+
+# Mac/Linux
+cp ../.env.example .env
+```
+
+Edite o `backend/.env` e ajuste as variáveis:
+
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASS=sua_senha_aqui
+DB_NAME=barbearia_maraca
+DB_NAME_TEST=barbearia_maraca_test
+```
+
+> **ATENÇÃO:** O arquivo `.env` é **pessoal e nunca deve ser commitado**. Ele já está no `.gitignore`. Nunca mande sua senha para o repositório.
+
+## 6. Rodar as migrations
+
+```bash
+npm run migrate:latest
+```
+
+Isso vai criar automaticamente todas as tabelas, enums e índices:
+
+| Migration | O que cria |
+|-----------|------------|
+| `create_users` | Tabela de usuários (clientes, barbeiros, recepcionistas, admin) |
+| `create_cargo_funcionario_enum` | Enum de cargos |
+| `add_cargo_to_funcionario` | Coluna de cargo na tabela de funcionários |
+| `backfill_cargo_from_is_admin` | Migra dados de `is_admin` para o novo campo `cargo` |
+| `add_perfil_columns_to_funcionario` | Colunas de perfil (foto, bio, etc.) |
+| `create_horario_excecao_table` | Tabela de horários de exceção (feriados, folgas) |
+| `add_indexes` | Índices para performance nas consultas |
+
+## 7. Dados de teste (seeds)
+
+Se existir pasta `backend/seeds/`, rode:
+
+```bash
+npm run seed
+```
+
+Isso popula o banco com dados de exemplo para desenvolvimento.
+
+## 8. Comandos úteis
+
+| Comando | O que faz |
+|---------|-----------|
+| `npm run migrate:latest` | Roda todas as migrations pendentes |
+| `npm run migrate:rollback` | Desfaz a última batch de migrations |
+| `npm run migrate:make -- nome_da_migration` | Cria uma nova migration |
+| `npm run seed` | Roda os seeds (dados de teste) |
+
+Para ver quais migrations já rodaram:
+
+```bash
+npx knex migrate:status --knexfile src/knexfile.ts
+```
+
+## 9. Troubleshooting
+
+### Erro: "password authentication failed for user"
+
+A senha no `.env` não bate com a do seu PostgreSQL.
+
+```bash
+# Teste a conexão direto
+psql -U postgres -h localhost -c "SELECT 1;"
+```
+
+Se pedir senha e não conectar, a senha está errada. Atualize o `.env`.
+
+### Erro: "database does not exist"
+
+O banco `barbearia_maraca` não foi criado. Rode:
+
+```bash
+psql -U postgres -c "CREATE DATABASE barbearia_maraca;"
+```
+
+### Erro: "type already exists"
+
+O banco já tinha tabelas/etypes antes de rodar o `migrate:latest`. Soluções:
+
+**Opção A:** Deixar o banco vazio e rodar do zero (recomendado):
+
+```bash
+# Windows
+dropdb -U postgres barbearia_maraca
+createdb -U postgres barbearia_maraca
+
+# Mac/Linux
+dropdb barbearia_maraca
+createdb barbearia_maraca
+```
+
+Depois rode `npm run migrate:latest` novamente.
+
+**Opção B:** Se tem dados importantes, rode o status e veja quais migrations faltam:
+
+```bash
+npx knex migrate:status --knexfile src/knexfile.ts
+```
+
+### Erro: "Knex: Timeout acquiring a connection"
+
+O PostgreSQL não está rodando ou a porta está errada.
+
+```bash
+# Windows - verificar se o serviço está rodando
+Get-Service postgresql*
+
+# Mac/Linux
+sudo systemctl status postgresql
+```
+
+### Versão do PostgreSQL
+
+O projeto usa PostgreSQL 14+. Se estiver com versão anterior, algumas functions como `gen_random_uuid()` podem não existir. Atualize ou crie manualmente:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+```
