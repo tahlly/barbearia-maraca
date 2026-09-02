@@ -1,94 +1,98 @@
-type Route = {
-  path: string;
-  title: string;
-  render: () => string;
-  afterMount?: () => void;
-};
+type RouteRender = (container: HTMLElement) => () => void;
 
-type RouteGuard = (path: string) => boolean;
+interface Route {
+  path: string;
+  render: RouteRender;
+}
 
 const routes: Route[] = [];
+const anchors: string[] = [];
+
 let currentCleanup: (() => void) | null = null;
-let guard: RouteGuard | null = null;
+let appContainer: HTMLElement | null = null;
+let pendingAnchorId: string | null = null;
+let currentRoute = "/";
 
-export function addRoute(path: string, title: string, render: () => string, afterMount?: () => void): void {
-  routes.push({ path, title, render, afterMount });
+export function registerRoute(path: string, render: RouteRender): void {
+  routes.push({ path, render });
 }
 
-export function setGuard(fn: RouteGuard): void {
-  guard = fn;
+export function registerAnchor(id: string): void {
+  if (!anchors.includes(id)) anchors.push(id);
 }
 
-function matchRoute(path: string): Route | undefined {
-  return routes.find((r) => r.path === path);
+export function navigateTo(hash: string): void {
+  window.location.hash = hash;
 }
 
-function getLink(path: string, label: string): string {
-  return `<a href="${path}" data-nav>${label}</a>`;
+function scrollToAnchor(id: string): void {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const headerH = document.querySelector<HTMLElement>(".header")?.offsetHeight ?? 0;
+  const top = el.getBoundingClientRect().top + window.scrollY - headerH;
+  window.scrollTo({ top, behavior: "smooth" });
 }
 
-export function updateNavLinks(links: { path: string; label: string }[]): void {
-  const container = document.getElementById('nav-links');
-  if (!container) return;
-  container.innerHTML = links.map((l) => getLink(l.path, l.label)).join('');
-}
-
-function renderApp(route: Route): void {
-  const app = document.getElementById('app');
-  if (!app) return;
-
-  if (currentCleanup) {
-    currentCleanup();
-    currentCleanup = null;
+function renderHome(): void {
+  if (!appContainer) return;
+  currentCleanup?.();
+  currentCleanup = null;
+  const fallback = routes.find((r) => r.path === "/");
+  if (fallback) {
+    appContainer.classList.remove("view-enter");
+    void appContainer.offsetWidth;
+    appContainer.classList.add("view-enter");
+    currentCleanup = fallback.render(appContainer);
   }
-
-  document.title = `${route.title} | Barbearia Maraca`;
-  app.innerHTML = `<div class="page">${route.render()}</div>`;
-
-  if (route.afterMount) {
-    route.afterMount();
-  }
-
-  document.querySelectorAll('#nav-links a').forEach((link) => {
-    link.classList.toggle('active', link.getAttribute('href') === route.path);
-  });
+  currentRoute = "/";
 }
 
-function navigate(path: string): void {
-  if (guard && !guard(path)) return;
+function handleRoute(): void {
+  if (!appContainer) return;
 
-  const route = matchRoute(path);
-  if (!route) {
-    const app = document.getElementById('app');
-    if (app) {
-      app.innerHTML = '<div class="page"><h1>404</h1><p>Pagina nao encontrada.</p></div>';
-    }
-    return;
-  }
+  const hash = window.location.hash.slice(1) || "/";
+  const route = routes.find((r) => r.path === hash);
+  const anchorId = hash.startsWith("/") ? hash.slice(1) : hash;
 
-  history.pushState(null, '', path);
-  renderApp(route);
-}
-
-export function initRouter(): void {
-  document.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'A' && target.hasAttribute('data-nav')) {
-      e.preventDefault();
-      const href = target.getAttribute('href');
-      if (href) navigate(href);
-    }
-  });
-
-  window.addEventListener('popstate', () => {
-    const route = matchRoute(location.pathname);
-    if (route) renderApp(route);
-  });
-
-  const route = matchRoute(location.pathname);
   if (route) {
-    renderApp(route);
+    currentCleanup?.();
+    currentCleanup = null;
+    appContainer.classList.remove("view-enter");
+    void appContainer.offsetWidth;
+    appContainer.classList.add("view-enter");
+    currentCleanup = route.render(appContainer);
+    currentRoute = hash;
+  } else if (anchors.includes(anchorId)) {
+    pendingAnchorId = anchorId;
+    const homeRendered = currentRoute === "/";
+    if (!homeRendered) renderHome();
   } else {
-    navigate('/');
+    currentCleanup?.();
+    currentCleanup = null;
+    const fallback = routes.find((r) => r.path === "/");
+    if (fallback) {
+      currentCleanup = fallback.render(appContainer!);
+    }
+    currentRoute = "/";
   }
+
+  if (pendingAnchorId) {
+    scrollToAnchor(pendingAnchorId);
+    pendingAnchorId = null;
+  } else {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+}
+
+export function initRouter(container: HTMLElement): void {
+  appContainer = container;
+  window.addEventListener("hashchange", handleRoute);
+  handleRoute();
+}
+
+export function destroyRouter(): void {
+  window.removeEventListener("hashchange", handleRoute);
+  currentCleanup?.();
+  currentCleanup = null;
+  appContainer = null;
 }

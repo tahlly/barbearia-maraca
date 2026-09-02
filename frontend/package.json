@@ -1,14 +1,17 @@
 {
-  "name": "frontend",
+  "name": "barbearia-maraca-frontend",
   "version": "1.0.0",
-  "private": true,
+  "description": "Front-end da Barbearia Maracá — Vanilla TypeScript + HTML5 + CSS3 SPA",
   "type": "module",
+  "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "vite": "^6.3.5"
+    "typescript": "^5.6.3",
+    "vite": "^6.0.0"
   }
 }

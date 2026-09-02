@@ -32,20 +32,23 @@ A API deve sustentar uma SPA para Cliente, Barbeiro, Recepcionista e Administrad
 - `AGENTS.md`
 - `agents/architect-database.md`
 - `backend/src/server.ts`
-- `backend/prisma/schema.prisma`
+- `backend/src/knexfile.ts`
+- `backend/src/database/**`
+- `backend/migrations/**`
 - `shared/types/index.ts`
 - Configuracoes/manifests do backend quando existirem.
 
 ## Arquivos permitidos
 
-- `backend/src/**`
+- `backend/src/**`, exceto `backend/src/knexfile.ts`.
 - Manifest e configuracao exclusivos do backend somente quando a tarefa autorizar sua criacao/alteracao.
 - `shared/types/**` somente quando nomeado escritor do contrato.
 
 ## Arquivos proibidos
 
-- `backend/prisma/migrations/**`
-- `backend/prisma/schema.prisma`, salvo revisao sem escrita.
+- `backend/migrations/**`
+- `backend/seeds/**`
+- `backend/src/knexfile.ts`, salvo revisao sem escrita.
 - `frontend/**`
 - Infraestrutura e agentes fora de escopo.
 

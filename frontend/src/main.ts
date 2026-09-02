@@ -1,49 +1,56 @@
-import { addRoute, initRouter, updateNavLinks, setGuard } from './router';
-import { renderHome } from './pages/home';
-import { renderLogin, mountLogin } from './pages/login';
-import { renderServicos, mountServicos } from './pages/servicos';
-import { renderDashboard, mountDashboard } from './pages/dashboard';
+import { initRouter, registerAnchor, registerRoute } from "./router.js";
+import { initTheme } from "./theme.js";
+import { initModals } from "./ui/modal.js";
+import { initNavbar } from "./features/navbar.js";
+import { renderLanding } from "./views/landing.js";
+import { renderLogin } from "./views/login.js";
+import { renderLoginCliente } from "./views/loginCliente.js";
+import { renderMinhaConta } from "./views/minhaConta.js";
+import { renderManage } from "./views/manage.js";
+import { renderPlaceholderPanel } from "./views/placeholderPanel.js";
+import { ensureSeed } from "./data/seed.js";
 
-addRoute('/', 'Inicio', renderHome);
-addRoute('/login', 'Login', renderLogin, mountLogin);
-addRoute('/servicos', 'Servicos', renderServicos, () => { mountServicos(); });
-addRoute('/dashboard', 'Dashboard', renderDashboard, mountDashboard);
+const renderProfissional = renderPlaceholderPanel("profissional");
 
-setGuard((path) => {
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
-  const protectedRoutes = ['/dashboard'];
+function init(): void {
+  ensureSeed();
 
-  if (protectedRoutes.includes(path) && !user) {
-    window.location.href = '/login';
-    return false;
+  initTheme();
+  initNavbar();
+  initModals();
+
+  registerRoute("/", renderLanding);
+  registerRoute("/login", renderLogin);
+  registerRoute("/login-cliente", renderLoginCliente);
+  registerRoute("/minha-conta", renderMinhaConta);
+  registerRoute("/minha-conta/proximos", renderMinhaConta);
+  registerRoute("/minha-conta/historico", renderMinhaConta);
+  registerRoute("/minha-conta/perfil", renderMinhaConta);
+  registerRoute("/admin", renderManage);
+  registerRoute("/admin/agendamentos", renderManage);
+  registerRoute("/admin/servicos", renderManage);
+  registerRoute("/admin/profissionais", renderManage);
+  registerRoute("/admin/configuracoes", renderManage);
+  registerRoute("/profissional", renderProfissional);
+  registerRoute("/recepcionista", renderManage);
+  registerRoute("/recepcionista/agendamentos", renderManage);
+  registerRoute("/recepcionista/servicos", renderManage);
+  registerRoute("/recepcionista/profissionais", renderManage);
+  registerRoute("/recepcionista/configuracoes", renderManage);
+
+  registerAnchor("inicio");
+  registerAnchor("servicos");
+  registerAnchor("sobre");
+  registerAnchor("contato");
+
+  const appContainer = document.getElementById("app");
+  if (appContainer) {
+    initRouter(appContainer);
   }
-
-  if (path === '/login' && user) {
-    window.location.href = '/dashboard';
-    return false;
-  }
-
-  return true;
-});
-
-function getNavLinks() {
-  const user = JSON.parse(localStorage.getItem('user') || 'null');
-  const links = [
-    { path: '/', label: 'Inicio' },
-    { path: '/servicos', label: 'Servicos' },
-  ];
-
-  if (user) {
-    links.push({ path: '/dashboard', label: 'Dashboard' });
-  } else {
-    links.push({ path: '/login', label: 'Entrar' });
-  }
-
-  return links;
 }
 
-updateNavLinks(getNavLinks());
-
-document.addEventListener('DOMContentLoaded', () => {
-  initRouter();
-});
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
