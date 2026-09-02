@@ -1,0 +1,142 @@
+.admin-grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
+}
+
+.admin-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.admin-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.admin-card__head > strong {
+  font-size: 0.92rem;
+  color: var(--color-text);
+}
+
+.admin-card__head-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.admin-card__head-info strong {
+  font-size: 0.88rem;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-card__head-info small {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.admin-card p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+}
+
+.admin-card__email {
+  word-break: break-all;
+}
+
+.admin-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+
+.admin-card__price {
+  font-size: 1.1rem;
+  color: var(--color-gold);
+}
+
+.top-service {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.88rem;
+}
+
+.top-service:last-child {
+  border-bottom: none;
+}
+
+.top-service strong {
+  color: var(--color-gold);
+}
+
+.toolbar select.input {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.check-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: var(--space-2) 0;
+}
+
+.check-line input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-gold);
+  cursor: pointer;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+}
+
+.alert--info {
+  background-color: rgba(212, 175, 55, 0.12);
+  border-left: 3px solid var(--color-gold);
+  color: var(--color-gold);
+}
+
+.alert--info strong {
+  color: var(--color-text);
+}
+
+.modal__body textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.modal__body select,
+.modal__body input[type="text"],
+.modal__body input[type="email"],
+.modal__body input[type="number"],
+.modal__body input[type="date"] {
+  width: 100%;
+}
