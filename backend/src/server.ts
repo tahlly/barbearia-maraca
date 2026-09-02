@@ -1,9 +1,11 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import db from './database/connection';
 import servicoRoutes from './rotas/servico-routes';
+import { errorHandler } from './middlewares/errorHandler';
+import { NotFoundError } from './errors/NotFoundError';
 
 dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 
@@ -73,11 +75,17 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
 
 app.use('/servicos', servicoRoutes);
 
+app.use('/api/{*path}', (_req: Request, _res: Response, next: NextFunction) => {
+  next(new NotFoundError('Rota não encontrada'));
+});
+
 app.get('/{*path}', (req: Request, res: Response) => {
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(frontendPath, 'index.html'));
   }
 });
+
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
