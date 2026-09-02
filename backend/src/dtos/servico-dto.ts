@@ -1,8 +1,6 @@
-export interface ServicoResponse {
+export interface ServicoDTO {
   id: string;
   nome: string;
-  descricao: string | null;
-  duracao_minutos: number;
   preco: string;
-  ativo: boolean;
+  duracao: number;
 }

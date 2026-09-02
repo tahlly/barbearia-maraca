@@ -1,6 +1,6 @@
 import { listarServicosAtivos } from '../repositories/servico-repository';
-import type { ServicoResponse } from '../dtos/servico-dto';
+import type { ServicoDTO } from '../dtos/servico-dto';
 
-export async function obterServicosAtivos(): Promise<ServicoResponse[]> {
+export async function obterServicosAtivos(): Promise<ServicoDTO[]> {
   return listarServicosAtivos();
 }

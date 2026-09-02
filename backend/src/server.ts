@@ -71,7 +71,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   }
 });
 
-app.use('/api/servicos-em-camadas', servicoRoutes);
+app.use('/servicos', servicoRoutes);
 
 app.get('/{*path}', (req: Request, res: Response) => {
   if (!req.path.startsWith('/api')) {
