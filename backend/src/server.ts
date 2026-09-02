@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import db from './database/connection';
+import servicoRoutes from './rotas/servico-routes';
 
 dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 
@@ -69,6 +70,8 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Erro ao autenticar' });
   }
 });
+
+app.use('/api/servicos-em-camadas', servicoRoutes);
 
 app.get('/{*path}', (req: Request, res: Response) => {
   if (!req.path.startsWith('/api')) {
