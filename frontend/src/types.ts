@@ -68,4 +68,6 @@ export interface Cliente {
   telefone: string;
   senha: string;
   createdAt: string;
+  googleId?: string;
+  avatarUrl?: string;
 }

@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import db from './database/connection';
 import servicoRoutes from './rotas/servico-routes';
+import authRoutes from './rotas/auth-routes';
 import { errorHandler } from './middlewares/errorHandler';
 import { NotFoundError } from './errors/NotFoundError';
 
@@ -73,6 +74,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   }
 });
 
+app.use('/api/auth', authRoutes);
 app.use('/servicos', servicoRoutes);
 
 app.use('/api/{*path}', (_req: Request, _res: Response, next: NextFunction) => {

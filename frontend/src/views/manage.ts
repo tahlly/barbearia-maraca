@@ -29,6 +29,16 @@ import { CONFIG } from "../config.js";
 
 type ManageTab = "dashboard" | "servicos" | "profissionais" | "agendamentos" | "configuracoes";
 
+type DashboardFilterMode = "todos" | "ano" | "mes" | "periodo";
+
+interface DashboardFilter {
+  mode: DashboardFilterMode;
+  ano: number;
+  mes: number;
+  inicio: string;
+  fim: string;
+}
+
 const STATUS_LABEL: Record<Appointment["status"], string> = {
   confirmado: "Confirmado",
   pendente: "Pendente",
@@ -37,6 +47,21 @@ const STATUS_LABEL: Record<Appointment["status"], string> = {
 };
 
 const WEEKDAY_LABEL = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+
+const MONTHS = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
 
 function statusBadge(status: Appointment["status"]): string {
   const variant =
@@ -103,6 +128,13 @@ export function renderManage(container: HTMLElement): () => void {
   });
 
   const cleanups: Array<() => void> = [];
+  const state: DashboardFilter = {
+    mode: "todos",
+    ano: new Date().getFullYear(),
+    mes: new Date().getMonth() + 1,
+    inicio: "",
+    fim: "",
+  };
 
   function handleTab(tab: ManageTab): void {
     if (tab === "dashboard") renderDashboard();
@@ -116,8 +148,141 @@ export function renderManage(container: HTMLElement): () => void {
   function renderDashboard(): void {
     refreshCaches();
     const appointments = loadAllAppointments();
+
+    const years = availableYears(appointments);
+    const selectedYear = years.includes(state.ano) ? state.ano : years[years.length - 1] ?? new Date().getFullYear();
+    state.ano = selectedYear;
+
+    content.innerHTML = `
+      <div class="panel__section dashboard-filter">
+        <div class="dashboard-filter__row">
+          <div class="field">
+            <label class="field__label" for="dashboard-mode">Período</label>
+            <select class="input" id="dashboard-mode" aria-label="Tipo de filtro">
+              <option value="todos" ${state.mode === "todos" ? "selected" : ""}>Todos os registros</option>
+              <option value="ano" ${state.mode === "ano" ? "selected" : ""}>Por ano</option>
+              <option value="mes" ${state.mode === "mes" ? "selected" : ""}>Por mês de um ano</option>
+              <option value="periodo" ${state.mode === "periodo" ? "selected" : ""}>Por período</option>
+            </select>
+          </div>
+          <div class="field" id="dashboard-ano-wrap" ${state.mode === "ano" || state.mode === "mes" ? "" : "hidden"}>
+            <label class="field__label" for="dashboard-ano">Ano</label>
+            <select class="input" id="dashboard-ano" aria-label="Selecionar ano">
+              ${years
+                .map(
+                  (y) =>
+                    `<option value="${y}" ${y === state.ano ? "selected" : ""}>${y}</option>`,
+                )
+                .join("")}
+            </select>
+          </div>
+          <div class="field" id="dashboard-mes-wrap" ${state.mode === "mes" ? "" : "hidden"}>
+            <label class="field__label" for="dashboard-mes">Mês</label>
+            <select class="input" id="dashboard-mes" aria-label="Selecionar mês">
+              ${MONTHS.map(
+                (name, i) =>
+                  `<option value="${i + 1}" ${i + 1 === state.mes ? "selected" : ""}>${name}</option>`,
+              ).join("")}
+            </select>
+          </div>
+          <div class="field" id="dashboard-periodo-wrap" ${state.mode === "periodo" ? "" : "hidden"}>
+            <label class="field__label" for="dashboard-inicio">De</label>
+            <input type="date" class="input" id="dashboard-inicio" value="${state.inicio}">
+          </div>
+          <div class="field" id="dashboard-fim-wrap" ${state.mode === "periodo" ? "" : "hidden"}>
+            <label class="field__label" for="dashboard-fim">Até</label>
+            <input type="date" class="input" id="dashboard-fim" value="${state.fim}">
+          </div>
+        </div>
+      </div>
+      <div id="dashboard-metrics">${dashboardMetricsHTML(appointments)}</div>
+    `;
+
+    const modeSelect = $<HTMLSelectElement>("#dashboard-mode", content);
+    const anoSelect = $<HTMLSelectElement>("#dashboard-ano", content);
+    const mesSelect = $<HTMLSelectElement>("#dashboard-mes", content);
+    const inicioInput = $<HTMLInputElement>("#dashboard-inicio", content);
+    const fimInput = $<HTMLInputElement>("#dashboard-fim", content);
+    const anoWrap = $("#dashboard-ano-wrap", content);
+    const mesWrap = $("#dashboard-mes-wrap", content);
+    const periodoWrap = $("#dashboard-periodo-wrap", content);
+    const fimWrap = $("#dashboard-fim-wrap", content);
+
+    const refresh = (): void => {
+      $("#dashboard-metrics", content)!.innerHTML = dashboardMetricsHTML(loadAllAppointments());
+    };
+
+    const modeHandler = (): void => {
+      state.mode = (modeSelect?.value ?? "todos") as DashboardFilterMode;
+      if (state.mode === "todos") {
+        state.inicio = "";
+        state.fim = "";
+        if (inicioInput) inicioInput.value = "";
+        if (fimInput) fimInput.value = "";
+      }
+      if (anoWrap) anoWrap.hidden = !(state.mode === "ano" || state.mode === "mes");
+      if (mesWrap) mesWrap.hidden = state.mode !== "mes";
+      if (periodoWrap) periodoWrap.hidden = state.mode !== "periodo";
+      if (fimWrap) fimWrap.hidden = state.mode !== "periodo";
+      refresh();
+    };
+
+    const anoHandler = (): void => {
+      if (!anoSelect) return;
+      state.ano = Number(anoSelect.value);
+      refresh();
+    };
+    const mesHandler = (): void => {
+      if (!mesSelect) return;
+      state.mes = Number(mesSelect.value);
+      refresh();
+    };
+    const inicioHandler = (): void => {
+      if (!inicioInput) return;
+      state.inicio = inicioInput.value;
+      refresh();
+    };
+    const fimHandler = (): void => {
+      if (!fimInput) return;
+      state.fim = fimInput.value;
+      refresh();
+    };
+
+    modeSelect?.addEventListener("change", modeHandler);
+    anoSelect?.addEventListener("change", anoHandler);
+    mesSelect?.addEventListener("change", mesHandler);
+    inicioInput?.addEventListener("change", inicioHandler);
+    fimInput?.addEventListener("change", fimHandler);
+
+    cleanups.push(() => modeSelect?.removeEventListener("change", modeHandler));
+    cleanups.push(() => anoSelect?.removeEventListener("change", anoHandler));
+    cleanups.push(() => mesSelect?.removeEventListener("change", mesHandler));
+    cleanups.push(() => inicioInput?.removeEventListener("change", inicioHandler));
+    cleanups.push(() => fimInput?.removeEventListener("change", fimHandler));
+  }
+
+  function matchesFilter(a: Appointment): boolean {
+    const m = monthOf(a.dateIso);
+    const y = yearOf(a.dateIso);
+    switch (state.mode) {
+      case "ano":
+        return y === state.ano;
+      case "mes":
+        return y === state.ano && m === state.mes;
+      case "periodo": {
+        if (state.inicio && a.dateIso < state.inicio) return false;
+        if (state.fim && a.dateIso > state.fim) return false;
+        return true;
+      }
+      default:
+        return true;
+    }
+  }
+
+  function dashboardMetricsHTML(appointments: Appointment[]): string {
+    const filtered = appointments.filter(matchesFilter);
     let revenue = 0;
-    for (const a of appointments) {
+    for (const a of filtered) {
       if (a.status === "cancelado") continue;
       revenue += serviceTotal(a.serviceIds);
     }
@@ -127,18 +292,18 @@ export function renderManage(container: HTMLElement): () => void {
       concluido: 0,
       cancelado: 0,
     };
-    for (const a of appointments) counts[a.status] += 1;
+    for (const a of filtered) counts[a.status] += 1;
 
     const sold: Record<string, number> = {};
-    for (const a of appointments) {
+    for (const a of filtered) {
       if (a.status === "cancelado") continue;
       for (const id of a.serviceIds) sold[id] = (sold[id] ?? 0) + 1;
     }
     const top = Object.entries(sold).sort((x, y) => y[1] - x[1]).slice(0, 3);
 
-    content.innerHTML = `
+    return `
       <div class="kpi-grid">
-        <div class="kpi-card"><span class="kpi-card__label">${icon("calendar", 16)} Total</span><span class="kpi-card__value">${appointments.length}</span></div>
+        <div class="kpi-card"><span class="kpi-card__label">${icon("calendar", 16)} Total</span><span class="kpi-card__value">${filtered.length}</span></div>
         <div class="kpi-card"><span class="kpi-card__label">${icon("check-circle", 16)} Confirmados</span><span class="kpi-card__value kpi-card__value--success">${counts.confirmado}</span></div>
         <div class="kpi-card"><span class="kpi-card__label">${icon("clock", 16)} Pendentes</span><span class="kpi-card__value kpi-card__value--gold">${counts.pendente}</span></div>
         <div class="kpi-card"><span class="kpi-card__label">${icon("x", 16)} Cancelados</span><span class="kpi-card__value kpi-card__value--danger">${counts.cancelado}</span></div>
@@ -157,6 +322,26 @@ export function renderManage(container: HTMLElement): () => void {
         </div>
       </div>
     `;
+  }
+
+  function monthOf(iso: string): number {
+    const m = Number(iso.slice(5, 7));
+    return Number.isNaN(m) ? -1 : m;
+  }
+
+  function yearOf(iso: string): number {
+    const y = Number(iso.slice(0, 4));
+    return Number.isNaN(y) ? -1 : y;
+  }
+
+  function availableYears(appointments: Appointment[]): number[] {
+    const set = new Set<number>();
+    for (const a of appointments) {
+      const y = yearOf(a.dateIso);
+      if (y >= 0) set.add(y);
+    }
+    set.add(new Date().getFullYear());
+    return [...set].sort((a, b) => a - b);
   }
 
   // ----------------------------------------------------------- Agendamentos

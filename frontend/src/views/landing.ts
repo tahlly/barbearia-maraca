@@ -170,7 +170,62 @@ export function renderLanding(container: HTMLElement): () => void {
 
   const cleanups: Array<() => void> = [];
 
+  const spyCleanup = initScrollSpy();
+  if (spyCleanup) cleanups.push(spyCleanup);
+
   return () => {
     cleanups.forEach((fn) => fn());
   };
+}
+
+interface SpyEntry {
+  sectionId: string;
+  link: HTMLAnchorElement | null;
+}
+
+function initScrollSpy(): (() => void) | null {
+  const nav = document.querySelector<HTMLElement>(".nav");
+  if (!nav) return null;
+
+  const headerH = document.querySelector<HTMLElement>(".header")?.offsetHeight ?? 0;
+
+  const entries: SpyEntry[] = [
+    { sectionId: "inicio", link: null },
+    { sectionId: "servicos", link: null },
+    { sectionId: "sobre", link: null },
+    { sectionId: "contato", link: null },
+  ];
+
+  for (const entry of entries) {
+    entry.link =
+      nav.querySelector<HTMLAnchorElement>(`a[href="#/${entry.sectionId}"]`) ??
+      (entry.sectionId === "inicio" ? nav.querySelector<HTMLAnchorElement>('a[href="#/"]') : null);
+  }
+
+  const setActive = (id: string): void => {
+    for (const entry of entries) {
+      entry.link?.classList.toggle("is-active", entry.sectionId === id);
+    }
+  };
+
+  const sections = entries
+    .map((e) => document.getElementById(e.sectionId))
+    .filter((el): el is HTMLElement => el !== null);
+
+  if (sections.length === 0) return null;
+
+  const observer = new IntersectionObserver(
+    (observed) => {
+      const visible = observed
+        .filter((o) => o.isIntersecting)
+        .sort((a, b) => b.boundingClientRect.top - a.boundingClientRect.top);
+      const top = visible[0];
+      if (top?.target.id) setActive(top.target.id);
+    },
+    { rootMargin: `-${headerH}px 0px -70% 0px`, threshold: 0 },
+  );
+
+  sections.forEach((s) => observer.observe(s));
+
+  return () => observer.disconnect();
 }
