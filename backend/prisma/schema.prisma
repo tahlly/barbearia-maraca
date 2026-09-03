@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  senhaHash    String
+  tipo         String   // CLIENTE, BARBEIRO, RECEPCIONISTA, ADMINISTRADOR
+  nome         String
+  ativo        Boolean  @default(true)
+  refreshToken String?  @unique
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("usuarios")
+}
