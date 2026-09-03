@@ -1196,59 +1196,103 @@ A regra de negócio principal entre esses dois perfis será:
 
 # 21. Modelagem Inicial do Banco de Dados
 
-Uma modelagem inicial poderá utilizar as seguintes entidades:
+> **Nota de atualização:** Esta seção foi atualizada para refletir o modelo **implementado** no repositório (ver `backend/migrations/**`). A modelagem inicial original previa 5 tabelas; o modelo real evoluiu para 7 tabelas com separação de papéis, enums e chaves `uuid`. O diagrama visual está em `docs/DER-MODELO-INICIAL.md`.
+
+O modelo de banco de dados implementado utiliza as seguintes entidades:
 
 ```text
 USUARIO
    │
-   ├── id
-   ├── nome
-   ├── email
-   ├── senha
-   ├── telefone
+   ├── id (uuid, PK)
+   ├── email (unique)
+   ├── senha_hash
    ├── tipo
-   └── status
+   ├── created_at
+   └── updated_at
 
 
-BARBEIRO
+CLIENTE
    │
-   ├── id
-   ├── usuario_id
+   ├── id (uuid, PK)
+   ├── usuario_id (FK → USUARIO)
+   ├── nome
+   ├── telefone
+   ├── created_at
+   └── updated_at
+
+
+FUNCIONARIO
+   │
+   ├── id (uuid, PK)
+   ├── usuario_id (FK → USUARIO)
+   ├── nome
+   ├── telefone
+   ├── cargo (enum: barbeiro, recepcionista, administrador)
    ├── especialidade
    ├── foto
-   └── descricao
+   ├── descricao
+   ├── ativo
+   ├── created_at
+   └── updated_at
 
 
 SERVICO
    │
-   ├── id
+   ├── id (uuid, PK)
    ├── nome
    ├── descricao
-   ├── preco
-   ├── duracao
-   └── status
+   ├── duracao_minutos
+   ├── preco (decimal 10,2)
+   ├── ativo
+   ├── created_at
+   └── updated_at
+
+
+HORARIO_TRABALHO
+   │
+   ├── id (uuid, PK)
+   ├── funcionario_id (FK → FUNCIONARIO)
+   ├── dia_semana
+   ├── hora_inicio
+   ├── hora_fim
+   ├── ativo
+   ├── created_at
+   └── updated_at
+
+
+HORARIO_EXCECAO
+   │
+   ├── id (uuid, PK)
+   ├── funcionario_id (FK → FUNCIONARIO)
+   ├── data
+   ├── hora_inicio
+   ├── hora_fim
+   ├── tipo (enum: bloqueio, liberacao)
+   ├── motivo
+   └── created_at
 
 
 AGENDAMENTO
    │
-   ├── id
-   ├── cliente_id
-   ├── barbeiro_id
-   ├── servico_id
+   ├── id (uuid, PK)
+   ├── cliente_id (FK → CLIENTE)
+   ├── funcionario_id (FK → FUNCIONARIO)
+   ├── servico_id (FK → SERVICO)
    ├── data
-   ├── horario
-   └── status
-
-
-HORARIO
-   │
-   ├── id
-   ├── barbeiro_id
-   ├── data
-   ├── hora_inicio
-   ├── hora_fim
-   └── status
+   ├── hora
+   ├── status (enum: pendente, confirmado, cancelado, concluido)
+   ├── observacao
+   ├── created_at
+   └── updated_at
 ```
+
+### Enums
+
+| Enum                    | Valores                                        |
+|-------------------------|------------------------------------------------|
+| `cargo_funcionario`     | `barbeiro`, `recepcionista`, `administrador`   |
+| `tipo_excecao_horario`  | `bloqueio`, `liberacao`                        |
+| `status_agendamento`    | `pendente`, `confirmado`, `cancelado`, `concluido` |
 
 ### Relacionamentos
 
@@ -1257,20 +1301,28 @@ USUARIO
    │
    ├────────── CLIENTE
    │
-   ├────────── BARBEIRO
-   │
-   ├────────── RECEPCIONISTA
-   │
-   └────────── ADMINISTRADOR
+   └────────── FUNCIONARIO
 
 
 CLIENTE ───────────────┐
                        │
-BARBEIRO ──────────────┼──> AGENDAMENTO <── SERVICO
+FUNCIONARIO ───────────┼──> AGENDAMENTO <── SERVICO
                        │
+                       ├──> HORARIO_TRABALHO
                        │
-                       └──> HORARIO
+                       └──> HORARIO_EXCECAO
 ```
+
+### Notas de evolução em relação à modelagem original
+
+- **`BARBEIRO` → `FUNCIONARIO`**: a tabela `barbeiro` foi substituída por `funcionario` com campo `cargo` (enum), unificando os papéis de equipe (barbeiro, recepcionista, administrador).
+- **`CLIENTE` separada**: cliente passou a ter tabela própria (em vez de apenas campo `tipo` em `usuario`), pois possui atributos específicos.
+- **`HORARIO` → `HORARIO_TRABALHO` + `HORARIO_EXCECAO`**: horários recorrentes (por dia da semana) e exceções pontuais (bloqueios/liberações) foram separados.
+- **Chaves `uuid`**: todas as chaves primárias usam `uuid` via `gen_random_uuid()`.
+- **Senha como `senha_hash`**: nunca armazenada em texto puro.
+- **Enums** para cargos, tipo de exceção e status de agendamento.
+- **`DECIMAL(10,2)`** para preço (nunca float).
+- **`duracao_minutos`** (INT) para duração de serviço.
 
 ---
 

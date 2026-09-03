@@ -85,13 +85,14 @@ Isso vai criar automaticamente todas as tabelas, enums e índices:
 
 | Migration | O que cria |
 |-----------|------------|
-| `create_users` | Tabela de usuários (clientes, barbeiros, recepcionistas, admin) |
-| `create_cargo_funcionario_enum` | Enum de cargos |
-| `add_cargo_to_funcionario` | Coluna de cargo na tabela de funcionários |
-| `backfill_cargo_from_is_admin` | Migra dados de `is_admin` para o novo campo `cargo` |
-| `add_perfil_columns_to_funcionario` | Colunas de perfil (foto, bio, etc.) |
-| `create_horario_excecao_table` | Tabela de horários de exceção (feriados, folgas) |
-| `add_indexes` | Índices para performance nas consultas |
+| `20260901000001_create_usuario` | Tabela `usuario` (id uuid, email, senha_hash, tipo) |
+| `20260901000002_create_cliente` | Tabela `cliente` (FK → usuario) |
+| `20260901000003_create_cargo_funcionario_enum` | Enum `cargo_funcionario` (barbeiro, recepcionista, administrador) |
+| `20260901000004_create_funcionario` | Tabela `funcionario` (FK → usuario, cargo, especialidade, foto, descricao, ativo) |
+| `20260901000005_create_servico` | Tabela `servico` (nome, descricao, duracao_minutos, preco, ativo) |
+| `20260901000006_create_horario_trabalho` | Tabela `horario_trabalho` (FK → funcionario, dia_semana, hora_inicio, hora_fim) |
+| `20260901000007_create_horario_excecao` | Tabela `horario_excecao` + enum `tipo_excecao_horario` (FK → funcionario) |
+| `20260901000008_create_agendamento` | Tabela `agendamento` + enum `status_agendamento` (FK → cliente, funcionario, servico) |
 
 ## 7. Dados de teste (seeds)
 
