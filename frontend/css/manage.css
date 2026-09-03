@@ -1,5 +1,26 @@
 /* ===== Painel compartilhado (Admin + Recepcionista) ===== */
 
+.dashboard-filter {
+  margin-bottom: var(--space-3);
+}
+
+.dashboard-filter__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+}
+
+.dashboard-filter__row .field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.dashboard-filter__row .field input[type="date"] {
+  min-width: 0;
+}
+
 .manage-head {
   flex-direction: row;
   align-items: flex-start;
@@ -319,7 +340,9 @@
 
 .config-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: var(--space-3);
   margin-top: var(--space-2);
 }
 

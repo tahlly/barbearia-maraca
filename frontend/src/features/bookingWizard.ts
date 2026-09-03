@@ -27,7 +27,11 @@ export interface BookingWizardHandle {
   openForReschedule(appointment: Appointment): void;
 }
 
-export function initBookingWizard(): BookingWizardHandle {
+export interface BookingWizardOptions {
+  onBookingCreated?: () => void;
+}
+
+export function initBookingWizard(options: BookingWizardOptions = {}): BookingWizardHandle {
   let catalogServices = loadServices();
   let catalogProfessionals = loadProfessionals();
 
@@ -54,7 +58,6 @@ export function initBookingWizard(): BookingWizardHandle {
   const phoneInput = $<HTMLInputElement>("#client-phone")!;
   const emailInput = $<HTMLInputElement>("#client-email")!;
   const successTitle = $("#booking-success-title")!;
-  const codeEl = $("#booking-code")!;
   const summaryEl = $("#booking-summary")!;
 
   const state: WizardState = {
@@ -401,14 +404,14 @@ export function initBookingWizard(): BookingWizardHandle {
       successTitle.textContent = state.rescheduleCode
         ? "Horário atualizado!"
         : "Agendamento realizado!";
-      codeEl.textContent = appointment.code;
       buildSummaryRows(appointment);
       goToStep(TOTAL_STEPS);
       showToast(
         state.rescheduleCode
-          ? `Horário do agendamento ${appointment.code} atualizado.`
-          : `Agendamento ${appointment.code} criado! Aguarde a confirmação da barbearia.`,
+          ? "Horário do agendamento atualizado."
+          : "Agendamento criado! Aguarde a confirmação da barbearia.",
       );
+      options.onBookingCreated?.();
     } catch {
       showToast("Não foi possível concluir o agendamento. Tente novamente.", "error");
     } finally {

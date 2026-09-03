@@ -269,3 +269,62 @@ body.light-theme .auth__box {
 .auth--admin .auth__footer .auth__link {
   color: #d4af37;
 }
+
+/* ----- Login com Google ----- */
+
+.auth__divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.auth__divider::before,
+.auth__divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background-color: var(--color-border);
+}
+
+.btn--google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-weight: 600;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.btn--google:hover:not(:disabled) {
+  background-color: var(--color-bg);
+  border-color: var(--color-gold-border);
+  transform: translateY(-2px);
+}
+
+.btn--google:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-gold-border);
+}
+
+.btn--google .google-icon {
+  flex-shrink: 0;
+}
+
+body.light-theme .btn--google {
+  background-color: #ffffff;
+}
+
+body.light-theme .btn--google:hover:not(:disabled) {
+  background-color: #f7f7f7;
+}
