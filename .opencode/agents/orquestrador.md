@@ -55,7 +55,6 @@ permissions:
   - action: skill
     resource: "*"
     effect: allow
----   effect: allow
 ---
 
 # Orquestrador
