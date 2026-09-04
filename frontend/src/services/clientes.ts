@@ -1,77 +1,68 @@
 import type { Cliente } from "../types.js";
-import { CONFIG } from "../config.js";
+import { apiFetch } from "./api.js";
 
-function readList(): Cliente[] {
-  const raw = localStorage.getItem(CONFIG.clientesKey);
-  if (!raw) return [];
+export async function findClienteByEmail(email: string): Promise<Cliente | null> {
   try {
-    const parsed = JSON.parse(raw) as Cliente[];
-    return Array.isArray(parsed) ? parsed : [];
+    const res = await apiFetch(`/api/clientes/buscar?email=${encodeURIComponent(email)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data ?? null;
   } catch {
-    return [];
+    return null;
   }
 }
 
-function writeList(list: Cliente[]): void {
-  localStorage.setItem(CONFIG.clientesKey, JSON.stringify(list));
-}
-
-function createId(): string {
-  return `CLI-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-}
-
-export function findClienteByEmail(email: string): Cliente | null {
-  const normalized = email.trim().toLowerCase();
-  return readList().find((c) => c.email.toLowerCase() === normalized) ?? null;
-}
-
-export function findClienteById(id: string): Cliente | null {
-  return readList().find((c) => c.id === id) ?? null;
-}
-
-export function registerCliente(data: {
+export async function registerCliente(data: {
   nome: string;
   email: string;
   telefone: string;
   senha: string;
-}): Cliente {
-  const cliente: Cliente = {
-    id: createId(),
-    nome: data.nome.trim(),
-    email: data.email.trim().toLowerCase(),
+}): Promise<Cliente> {
+  const res = await apiFetch("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({
+      email: data.email,
+      senha: data.senha,
+      nome: data.nome,
+      telefone: data.telefone,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: "Erro ao cadastrar" }));
+    throw new Error(err.message || "Erro ao cadastrar");
+  }
+
+  const result = await res.json();
+  return {
+    id: result.user.id,
+    nome: result.user.nome,
+    email: result.user.email,
     telefone: data.telefone,
-    senha: data.senha,
+    senha: "",
     createdAt: new Date().toISOString(),
   };
-  writeList([...readList(), cliente]);
-  return cliente;
 }
 
-export function updateCliente(
-  id: string,
-  data: { nome?: string; telefone?: string; email?: string; senha?: string },
-): Cliente | null {
-  const list = readList();
-  const index = list.findIndex((c) => c.id === id);
-  if (index < 0) return null;
-  const updated: Cliente = {
-    ...list[index]!,
-    ...(data.nome !== undefined ? { nome: data.nome.trim() } : {}),
-    ...(data.telefone !== undefined ? { telefone: data.telefone } : {}),
-    ...(data.email !== undefined ? { email: data.email.trim().toLowerCase() } : {}),
-    ...(data.senha !== undefined ? { senha: data.senha } : {}),
-  };
-  list[index] = updated;
-  writeList(list);
-  return updated;
-}
+export async function validateClienteLogin(email: string, senha: string): Promise<Cliente | null> {
+  try {
+    const res = await apiFetch("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, senha }),
+    });
 
-export function updateClienteSenha(id: string, senha: string): boolean {
-  return updateCliente(id, { senha }) !== null;
-}
+    if (!res.ok) return null;
 
-export function validateClienteLogin(email: string, senha: string): Cliente | null {
-  const cliente = findClienteByEmail(email);
-  if (!cliente) return null;
-  return cliente.senha === senha ? cliente : null;
+    const data = await res.json();
+    return {
+      id: data.user.id,
+      nome: data.user.nome || data.user.name || "",
+      email: data.user.email,
+      telefone: "",
+      senha: "",
+      createdAt: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
 }

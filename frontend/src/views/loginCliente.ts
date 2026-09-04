@@ -1,6 +1,6 @@
 import { $, clearFormErrors, setFieldError } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
-import { registerCliente, findClienteByEmail } from "../services/clientes.js";
+import { registerCliente } from "../services/clientes.js";
 import { getSession, loginCliente, redirectForRole } from "../services/auth.js";
 import { loginWithGoogle, promptGoogleIdToken, decodeGoogleProfile } from "../services/googleAuth.js";
 import { showToast } from "../ui/toast.js";
@@ -307,10 +307,6 @@ export function renderLoginCliente(container: HTMLElement): () => void {
       setFieldError(regEmail, "Informe um e-mail válido.");
       valid = false;
     }
-    if (findClienteByEmail(regEmail.value.trim())) {
-      setFieldError(regEmail, "Já existe uma conta com este e-mail.");
-      valid = false;
-    }
     if (regPhone.value.replace(/\D/g, "").length < 11) {
       setFieldError(regPhone, "Informe um WhatsApp válido com DDD.");
       valid = false;
@@ -328,17 +324,17 @@ export function renderLoginCliente(container: HTMLElement): () => void {
     regSubmit.disabled = true;
     regSubmit.classList.add("is-loading");
     try {
-      registerCliente({
+      await registerCliente({
         nome: regName.value,
         email: regEmail.value,
         telefone: regPhone.value,
         senha: regPassword.value,
       });
-      await loginCliente(regEmail.value, regPassword.value);
       showToast("Conta criada com sucesso! Bem-vindo(a).", "success");
       redirectForRole("cliente");
-    } catch {
-      regAlert.textContent = "Não foi possível criar a conta. Tente novamente.";
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Não foi possível criar a conta.";
+      regAlert.textContent = message;
       regAlert.hidden = false;
     } finally {
       regSubmit.disabled = false;

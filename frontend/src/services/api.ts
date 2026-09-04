@@ -16,6 +16,13 @@ export function delay(ms: number): Promise<void> {
 
 export const isMockMode = (): boolean => CONFIG.useMockApi;
 
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(`${CONFIG.apiBaseUrl}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...init,
+  });
+}
+
 export async function httpJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
