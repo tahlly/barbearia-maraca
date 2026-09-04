@@ -147,9 +147,8 @@ export function renderLanding(container: HTMLElement): () => void {
               </div>
             </div>
             <div class="contact__socials">
-              <a href="#" class="social-btn" aria-label="Instagram da Barbearia Maracá"><i class='bx bxl-instagram'></i></a>
-              <a href="#" class="social-btn" aria-label="WhatsApp da Barbearia Maracá"><i class='bx bxl-whatsapp'></i></a>
-              <a href="#" class="social-btn" aria-label="Telefone da Barbearia Maracá"><i class='bx bx-phone'></i></a>
+              <a href="https://www.instagram.com/barbeariamaraca/" target="_blank" rel="noopener noreferrer" class="social-btn" aria-label="Instagram da Barbearia Maracá"><i class='bx bxl-instagram'></i></a>
+              <a href="https://wa.me/5591999999999" target="_blank" rel="noopener noreferrer" class="social-btn" aria-label="WhatsApp da Barbearia Maracá"><i class='bx bxl-whatsapp'></i></a>
             </div>
           </div>
           <div class="map-placeholder" role="img" aria-label="Mapa interativo da localização da Barbearia Maracá">

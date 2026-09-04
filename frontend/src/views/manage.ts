@@ -111,14 +111,14 @@ export function renderManage(container: HTMLElement): () => void {
         { href: `#${base}/servicos`, label: "Serviços", icon: "scissors" },
         { href: `#${base}/profissionais`, label: "Profissionais", icon: "users" },
         { href: `#${base}/configuracoes`, label: "Configurações", icon: "cog" },
-        { href: "#/", label: "Início", icon: "grid" },
+        { href: "#/", label: "Voltar ao site", icon: "arrow-left" },
       ]
     : [
         { href: `#${base}`, label: "Agendamentos", icon: "calendar" },
         { href: `#${base}/servicos`, label: "Serviços", icon: "scissors" },
         { href: `#${base}/profissionais`, label: "Profissionais", icon: "users" },
         { href: `#${base}/configuracoes`, label: "Configurações", icon: "cog" },
-        { href: "#/", label: "Início", icon: "grid" },
+        { href: "#/", label: "Voltar ao site", icon: "arrow-left" },
       ];
 
   const { content, cleanup: cleanupPanel } = renderPanel(container, {
@@ -353,6 +353,10 @@ export function renderManage(container: HTMLElement): () => void {
       return kb.toString().localeCompare(ka.toString());
     });
 
+    const currentYear = new Date().getFullYear();
+    const defaultStart = `${currentYear}-01-01`;
+    const defaultEnd = `${currentYear}-12-31`;
+
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -376,6 +380,27 @@ export function renderManage(container: HTMLElement): () => void {
           <option value="cancelado">Cancelados</option>
         </select>
       </div>
+      <div class="panel__section adv-filter">
+        <div class="adv-filter__title">CONSULTAR AGENDAMENTOS</div>
+        <div class="adv-filter__row">
+          <div class="field adv-filter__field">
+            <span class="adv-filter__date">
+              ${icon("calendar", 16)}
+              <input type="date" data-inicio aria-label="Data inicial">
+            </span>
+          </div>
+          <div class="field adv-filter__field">
+            <span class="adv-filter__date">
+              ${icon("calendar", 16)}
+              <input type="date" data-fim aria-label="Data final">
+            </span>
+          </div>
+          <div class="adv-filter__actions">
+            <button type="button" class="btn adv-filter__consult" data-consult>Consultar</button>
+            <button type="button" class="btn adv-filter__clear" data-clear-filter>Limpar Filtro</button>
+          </div>
+        </div>
+      </div>
       <div class="table-wrap" id="manage-agenda-table">
         ${buildAgendamentosTable(appointments)}
       </div>
@@ -383,24 +408,48 @@ export function renderManage(container: HTMLElement): () => void {
 
     const search = $<HTMLInputElement>("[data-search-app]", content);
     const filter = $<HTMLSelectElement>("[data-status-filter]", content);
+    const inicio = $<HTMLInputElement>("[data-inicio]", content);
+    const fim = $<HTMLInputElement>("[data-fim]", content);
+    if (inicio) inicio.value = defaultStart;
+    if (fim) fim.value = defaultEnd;
     const applyFilters = (): void => {
       const q = (search?.value ?? "").trim().toLowerCase();
       const status = filter?.value ?? "todos";
+      const ini = inicio?.value ?? "";
+      const fimv = fim?.value ?? "";
       const filtered = appointments.filter((a) => {
         if (status !== "todos" && a.status !== status) return false;
         if (q && !a.clientName.toLowerCase().includes(q) && !a.email.toLowerCase().includes(q)) return false;
+        if (ini && a.dateIso < ini) return false;
+        if (fimv && a.dateIso > fimv) return false;
         return true;
       });
       $("#manage-agenda-table", content)!.innerHTML = buildAgendamentosTable(filtered);
       bindAgendaRows();
     };
 
-    const sHandler = (): void => applyFilters();
-    const fHandler = (): void => applyFilters();
-    search?.addEventListener("input", sHandler);
-    filter?.addEventListener("change", fHandler);
-    cleanups.push(() => search?.removeEventListener("input", sHandler));
-    cleanups.push(() => filter?.removeEventListener("change", fHandler));
+    const applyHandler = (): void => applyFilters();
+    search?.addEventListener("input", applyHandler);
+    filter?.addEventListener("change", applyHandler);
+    inicio?.addEventListener("change", applyHandler);
+    fim?.addEventListener("change", applyHandler);
+    $<HTMLButtonElement>("[data-consult]", content)?.addEventListener("click", applyHandler);
+    const clearBtn = $<HTMLButtonElement>("[data-clear-filter]", content);
+    if (clearBtn) {
+      const clearHandler = (): void => {
+        if (inicio) inicio.value = defaultStart;
+        if (fim) fim.value = defaultEnd;
+        if (search) search.value = "";
+        if (filter) filter.value = "todos";
+        applyFilters();
+      };
+      clearBtn.addEventListener("click", clearHandler);
+      cleanups.push(() => clearBtn.removeEventListener("click", clearHandler));
+    }
+    cleanups.push(() => search?.removeEventListener("input", applyHandler));
+    cleanups.push(() => filter?.removeEventListener("change", applyHandler));
+    cleanups.push(() => inicio?.removeEventListener("change", applyHandler));
+    cleanups.push(() => fim?.removeEventListener("change", applyHandler));
 
     const openAgendaBtn = $<HTMLButtonElement>("[data-open-agenda]", content);
     if (openAgendaBtn) {
@@ -472,7 +521,7 @@ export function renderManage(container: HTMLElement): () => void {
       return `<p class="panel__empty">Nenhum agendamento encontrado.</p>`;
     }
     return `
-      <table class="table">
+      <table class="table table--fit">
         <thead>
           <tr>
             <th>Cliente</th>
@@ -491,7 +540,7 @@ export function renderManage(container: HTMLElement): () => void {
               let actions = "";
               if (a.status === "pendente") {
                 actions = `<span class="actions-cell">
-                  <button type="button" class="btn btn--sm btn--success" data-set-status="confirmado" data-code="${escapeHtml(a.code)}">Confirmar Presença</button>
+                  <button type="button" class="btn btn--sm btn--success" data-set-status="confirmado" data-code="${escapeHtml(a.code)}">CONFIRMAR</button>
                   <button type="button" class="btn btn--sm btn--danger-outline" data-cancel-app="${escapeHtml(a.code)}">Cancelar</button>
                 </span>`;
               } else if (a.status === "confirmado") {
@@ -767,7 +816,7 @@ export function renderManage(container: HTMLElement): () => void {
                     <td>${escapeHtml(s.category || "-")}</td>
                     <td>${s.durationMin} min</td>
                     <td>${formatCurrency(s.price)}</td>
-                    <td><span class="cell-actions"><button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-service="${escapeHtml(s.id)}">Editar</button></span></td>
+                    <td><span class="cell-actions"><button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-service="${escapeHtml(s.id)}">Editar</button><button type="button" class="btn btn--sm btn--danger-outline" data-delete-service="${escapeHtml(s.id)}">Excluir</button></span></td>
                   </tr>`,
               )
               .join("")}
@@ -793,6 +842,30 @@ export function renderManage(container: HTMLElement): () => void {
       btn.addEventListener("click", h);
       cleanups.push(() => btn.removeEventListener("click", h));
     });
+
+    $$("[data-delete-service]", content).forEach((btn) => {
+      const id = btn.getAttribute("data-delete-service")!;
+      const h = (): void => {
+        const service = servicesCache.find((s) => s.id === id);
+        if (!service) return;
+        void handleDeleteService(service);
+      };
+      btn.addEventListener("click", h);
+      cleanups.push(() => btn.removeEventListener("click", h));
+    });
+  }
+
+  async function handleDeleteService(service: Service): Promise<void> {
+    const confirmed = await confirmDialog({
+      title: "Excluir serviço",
+      message: `Excluir o serviço "${service.name}"? Esta ação não pode ser desfeita.`,
+      confirmLabel: "Excluir",
+      danger: true,
+    });
+    if (!confirmed) return;
+    servicesCache = servicesCache.filter((s) => s.id !== service.id);
+    saveServices(servicesCache);
+    renderServicos();
   }
 
   function openServiceModal(service: Service | null): void {

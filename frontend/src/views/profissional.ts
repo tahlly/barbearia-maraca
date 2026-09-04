@@ -1,14 +1,12 @@
 import { renderPanel } from "../ui/layout.js";
 import { requireRole, getSession, updateSessionUser } from "../services/auth.js";
-import { $, $$, escapeHtml, initials } from "../ui/dom.js";
+import { $, escapeHtml, initials } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { formatDateMedium } from "../ui/format.js";
 import { loadServices, loadProfessionals } from "../services/catalog.js";
-import { listByEmail, cancelAppointment } from "../services/booking.js";
+import { loadAllAppointments } from "../services/booking.js";
 import { listUsuariosInternos, updateUsuarioInterno } from "../services/usuarios.js";
 import { showToast } from "../ui/toast.js";
-import { confirmDialog } from "../ui/modal.js";
-import { initBookingWizard } from "../features/bookingWizard.js";
 import type { Appointment, Service, Professional } from "../types.js";
 
 const STATUS_LABEL: Record<Appointment["status"], string> = {
@@ -30,21 +28,24 @@ function statusBadge(status: Appointment["status"]): string {
   return `<span class="badge badge--${variant}">${STATUS_LABEL[status]}</span>`;
 }
 
-export function renderMinhaConta(container: HTMLElement): () => void {
-  const session = requireRole(["cliente"]);
-
+export function renderProfissional(container: HTMLElement): () => void {
+  const session = requireRole(["profissional"]);
   const { content, cleanup: cleanupPanel } = renderPanel(container, {
-    title: "Minha Conta",
-    roleLabel: "Cliente",
+    title: "Minha Agenda",
+    roleLabel: "Profissional",
     links: [
-      { href: "#/minha-conta", label: "Agendamentos", icon: "calendar" },
-      { href: "#/minha-conta/configuracoes", label: "Configurações", icon: "cog" },
+      { href: "#/profissional", label: "Agendamentos", icon: "calendar" },
+      { href: "#/profissional/configuracoes", label: "Configurações", icon: "cog" },
       { href: "#/", label: "Voltar ao site", icon: "arrow-left" },
     ],
   });
 
-  const wizard = initBookingWizard({ onBookingCreated: () => renderAgendamentos() });
   const cleanups: Array<() => void> = [];
+
+  const usuarioLogado = listUsuariosInternos().find(
+    (u) => u.email.toLowerCase() === (session?.userEmail ?? "").toLowerCase(),
+  );
+  const professionalId = usuarioLogado?.professionalId ?? "";
 
   let servicesCache: Service[] = loadServices();
   let prosCache: Professional[] = loadProfessionals();
@@ -59,23 +60,25 @@ export function renderMinhaConta(container: HTMLElement): () => void {
 
   type ManageTab = "agendamentos" | "configuracoes";
 
-  const base = "/minha-conta";
+  const base = "/profissional";
 
   function handleTab(tab: ManageTab): void {
     if (tab === "agendamentos") renderAgendamentos();
     else renderConfiguracoes();
   }
 
-  // ------------------------------------------------------------- Agendamentos
+  // ------------------------------------------------------------ Agendamentos
   function renderAgendamentos(): void {
     servicesCache = loadServices();
     prosCache = loadProfessionals();
 
-    const appointments = listByEmail(session.userEmail).sort((a, b) => {
-      const ka = `${a.dateIso}T${a.time}`;
-      const kb = `${b.dateIso}T${b.time}`;
-      return kb.toString().localeCompare(ka.toString());
-    });
+    const appointments = loadAllAppointments()
+      .filter((a) => a.professionalId === professionalId)
+      .sort((a, b) => {
+        const ka = `${a.dateIso}T${a.time}`;
+        const kb = `${b.dateIso}T${b.time}`;
+        return kb.toString().localeCompare(ka.toString());
+      });
 
     const currentYear = new Date().getFullYear();
     const defaultStart = `${currentYear}-01-01`;
@@ -85,7 +88,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
           <h3 class="panel__section-title">MEUS AGENDAMENTOS</h3>
-          <p class="manage-head__sub">Histórico completo das suas reservas</p>
+          <p class="manage-head__sub">Controle completo da agenda do salão e status das reservas</p>
         </div>
         <div class="toolbar">
           <select class="input" data-status-filter aria-label="Filtrar por status">
@@ -97,7 +100,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
           </select>
           <div class="manage-search">
             ${icon("search", 16)}
-            <input type="search" data-search-app placeholder="Buscar por serviço..." aria-label="Buscar por serviço">
+            <input type="search" data-search-app placeholder="Buscar cliente..." aria-label="Buscar cliente">
           </div>
         </div>
       </div>
@@ -118,13 +121,13 @@ export function renderMinhaConta(container: HTMLElement): () => void {
             </span>
           </div>
           <div class="adv-filter__actions">
-            <button type="button" class="btn adv-filter__consult" data-new-booking>${icon("plus", 14)} Novo agendamento</button>
+            <button type="button" class="btn adv-filter__consult" data-consult>Consultar</button>
             <button type="button" class="btn adv-filter__clear" data-clear-filter>Limpar Filtro</button>
           </div>
         </div>
       </div>
 
-      <div class="table-wrap" id="conta-agenda-table">
+      <div class="table-wrap" id="pro-agenda-table">
         ${buildTable(appointments)}
       </div>
     `;
@@ -134,24 +137,27 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     const inicio = $<HTMLInputElement>("[data-inicio]", content);
     const fim = $<HTMLInputElement>("[data-fim]", content);
 
+    // Por padrão, mostra apenas os agendamentos do profissional logado.
     if (inicio) inicio.value = defaultStart;
     if (fim) fim.value = defaultEnd;
 
     function rows(): Appointment[] {
-      return listByEmail(session.userEmail).sort((a, b) => {
-        const ka = `${a.dateIso}T${a.time}`;
-        const kb = `${b.dateIso}T${b.time}`;
-        return kb.toString().localeCompare(ka.toString());
-      });
+      return loadAllAppointments()
+        .filter((a) => a.professionalId === professionalId)
+        .sort((a, b) => {
+          const ka = `${a.dateIso}T${a.time}`;
+          const kb = `${b.dateIso}T${b.time}`;
+          return kb.toString().localeCompare(ka.toString());
+        });
     }
 
-    function applySearch(list: Appointment[]): Appointment[] {
+    function applySearch(): Appointment[] {
       const q = (search?.value ?? "").trim().toLowerCase();
-      if (!q) return list;
-      return list.filter((a) => {
-        const names = a.serviceIds.map((id) => serviceName(id)).filter((n) => n !== "-");
-        return names.some((n) => n.toLowerCase().includes(q));
-      });
+      let list = rows();
+      if (q) {
+        list = list.filter((a) => a.clientName.toLowerCase().includes(q) || a.phone.includes(q));
+      }
+      return list;
     }
 
     function applyStatus(list: Appointment[]): Appointment[] {
@@ -172,16 +178,16 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     }
 
     function refresh(): void {
-      let list = rows();
-      list = applySearch(list);
+      let list = applySearch();
       list = applyStatus(list);
       list = applyDates(list);
-      $("#conta-agenda-table", content)!.innerHTML = buildTable(list);
-      bindRows();
+      $("#pro-agenda-table", content)!.innerHTML = buildTable(list);
     }
 
     const onSearch = (): void => refresh();
     const onFilter = (): void => refresh();
+
+    const onConsult = (): void => refresh();
 
     const onClear = (): void => {
       if (inicio) inicio.value = defaultStart;
@@ -193,13 +199,11 @@ export function renderMinhaConta(container: HTMLElement): () => void {
 
     search?.addEventListener("input", onSearch);
     filter?.addEventListener("change", onFilter);
+    $<HTMLButtonElement>("[data-consult]", content)?.addEventListener("click", onConsult);
     $<HTMLButtonElement>("[data-clear-filter]", content)?.addEventListener("click", onClear);
-    $<HTMLButtonElement>("[data-new-booking]", content)?.addEventListener("click", () => wizard.openNew());
 
     cleanups.push(() => search?.removeEventListener("input", onSearch));
     cleanups.push(() => filter?.removeEventListener("change", onFilter));
-
-    bindRows();
   }
 
   function buildTable(appointments: Appointment[]): string {
@@ -207,34 +211,30 @@ export function renderMinhaConta(container: HTMLElement): () => void {
       return `<p class="panel__empty">Nenhum agendamento encontrado.</p>`;
     }
     return `
-      <table class="table table--fit table--conta">
+      <table class="table">
         <thead>
           <tr>
-            <th>Serviço</th>
+            <th>Cliente</th>
+            <th>Telefone</th>
             <th>Profissional</th>
+            <th>Serviço</th>
             <th>Data/Hora</th>
             <th>Status</th>
-            <th>Ações</th>
           </tr>
         </thead>
         <tbody>
           ${appointments
             .map((a) => {
-              const names = a.serviceIds.map((id) => serviceName(id)).filter((n) => n !== "-").join(", ") || "-";
-              let actions = `<span class="muted-note">-</span>`;
-              if (a.status === "pendente" || a.status === "confirmado") {
-                actions = `<span class="cell-actions">
-                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-reschedule="${escapeHtml(a.code)}">REAGENDAR</button>
-                  <button type="button" class="btn btn--sm btn--danger-outline" data-cancel="${escapeHtml(a.code)}">Cancelar</button>
-                </span>`;
-              }
+              const names =
+                a.serviceIds.map((id) => serviceName(id)).filter((n) => n !== "-").join(", ") || "-";
               return `
                 <tr>
-                  <td><strong>${escapeHtml(names)}</strong></td>
+                  <td><strong>${escapeHtml(a.clientName)}</strong></td>
+                  <td>${escapeHtml(a.phone)}</td>
                   <td>${escapeHtml(professionalName(a.professionalId))}</td>
+                  <td>${escapeHtml(names)}</td>
                   <td>${formatDateMedium(a.dateIso)} · ${a.time}</td>
                   <td>${statusBadge(a.status)}</td>
-                  <td>${actions}</td>
                 </tr>`;
             })
             .join("")}
@@ -243,47 +243,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     `;
   }
 
-  function bindRows(): void {
-    $$("[data-reschedule]", content).forEach((btn) => {
-      const code = btn.getAttribute("data-reschedule")!;
-      const appointment = listByEmail(session.userEmail).find((a) => a.code === code);
-      if (!appointment) return;
-      const h = (): void => wizard.openForReschedule(appointment);
-      btn.addEventListener("click", h);
-      cleanups.push(() => btn.removeEventListener("click", h));
-    });
-
-    $$("[data-cancel]", content).forEach((btn) => {
-      const code = btn.getAttribute("data-cancel")!;
-      const appointment = listByEmail(session.userEmail).find((a) => a.code === code);
-      if (!appointment) return;
-      const h = (): void => {
-        void handleCancel(appointment);
-      };
-      btn.addEventListener("click", h);
-      cleanups.push(() => btn.removeEventListener("click", h));
-    });
-  }
-
-  async function handleCancel(appointment: Appointment): Promise<void> {
-    const confirmed = await confirmDialog({
-      title: "Cancelar agendamento",
-      message: `Tem certeza que deseja cancelar o agendamento ${appointment.code}? Essa ação não pode ser desfeita.`,
-      confirmLabel: "Sim, cancelar",
-      cancelLabel: "Manter",
-      danger: true,
-    });
-    if (!confirmed) return;
-    const updated = await cancelAppointment(appointment.code);
-    if (updated) {
-      showToast(`Agendamento ${updated.code} cancelado.`);
-    } else {
-      showToast("Não foi possível cancelar. Tente novamente.", "error");
-    }
-    renderAgendamentos();
-  }
-
-  // ------------------------------------------------------------- Configurações
+  // ----------------------------------------------------------- Configurações
   function renderConfiguracoes(): void {
     const current = getSession();
     content.innerHTML = `
@@ -375,10 +335,6 @@ export function renderMinhaConta(container: HTMLElement): () => void {
       }
     }
 
-    const usuarioLogado = listUsuariosInternos().find(
-      (u) => u.email.toLowerCase() === (current?.userEmail ?? "").toLowerCase(),
-    );
-
     const form = $<HTMLFormElement>("#profile-form", content);
     if (form) {
       const cancelBtn = $<HTMLButtonElement>("[data-profile-cancel]", content);
@@ -462,7 +418,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     }
   }
 
-  // ------------------------------------------------------------- Tab routing
+  // ------------------------------------------------------------ Tab routing
   const linkHandler = (): void => {
     const path = window.location.hash.slice(1);
     if (path === `${base}/configuracoes`) handleTab("configuracoes");

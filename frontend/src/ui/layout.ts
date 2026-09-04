@@ -75,9 +75,15 @@ export function renderPanel(container: HTMLElement, options: PanelOptions): Pane
           </button>
         </div>
       </aside>
+      <div class="panel__backdrop" data-panel-backdrop></div>
       <div class="panel__main">
         <header class="panel__topbar">
-          <h1 class="panel__title">${escapeHtml(options.title)}</h1>
+          <div class="panel__topbar-start">
+            <button type="button" class="panel__hamburger" data-panel-hamburger aria-label="Abrir menu" aria-expanded="false">
+              <span class="panel__hamburger-icon">${icon("menu", 22)}</span>
+            </button>
+            <h1 class="panel__title">${escapeHtml(options.title)}</h1>
+          </div>
           <button type="button" class="theme-toggle" data-theme-toggle aria-label="Alternar para tema claro">
             <i class="bx bx-moon"></i>
           </button>
@@ -109,6 +115,32 @@ export function renderPanel(container: HTMLElement, options: PanelOptions): Pane
     collapseBtn.addEventListener("click", onCollapse);
     cleanups.push(() => collapseBtn.removeEventListener("click", onCollapse));
   }
+
+  const hamburgerBtn = $<HTMLButtonElement>("[data-panel-hamburger]", container);
+  const backdrop = $<HTMLElement>("[data-panel-backdrop]", container);
+
+  function setMobileOpen(open: boolean): void {
+    panelRoot.classList.toggle("is-mobile-open", open);
+    hamburgerBtn?.setAttribute("aria-expanded", String(open));
+    hamburgerBtn?.setAttribute("aria-label", open ? "Fechar menu" : "Abrir menu");
+    const iconEl = hamburgerBtn?.querySelector<HTMLElement>(".panel__hamburger-icon");
+    if (iconEl) iconEl.innerHTML = icon(open ? "x" : "menu", 22);
+  }
+
+  if (hamburgerBtn) {
+    const onHamburger = (): void => {
+      const open = panelRoot.classList.contains("is-mobile-open");
+      setMobileOpen(!open);
+    };
+    hamburgerBtn.addEventListener("click", onHamburger);
+    cleanups.push(() => hamburgerBtn.removeEventListener("click", onHamburger));
+  }
+
+  backdrop?.addEventListener("click", () => setMobileOpen(false));
+
+  const onPanelHashChange = (): void => setMobileOpen(false);
+  window.addEventListener("hashchange", onPanelHashChange);
+  cleanups.push(() => window.removeEventListener("hashchange", onPanelHashChange));
 
   const markActive = (): void => {
     const path = window.location.hash;
