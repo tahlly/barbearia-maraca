@@ -3,11 +3,13 @@ import type { Request, Response } from 'express';
 import {
   listarClientesService,
   obterClienteParaUsuario,
+  buscarClientePorEmailService,
   criarClienteNovo,
   atualizarClienteParaUsuario,
 } from '../services/cliente-service';
 import type { UsuarioAutenticado } from '../services/cliente-service';
 import { UnauthorizedError } from '../errors/UnauthorizedError';
+import { ValidationError } from '../errors/ValidationError';
 
 const createSchema = z.object({
   nome: z.string().trim().min(1, 'Nome é obrigatório'),
@@ -20,6 +22,10 @@ const updateSchema = z.object({
   nome: z.string().trim().min(1, 'Nome não pode ser vazio').optional(),
   email: z.string().trim().toLowerCase().email('Email inválido').optional(),
   telefone: z.string().trim().min(1, 'Telefone não pode ser vazio').optional(),
+});
+
+const buscarQuerySchema = z.object({
+  email: z.string().trim().toLowerCase().min(1, 'Email é obrigatório').email('Email inválido'),
 });
 
 function userAutenticado(req: Request): UsuarioAutenticado {
@@ -47,6 +53,18 @@ export async function obterClienteHandler(req: Request, res: Response): Promise<
   const id = parametroId(req);
   const usuario = userAutenticado(req);
   const cliente = await obterClienteParaUsuario(id, usuario);
+  res.json(cliente);
+}
+
+export async function buscarClientePorEmailHandler(req: Request, res: Response): Promise<void> {
+  const parsed = buscarQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError('Parâmetro email inválido', parsed.error.issues);
+  }
+
+  const usuario = userAutenticado(req);
+  const cliente = await buscarClientePorEmailService(parsed.data.email, usuario);
   res.json(cliente);
 }
 

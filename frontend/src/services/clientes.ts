@@ -5,12 +5,33 @@ import { apiFetch } from "./api.js";
 /**
  * Busca cliente por e-mail.
  *
- * O endpoint GET /clientes/buscar NÃO existe no backend.
- * Função mantida como stub para compatibilidade com googleAuth.ts (mock).
- * TODO integração: implementar quando houver endpoint equivalente no backend.
+ * Chama `GET /clientes/buscar?email=...` (endpoint autenticado: recepcionista/
+ * admin encontram qualquer cliente; um cliente autenticado só encontra o
+ * próprio registro). Retorna `null` em 401/404/erro para o caller tratar
+ * como "não cadastrado".
  */
-export async function findClienteByEmail(_email: string): Promise<Cliente | null> {
-  return null;
+export async function findClienteByEmail(email: string): Promise<Cliente | null> {
+  try {
+    const res = await apiFetch(`/clientes/buscar?email=${encodeURIComponent(email)}`);
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as {
+      id: string;
+      nome: string;
+      email: string;
+      telefone: string | null;
+    };
+    return {
+      id: data.id,
+      nome: data.nome,
+      email: data.email,
+      telefone: data.telefone ?? "",
+      senha: "",
+      createdAt: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**

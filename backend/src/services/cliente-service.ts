@@ -3,6 +3,7 @@ import { findUsuarioByEmail } from '../repositories/auth-repository';
 import {
   listarClientes,
   buscarClientePorId,
+  buscarClientePorEmail,
   criarClienteCompleto,
   atualizarCliente,
 } from '../repositories/cliente-repository';
@@ -90,6 +91,27 @@ export async function obterClienteParaUsuario(
   usuario: UsuarioAutenticado
 ): Promise<ClienteDTO> {
   const cliente = await resolverAcesso(id, usuario);
+  return toDTO(cliente);
+}
+
+/**
+ * Busca um cliente pelo e-mail aplicando a regra de ownership:
+ * - recepcionista/admin encontram qualquer cliente;
+ * - um cliente autenticado só encontra o próprio registro (por `usuario_id`).
+ *
+ * Não autenticado não chega aqui (a rota exige `authenticate`).
+ */
+export async function buscarClientePorEmailService(
+  email: string,
+  usuario: UsuarioAutenticado
+): Promise<ClienteDTO> {
+  const cliente = await buscarClientePorEmail(email);
+  if (!cliente) {
+    throw new NotFoundError('Cliente não encontrado');
+  }
+  if (!podeAcessarQualquer(usuario.role) && usuario.id !== cliente.usuario_id) {
+    throw new ForbiddenError('Acesso negado');
+  }
   return toDTO(cliente);
 }
 
