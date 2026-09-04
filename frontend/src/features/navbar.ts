@@ -5,9 +5,12 @@ export function initNavbar(): () => void {
   const nav = $("#nav");
   if (!toggle || !nav) return () => {};
 
-  const backdrop = document.createElement("div");
-  backdrop.className = "nav-backdrop";
-  document.body.appendChild(backdrop);
+  let backdrop = document.querySelector<HTMLElement>(".nav-backdrop");
+  if (!backdrop) {
+    backdrop = document.createElement("div");
+    backdrop.className = "nav-backdrop";
+    document.body.appendChild(backdrop);
+  }
 
   const closeMenu = (): void => {
     nav.classList.remove("is-open");
