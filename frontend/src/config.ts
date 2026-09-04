@@ -1,5 +1,12 @@
+// VITE_USE_MOCK_API: ausente = mock (padrão); "false" = API real; qualquer outro valor = mock.
+function resolveUseMockApi(): boolean {
+  const raw = import.meta.env.VITE_USE_MOCK_API;
+  if (raw === undefined) return true;
+  return raw !== "false";
+}
+
 export const CONFIG = {
-  useMockApi: true,
+  useMockApi: resolveUseMockApi(),
   apiBaseUrl: "http://localhost:3000/api",
   googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "",
   sessionKey: "maraca.session",

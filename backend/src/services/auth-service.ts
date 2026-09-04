@@ -1,18 +1,23 @@
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
 import { ValidationError } from '../errors/ValidationError';
 import { ForbiddenError } from '../errors/ForbiddenError';
+import { UnauthorizedError } from '../errors/UnauthorizedError';
 import {
   findUsuarioByEmail,
   findUsuarioByGoogleId,
   criarUsuarioGoogle,
   vincularGoogleAUsuario,
   criarCliente,
+  criarSessao,
   obterClienteNome,
   obterFuncionarioNome,
   type UsuarioRow,
 } from '../repositories/auth-repository';
-import type { LoginResponseDTO, UsuarioDTO } from '../dtos/auth-dto';
+import type { LoginResponseDTO, Papel, UsuarioDTO } from '../dtos/auth-dto';
+
+export const SESSAO_TTL_MS = 30 * 60 * 1000;
 
 const DEFAULT_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 
@@ -23,6 +28,36 @@ export interface GoogleProfile {
   email: string;
   nome: string;
   avatarUrl: string | null;
+}
+
+/**
+ * Mapeia tipo/cargo persistidos para o papel consumido pela SPA e pelo
+ * middleware de autorização. Papel é derivado no backend, nunca aceito do cliente.
+ */
+export function mapearTipoParaRole(tipo: string, cargo?: string | null): Papel {
+  if (tipo === 'cliente') return 'cliente';
+  if (cargo === 'administrador') return 'admin';
+  if (cargo === 'recepcionista') return 'recepcionista';
+  return 'profissional';
+}
+
+export function hashTokenSessao(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function gerarToken(): string {
+  return 'tok_' + crypto.randomBytes(24).toString('hex');
+}
+
+function buildUsuarioDTO(usuario: UsuarioRow, nome: string | null, cargo?: string | null): UsuarioDTO {
+  return {
+    id: usuario.id,
+    email: usuario.email,
+    tipo: usuario.tipo,
+    nome,
+    cargo: cargo || null,
+    avatarUrl: usuario.avatar_url,
+  };
 }
 
 export function validarTokenGoogle(idToken: string): Promise<GoogleProfile> {
@@ -54,19 +89,59 @@ export function validarTokenGoogle(idToken: string): Promise<GoogleProfile> {
     });
 }
 
-function buildUsuarioDTO(usuario: UsuarioRow, nome: string | null, cargo?: string | null): UsuarioDTO {
+async function carregarNomeECargo(
+  usuario: UsuarioRow,
+): Promise<{ nome: string | null; cargo: string | null }> {
+  if (usuario.tipo === 'cliente') {
+    return { nome: await obterClienteNome(usuario.id), cargo: null };
+  }
+  const funcionario = await obterFuncionarioNome(usuario.id);
   return {
-    id: usuario.id,
-    email: usuario.email,
-    tipo: usuario.tipo,
-    nome,
-    cargo: cargo || null,
-    avatarUrl: usuario.avatar_url,
+    nome: funcionario?.nome ?? null,
+    cargo: funcionario?.cargo ?? null,
   };
 }
 
-function gerarToken(): string {
-  return 'tok_' + crypto.randomBytes(24).toString('hex');
+/**
+ * Gera token opaco, registra a sessão (token_hash SHA-256 hex) com TTL de 30
+ * minutos e monta a resposta interna de login. Nunca retorna o hash nem a senha.
+ */
+export async function criarSessaoParaUsuario(usuario: UsuarioRow): Promise<LoginResponseDTO> {
+  const perfil = await carregarNomeECargo(usuario);
+  const token = gerarToken();
+  const expiraEm = new Date(Date.now() + SESSAO_TTL_MS);
+
+  await criarSessao({
+    usuarioId: usuario.id,
+    tokenHash: hashTokenSessao(token),
+    expiraEm,
+  });
+
+  return {
+    token,
+    expiresAt: expiraEm.getTime(),
+    user: buildUsuarioDTO(usuario, perfil.nome, perfil.cargo),
+  };
+}
+
+export async function autenticarLocal(email: string, senha: string): Promise<LoginResponseDTO> {
+  const usuario = await findUsuarioByEmail(email.trim().toLowerCase());
+
+  if (!usuario) {
+    throw new UnauthorizedError('Credenciais inválidas');
+  }
+
+  // Usuário criado via Google sem senha não pode autenticar com credenciais locais.
+  if (!usuario.senha_hash) {
+    throw new UnauthorizedError('Credenciais inválidas');
+  }
+
+  const senhaValida = await bcrypt.compare(senha, usuario.senha_hash);
+  if (!senhaValida) {
+    throw new UnauthorizedError('Credenciais inválidas');
+  }
+
+  return criarSessaoParaUsuario(usuario);
 }
 
 export async function autenticarComGoogle(idToken: string): Promise<LoginResponseDTO> {
@@ -75,10 +150,11 @@ export async function autenticarComGoogle(idToken: string): Promise<LoginRespons
   let usuario = await findUsuarioByGoogleId(perfil.sub);
 
   if (!usuario) {
-    usuario = await findUsuarioByEmail(perfil.email);
+    const usuarioPorEmail = await findUsuarioByEmail(perfil.email);
 
-    if (usuario) {
-      await vincularGoogleAUsuario(usuario.id, perfil.sub, perfil.avatarUrl);
+    if (usuarioPorEmail) {
+      await vincularGoogleAUsuario(usuarioPorEmail.id, perfil.sub, perfil.avatarUrl);
+      usuario = await findUsuarioByGoogleId(perfil.sub);
     } else {
       usuario = await criarUsuarioGoogle({
         email: perfil.email,
@@ -90,19 +166,9 @@ export async function autenticarComGoogle(idToken: string): Promise<LoginRespons
     }
   }
 
-  let nome: string | null = null;
-  let cargo: string | null = null;
-
-  if (usuario.tipo === 'cliente') {
-    nome = await obterClienteNome(usuario.id);
-  } else {
-    const funcionario = await obterFuncionarioNome(usuario.id);
-    nome = funcionario?.nome ?? null;
-    cargo = usuario.tipo === 'funcionario' ? (funcionario?.cargo ?? null) : null;
+  if (!usuario) {
+    throw new ForbiddenError('Falha ao validar token do Google');
   }
 
-  return {
-    token: gerarToken(),
-    user: buildUsuarioDTO(usuario, nome, cargo),
-  };
+  return criarSessaoParaUsuario(usuario);
 }

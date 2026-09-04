@@ -5,6 +5,7 @@ import { ValidationError } from '../errors/ValidationError';
 import { ForbiddenError } from '../errors/ForbiddenError';
 import { NotFoundError } from '../errors/NotFoundError';
 import { InternalError } from '../errors/InternalError';
+import { UnauthorizedError } from '../errors/UnauthorizedError';
 
 export interface ErrorResponse {
   erro: boolean;
@@ -35,6 +36,8 @@ export function errorHandler(
 
   let response: ErrorResponse;
 
+  // Qualquer AppError (incluindo UnauthorizedError 401 e ForbiddenError 403)
+  // responde com o próprio status, sem conversão adicional.
   if (error instanceof AppError) {
     response = {
       erro: true,
@@ -62,14 +65,17 @@ export function errorHandler(
     return;
   }
 
-  if (error.name === 'UnauthorizedError' || error.message.includes('jwt')) {
-    const forbiddenError = new ForbiddenError('Token inválido ou expirado');
+  // Bloco legado para erros 401 genéricos de bibliotecas externas (ex.: jwt).
+  // Não altera o status de AppError, tratado acima; aqui o correto é 401 e
+  // nunca converter um não-autenticado em 403.
+  if (error.name === 'UnauthorizedError' || error.message.toLowerCase().includes('jwt')) {
+    const unauthorizedError = new UnauthorizedError('Token inválido ou expirado');
     response = {
       erro: true,
-      mensagem: forbiddenError.message,
-      status: forbiddenError.status,
+      mensagem: unauthorizedError.message,
+      status: unauthorizedError.status,
     };
-    res.status(forbiddenError.status).json(response);
+    res.status(unauthorizedError.status).json(response);
     return;
   }
 

@@ -37,43 +37,6 @@ app.get('/api/servicos', async (req: Request, res: Response) => {
   }
 });
 
-app.post('/api/auth/login', async (req: Request, res: Response) => {
-  const { email, senha } = req.body;
-
-  if (!email || !senha) {
-    return res.status(400).json({ message: 'Email e senha obrigatorios' });
-  }
-
-  try {
-    const bcrypt = await import('bcrypt');
-    const usuario = await db('usuario').where('email', email).first();
-
-    if (!usuario) {
-      return res.status(401).json({ message: 'Credenciais invalidas' });
-    }
-
-    const senhaValida = await bcrypt.default.compare(senha, usuario.senha_hash);
-    if (!senhaValida) {
-      return res.status(401).json({ message: 'Credenciais invalidas' });
-    }
-
-    const funcionario = await db('funcionario').where('usuario_id', usuario.id).first();
-    const cliente = await db('cliente').where('usuario_id', usuario.id).first();
-
-    const userData = {
-      id: usuario.id,
-      email: usuario.email,
-      tipo: usuario.tipo,
-      nome: funcionario?.nome || cliente?.nome,
-      cargo: funcionario?.cargo || null,
-    };
-
-    res.json({ token: 'token_placeholder', user: userData });
-  } catch (error) {
-    res.status(500).json({ message: 'Erro ao autenticar' });
-  }
-});
-
 app.use('/api/auth', authRoutes);
 app.use('/servicos', servicoRoutes);
 

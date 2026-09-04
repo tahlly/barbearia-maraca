@@ -25,9 +25,11 @@ interface GoogleIdTokenPayload {
 }
 
 interface GoogleAccounts {
-  id?: {
-    initialize: (config: { client_id: string; callback: (res: { credential?: string }) => void }) => void;
-    prompt: () => void;
+  accounts?: {
+    id?: {
+      initialize: (config: { client_id: string; callback: (res: { credential?: string }) => void }) => void;
+      prompt: () => void;
+    };
   };
 }
 
@@ -68,11 +70,11 @@ export function promptGoogleIdToken(): Promise<string> {
     () =>
       new Promise<string>((resolve, reject) => {
         const google = (window as unknown as { google?: GoogleAccounts }).google;
-        if (!google?.id) {
+        if (!google?.accounts?.id) {
           reject(new Error("Google Identity Services indisponível."));
           return;
         }
-        google.id.initialize({
+        google.accounts.id.initialize({
           client_id: clientId,
           callback: (res) => {
             if (res.credential) {
@@ -82,7 +84,7 @@ export function promptGoogleIdToken(): Promise<string> {
             }
           },
         });
-        google.id.prompt();
+        google.accounts.id.prompt();
       }),
   );
 }
