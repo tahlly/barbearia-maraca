@@ -49,6 +49,49 @@ Se houver conflito, ambiguidade ou lacuna material:
 - integridade referencial
 - Knex para configuração, migrations e seeds quando isso fizer parte do repositório aprovado
 
+## Operação / Desenvolvimento local
+
+### Arquitetura (não óbvia pelos nomes)
+- Monorepo simples: `backend/` (Express + Knex), `frontend/` (Vite + Vanilla TS SPA), `shared/types/**` (contratos HTTP compartilhados — hoje vazio, o Backend é o dono padrão).
+- Backend em camadas: `rotas/` → `controllers/` → `services/` → `repositories/`.
+- Frontend: SPA sem framework, roteamento por hash (`#/...`), entrypoint `frontend/src/main.ts`, `index.html` em `frontend/`.
+- O backend também serve o frontend estático em `http://localhost:3000`; em dev use o Vite (5173).
+
+### Comandos
+```sh
+# Banco (Postgres 16 via Docker)
+docker compose up -d          # sobe o banco na porta 5432 (db: barbearia_maraca, user/senha: postgres/postgres)
+
+# Backend (rodar de backend/)
+npm install
+npm run dev                   # tsx src/server.ts -> http://localhost:3000
+npm run migrate:latest        # aplica migrations
+npm run migrate:rollback      # desfaz última batch
+npm run migrate:make -- nome  # cria nova migration
+npm run seed                  # popula dados de teste
+npm run build                 # tsc -> dist/
+npm start                     # node dist/server.js
+
+# Frontend (rodar de frontend/)
+npm install
+npm run dev                   # Vite -> http://localhost:5173 (proxy /api -> :3000)
+npm run typecheck             # tsc --noEmit
+npm run build                 # tsc && vite build
+```
+
+### Gotchas de ambiente (fáceis de errar)
+- **O `.env` ativo é `backend/.env`, NÃO o da raiz.** Tanto `backend/src/knexfile.ts` quanto `backend/src/server.ts` carregam `path.resolve(__dirname, '..', '.env')` = `backend/.env`. O `.env` da raiz é redundante/confuso — mantenha os dois consistentes ou remova o da raiz.
+- **Migrations e seeds são TypeScript** e rodam via `npx tsx node_modules/knex/bin/cli.js ...` (os scripts do `package.json` já fazem isso). Não use `npx knex` direto.
+- **Migrations não devem ser reescritas após aplicadas** — crie novas migrations para mudanças.
+- **Restrição de dupla reserva** é um índice único parcial em `agendamento (funcionario_id, data, hora) WHERE status <> 'cancelado'` (migration `20260902000004`). Cobre horário exato, não sobreposição parcial.
+- **Nomenclatura do schema:** a tabela de equipe é `funcionario` (enum `cargo`: barbeiro/recepcionista/administrador), NÃO `barbeiro`. Horários são `horario_trabalho` + `horario_excecao`, NÃO `horario`.
+- **Seed:** senha padrão dos usuários de teste é `senha123`; o seed não cria agendamentos.
+
+### Commits e fluxo de PR
+- **Commitlint + Husky** validam a mensagem de commit (Conventional Commits, `commitlint.config.cjs`). Formato: `tipo(escopo): descrição` (ex.: `fix(frontend): ...`). Mensagens fora do padrão são **bloqueadas**.
+- **Todas as mudanças entram via Pull Request** (o histórico é todo de merges de PRs). Não commitar/pushar direto na `developer` — crie uma branch (`feat/`, `fix/`, `chore/`, `docs/`), abra PR para `developer`, e faça merge no GitHub.
+- `*.log` e `.env` (qualquer nível) são ignorados — não commitar logs nem credenciais.
+
 ## Restrições globais
 
 Não adote sem aprovação explícita:
