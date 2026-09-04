@@ -91,6 +91,29 @@ export async function buscarPorId(id: string): Promise<FuncionarioCompletoDTO | 
   return row ? toCompletoDTO(row, row.email) : null;
 }
 
+export async function buscarPorEmail(email: string): Promise<FuncionarioCompletoDTO | null> {
+  const row = (await db('funcionario')
+    .join('usuario', 'funcionario.usuario_id', 'usuario.id')
+    .where('usuario.email', email)
+    .select(
+      'funcionario.id',
+      'funcionario.usuario_id',
+      'funcionario.nome',
+      'funcionario.telefone',
+      'funcionario.cargo',
+      'funcionario.especialidade',
+      'funcionario.foto',
+      'funcionario.descricao',
+      'funcionario.ativo',
+      'funcionario.created_at',
+      'funcionario.updated_at',
+      'usuario.email',
+    )
+    .first()) as (FuncionarioRow & { email: string }) | undefined;
+
+  return row ? toCompletoDTO(row, row.email) : null;
+}
+
 export async function buscarPorUsuarioId(usuarioId: string): Promise<FuncionarioRow | null> {
   const row = (await db('funcionario').where('usuario_id', usuarioId).first()) as FuncionarioRow | undefined;
   return row ?? null;

@@ -172,10 +172,9 @@ export async function listUsuariosInternos(): Promise<UsuarioInterno[]> {
  * Busca um usuário interno por e-mail.
  *
  * **Modo mock:** filtra a lista em `localStorage`.
- * **Modo API:** busca todos os funcionários e filtra por e-mail.
- *
- * PENDÊNCIA: Não há endpoint de busca por e-mail no backend.
- * A implementação atual faz fetch completo e filtra.
+ * **Modo API:** chama `GET /funcionarios/buscar?email=...` (autenticado;
+ * admin/recepcionista encontram qualquer funcionário; um profissional só o
+ * próprio). Retorna `null` em 404/erro para o caller tratar como inexistente.
  */
 export async function findUsuarioByEmail(
   email: string,
@@ -187,11 +186,14 @@ export async function findUsuarioByEmail(
     );
   }
 
-  const usuarios = await fetchAllFromApi();
-  const normalized = email.trim().toLowerCase();
-  return (
-    usuarios.find((u) => u.email.toLowerCase() === normalized) ?? null
-  );
+  try {
+    const funcionario = await httpJson<FuncionarioDTO>(
+      `/funcionarios/buscar?email=${encodeURIComponent(email.trim().toLowerCase())}`,
+    );
+    return funcionarioToUsuario(funcionario);
+  } catch {
+    return null;
+  }
 }
 
 /**

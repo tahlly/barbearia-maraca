@@ -31,6 +31,10 @@ const alterarStatusSchema = z.object({
   ativo: z.boolean(),
 });
 
+const buscarQuerySchema = z.object({
+  email: z.string().trim().toLowerCase().min(1, 'Email é obrigatório').email('Email inválido'),
+});
+
 // ── Helpers ───────────────────────────────────────────────────
 
 /** Extrai um parâmetro de rota como string única (Express 5 permite string[]). */
@@ -67,6 +71,22 @@ export async function listarDetalhes(_req: Request, res: Response): Promise<void
 export async function buscarPorId(req: Request, res: Response): Promise<void> {
   const resultado = await funcionarioService.buscarFuncionarioPorId(
     idParam(req),
+    req.user?.id,
+    req.user?.role,
+  );
+  res.json(resultado);
+}
+
+/** GET /api/funcionarios/buscar?email=... — autenticado; permissão verificada no service. */
+export async function buscarPorEmail(req: Request, res: Response): Promise<void> {
+  const parsed = buscarQuerySchema.safeParse(req.query);
+
+  if (!parsed.success) {
+    throw new ValidationError('Parâmetro email inválido', parsed.error.issues);
+  }
+
+  const resultado = await funcionarioService.buscarFuncionarioPorEmail(
+    parsed.data.email,
     req.user?.id,
     req.user?.role,
   );
