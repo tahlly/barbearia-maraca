@@ -315,27 +315,42 @@
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: var(--space-5);
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-3);
 }
 
 .config-photo {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
-.avatar--lg {
-  width: 88px;
-  height: 88px;
-  font-size: 1.6rem;
+.config-photo .avatar--lg {
+  width: 64px;
+  height: 64px;
+  font-size: 1.2rem;
   background-size: cover;
   background-position: center;
-  background-color: var(--color-surface-raised);
-  display: grid;
-  place-items: center;
+}
+
+.config-card .form-grid {
+  gap: var(--space-3);
+}
+
+.config-card .manage-form-title {
+  margin: var(--space-2) 0 var(--space-2);
+}
+
+.config-card .field {
+  gap: 4px;
+}
+
+.config-card .field input,
+.config-card .field select {
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .config-actions {
@@ -343,7 +358,9 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-3);
-  margin-top: var(--space-2);
+  margin-top: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
 }
 
 /* ----- Botões auxiliares ----- */
@@ -381,6 +398,90 @@
 /* ----- Botões dentro de tabela ----- */
 .table .cell-actions {
   gap: var(--space-2);
+}
+
+/* ----- Consulta avançada (Profissional) ----- */
+.adv-filter {
+  border: 1px solid var(--color-gold-border);
+  border-radius: 8px;
+  padding: 20px;
+  background-color: var(--color-surface);
+}
+
+.adv-filter__title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-gold);
+  margin-bottom: var(--space-3);
+}
+
+.adv-filter__row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.adv-filter__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+
+.adv-filter__date {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.adv-filter__date .bx {
+  position: absolute;
+  left: 10px;
+  font-size: 16px;
+  color: var(--color-gold);
+  pointer-events: none;
+}
+
+.adv-filter__date input[type="date"] {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.84rem;
+  padding: 10px 12px 10px 34px;
+  color-scheme: dark;
+}
+
+.adv-filter__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.adv-filter__consult {
+  background: transparent;
+  border-color: var(--color-gold-border);
+  color: var(--color-gold);
+}
+
+.adv-filter__consult:hover {
+  background-color: var(--color-gold-soft);
+  color: var(--color-gold-strong);
+}
+
+.adv-filter__clear {
+  background: transparent;
+  border-color: rgba(211, 47, 47, 0.5);
+  color: var(--color-danger-text);
+}
+
+.adv-filter__clear:hover {
+  background-color: var(--color-danger-soft);
+  color: var(--color-danger-text);
 }
 
 @media (max-width: 768px) {

@@ -218,27 +218,28 @@ body.light-theme .auth__box {
 }
 
 .auth--admin .auth__box {
-  background-color: #0e0e10;
+  background-color: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: 8px;
+  padding: var(--space-5) var(--space-5) var(--space-4);
 }
 
 .auth--admin .auth__close {
-  background-color: #2d2d35;
+  background-color: transparent;
   border-radius: 4px;
-  color: #ffffff;
+  color: var(--color-text-muted);
 }
 
 .auth--admin .auth__close:hover {
-  background-color: #3a3a44;
-  color: #ffffff;
+  background-color: rgba(128, 128, 128, 0.14);
+  color: var(--color-text);
 }
 
 .auth--admin .auth__panel {
-  background-color: #1e1e22;
+  background-color: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  padding: 24px;
+  padding: var(--space-4);
   text-align: left;
 }
 
@@ -246,28 +247,42 @@ body.light-theme .auth__box {
   margin-top: 0;
 }
 
+.auth--admin .auth__box form {
+  gap: 12px;
+}
+
+.auth--admin .auth__box form .btn {
+  margin-top: var(--space-2);
+}
+
+.auth--admin .field {
+  gap: 4px;
+}
+
 .auth--admin .field input {
-  background-color: #121214;
+  background-color: var(--color-surface);
   border-radius: 4px;
-  padding: 12px;
+  padding: 9px 12px;
 }
 
 .auth--admin .field input::placeholder {
-  color: #626270;
+  color: var(--color-text-muted);
 }
 
 .auth--admin .auth__subtitle {
   font-size: 0.8125rem;
-  color: #a0a0b0;
+  color: var(--color-label);
+  margin-bottom: var(--space-4);
 }
 
 .auth--admin .auth__footer {
   font-size: 0.8125rem;
-  color: #ffffff;
+  color: var(--color-text);
+  margin-top: var(--space-4);
 }
 
 .auth--admin .auth__footer .auth__link {
-  color: #d4af37;
+  color: var(--color-gold);
 }
 
 /* ----- Login com Google ----- */

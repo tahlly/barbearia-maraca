@@ -24,11 +24,17 @@ npm run preview    # pré-visualiza o build de produção
 |---|---|
 | `#/` | Landing pública (Início · Serviços · Sobre · Contato) |
 | `#/login` | Acesso administrativo (redireciona por papel: admin / profissional / recepcionista) |
-| `#/login-cliente` | Login / cadastro da área do cliente |
-| `#/minha-conta` | Área do cliente (próximos, histórico, perfil) |
+| `#/login-cliente` | Login / cadastro da área do cliente (inclui **Login com Google**) |
+| `#/minha-conta` | Painel do Cliente — **Agendamentos** (histórico, filtro CONSULTAR, busca por serviço, Reagendar/Cancelar) |
+| `#/minha-conta/configuracoes` | Painel do Cliente — **Configurações** (foto, nome, senha, e-mail) |
 | `#/admin` | Painel de gestão — Administrador (dashboard, agendamentos, serviços, profissionais, configurações) |
-| `#/profissional` | Painel do Profissional (esqueleto) |
+| `#/admin/*` | Abas do painel do Administrador |
+| `#/profissional` | Painel do Profissional — **Agendamentos** (somente leitura) |
+| `#/profissional/configuracoes` | Painel do Profissional — **Configurações** |
 | `#/recepcionista` | Painel de gestão compartilhado com o Admin (sem dashboard/financeiro — abre em Agendamentos) |
+| `#/recepcionista/*` | Abas do painel da Recepcionista |
+| `#/privacidade` | Política de Privacidade (institucional) |
+| `#/termos` | Termos de Uso (institucional) |
 | `#/servicos`, `#/sobre`, `#/contato` | Âncoras da landing → rolagem suave até a seção |
 | qualquer outra | Fallback → landing |
 
@@ -51,7 +57,7 @@ frontend/
     ├── config.ts         # config geral (credencial demo, chave de sessão)
     ├── types.ts          # tipos/contratos do domínio
     ├── data/             # mock.ts · seed.ts (dados de demonstração)
-    ├── views/            # landing.ts · login.ts · loginCliente.ts · minhaConta.ts · manage.ts · placeholderPanel.ts
+    ├── views/            # landing · login · loginCliente · minhaConta · manage · profissional · privacidade · termos
     ├── features/         # navbar.ts · bookingWizard.ts
     ├── services/         # api · auth · clientes · usuarios · booking · catalog · schedule (Fetch)
     └── ui/               # dom · format · icons · mask · modal · toast · layout (painel/sidebar)
@@ -62,17 +68,29 @@ frontend/
 - **Agendamento em 4 passos** (wizard modal): serviços → profissional/horário → dados → confirmação, com código gerado.
 - **Autenticação por papel (mock/localStorage)**: login administrativo redireciona por papel
   (admin → `#/admin`, recepcionista → `#/recepcionista`, profissional → `#/profissional`); cliente → `#/minha-conta`.
-- **Painel de gestão compartilhado (Admin + Recepcionista)** em `views/manage.ts`: abas de
-  agendamentos (busca, filtro por status, confirmar/cancelar, detalhes, configuração de agenda),
-  serviços (CRUD), profissionais (CRUD + métricas do mês) e configurações do perfil (foto, nome,
-  senha, e-mail). **Dashboard/receita é exclusivo do Admin** — a Recepcionista abre no Agendamentos
-  e não acessa financeiro.
-- **Área do Cliente** (`#/minha-conta`): abas Próximos / Histórico / Perfil, cancelar e
-  reagendar agendamentos, edição de perfil.
-- **Sidebar recolhível** nos painéis: botão recolhe/expande (estado persistido em `localStorage`),
-  ícones + tooltip quando recolhida, mobile sempre expandida.
+  Inclui **login com conta Google** na área do cliente (botão "LOGIN COM GOOGLE").
+- **Painel compartilhado (Admin + Recepcionista)** em `views/manage.ts`: abas de agendamentos
+  (busca, filtro por status, **bloco "CONSULTAR AGENDAMENTOS"** com filtro por datas, confirmar/cancelar,
+  detalhes, configuração de agenda), serviços (CRUD + **excluir** com confirmação), profissionais
+  (CRUD + métricas do mês) e configurações do perfil (foto, nome, senha, e-mail).
+  **Dashboard/receita é exclusivo do Admin** — a Recepcionista abre no Agendamentos e não acessa financeiro.
+  A tabela usa layout **encaixado (`table--fit`)**, sem scroll horizontal, e o menu tem item
+  **"Voltar ao site"**.
+- **Painel do Profissional** (`views/profissional.ts`): duas abas — **Agendamentos** (tabela
+  **somente leitura** dos seus agendamentos, filtro por status, busca por cliente, bloco
+  "CONSULTAR AGENDAMENTOS" com datas) e **Configurações** (foto, nome, senha, e-mail), além do
+  menu **"Voltar ao site"**.
+- **Painel do Cliente** (`views/minhaConta.ts`): duas abas — **Agendamentos** (histórico completo
+  do próprio cliente, filtro por status, **busca por serviço**, bloco "CONSULTAR AGENDAMENTOS" com
+  datas, ações **Reagendar** — muda data/hora — e **Cancelar**, botão "Novo agendamento") e
+  **Configurações** (foto, nome, senha, e-mail), além do menu **"Voltar ao site"**.
+- **Páginas institucionais**: Política de Privacidade (`#/privacidade`) e Termos de Uso (`#/termos`),
+  acessíveis pelo rodapé; landing com **links reais de Instagram e WhatsApp**.
+- **Sidebar fixa + drawer mobile** nos painéis: no desktop a sidebar fica fixa e o conteúdo rola à
+  direita; no mobile vira um **drawer lateral** aberto por **hamburger**, com **backdrop** e fechamento
+  ao tocar fora ou navegar.
 - **Light/dark mode**: toggle no header, persistido em `localStorage` (classe `body.light-theme` +
-  variáveis CSS); **logo troca por tema** (verde no modo claro).
+  variáveis CSS); **logo troca por tema**; as **telas de login** respeitam o tema (modo claro corrigido).
 - **Menu mobile**: hamburger com backdrop e bloqueio de scroll.
 - **Validação client-side** nos formulários (nome, telefone, e-mail, senha).
 - **CSS3 nativo** com variáveis, BEM e animações; responsivo desktop/mobile.
