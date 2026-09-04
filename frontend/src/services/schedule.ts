@@ -392,10 +392,8 @@ export async function saveSchedule(
  * **Modo API:** chama `GET /horarios/funcionario-disponibilidade` e gera
  * slots a partir dos `horario_trabalho` retornados.
  *
- * PENDÊNCIA: O endpoint de disponibilidade requer autenticação.
- * Clientes não autenticados (booking wizard público) não poderão
- * obter slots via API até o backend disponibilizar acesso público
- * ou `authenticateOptional` neste endpoint.
+ * O endpoint de disponibilidade é público (não exige autenticação), permitindo
+ * que o booking wizard obtenha slots sem login.
  */
 export async function slotsForDate(
   dateIso: string,
@@ -437,8 +435,6 @@ export async function slotsForDate(
  *
  * **Modo mock:** verifica `blockedDates`, `exceptions` e `weekly` localmente.
  * **Modo API:** delega para `slotsForDate` (verifica se há ao menos 1 slot).
- *
- * PENDÊNCIA: Mesma restrição de autenticação que `slotsForDate`.
  */
 export async function isDateOpen(
   dateIso: string,
