@@ -10,6 +10,7 @@ export interface UsuarioDTO {
 export interface LoginResponseDTO {
   token: string;
   user: UsuarioDTO;
+  role: string;
 }
 
 export interface GoogleLoginRequestDTO {

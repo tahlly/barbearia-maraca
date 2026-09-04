@@ -1,10 +1,14 @@
-import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
+import { signToken } from '../config/jwt';
+import db from '../database/connection';
 import { ValidationError } from '../errors/ValidationError';
 import { ForbiddenError } from '../errors/ForbiddenError';
+import { UnauthorizedError } from '../errors/UnauthorizedError';
+import { NotFoundError } from '../errors/NotFoundError';
 import {
   findUsuarioByEmail,
+  findUsuarioById,
   findUsuarioByGoogleId,
   criarUsuarioGoogle,
   criarUsuarioComSenha,
@@ -26,6 +30,15 @@ export interface GoogleProfile {
   email: string;
   nome: string;
   avatarUrl: string | null;
+}
+
+const SALT_ROUNDS = 10;
+
+export function mapearTipoParaRole(tipo: string, cargo?: string | null): string {
+  if (tipo === 'cliente') return 'cliente';
+  if (cargo === 'administrador') return 'admin';
+  if (cargo === 'recepcionista') return 'recepcionista';
+  return 'profissional';
 }
 
 export function validarTokenGoogle(idToken: string): Promise<GoogleProfile> {
@@ -57,7 +70,11 @@ export function validarTokenGoogle(idToken: string): Promise<GoogleProfile> {
     });
 }
 
-function buildUsuarioDTO(usuario: UsuarioRow, nome: string | null, cargo?: string | null): UsuarioDTO {
+function buildUsuarioDTO(
+  usuario: UsuarioRow,
+  nome: string | null,
+  cargo?: string | null,
+): UsuarioDTO {
   return {
     id: usuario.id,
     email: usuario.email,
@@ -68,8 +85,27 @@ function buildUsuarioDTO(usuario: UsuarioRow, nome: string | null, cargo?: strin
   };
 }
 
-function gerarToken(): string {
-  return 'tok_' + crypto.randomBytes(24).toString('hex');
+function gerarTokenJWT(usuario: UsuarioRow, role: string): string {
+  return signToken({
+    sub: usuario.id,
+    id: usuario.id,
+    tipo: usuario.tipo,
+    role,
+  });
+}
+
+async function resolveNomeECargo(
+  usuario: UsuarioRow,
+): Promise<{ nome: string | null; cargo: string | null }> {
+  if (usuario.tipo === 'cliente') {
+    const nome = await obterClienteNome(usuario.id);
+    return { nome, cargo: null };
+  }
+  const funcionario = await obterFuncionarioNome(usuario.id);
+  return {
+    nome: funcionario?.nome ?? null,
+    cargo: usuario.tipo === 'funcionario' ? (funcionario?.cargo ?? null) : null,
+  };
 }
 
 export async function autenticarComGoogle(idToken: string): Promise<LoginResponseDTO> {
@@ -93,24 +129,65 @@ export async function autenticarComGoogle(idToken: string): Promise<LoginRespons
     }
   }
 
-  let nome: string | null = null;
-  let cargo: string | null = null;
-
-  if (usuario.tipo === 'cliente') {
-    nome = await obterClienteNome(usuario.id);
-  } else {
-    const funcionario = await obterFuncionarioNome(usuario.id);
-    nome = funcionario?.nome ?? null;
-    cargo = usuario.tipo === 'funcionario' ? (funcionario?.cargo ?? null) : null;
-  }
+  const { nome, cargo } = await resolveNomeECargo(usuario);
+  const role = mapearTipoParaRole(usuario.tipo, cargo);
 
   return {
-    token: gerarToken(),
+    token: gerarTokenJWT(usuario, role),
     user: buildUsuarioDTO(usuario, nome, cargo),
+    role,
   };
 }
 
-const SALT_ROUNDS = 10;
+export async function atualizarPerfil(
+  usuarioId: string,
+  dados: { nome?: string; email?: string; senha?: string }
+): Promise<{ nome: string | null; email: string }> {
+  // Se email fornecido, verificar duplicidade
+  if (dados.email) {
+    const existente = await findUsuarioByEmail(dados.email);
+    if (existente && existente.id !== usuarioId) {
+      throw new ValidationError('Email já está em uso');
+    }
+  }
+
+  // Hash senha se fornecida
+  let senhaHash: string | undefined;
+  if (dados.senha) {
+    senhaHash = await bcrypt.hash(dados.senha, SALT_ROUNDS);
+  }
+
+  // Buscar tipo do usuário
+  const usuario = await findUsuarioById(usuarioId);
+  if (!usuario) throw new NotFoundError('Usuário não encontrado');
+
+  // Transaction: atualizar usuario + cliente/funcionario
+  await db.transaction(async (trx) => {
+    // Atualizar usuario
+    const updateUsuario: Record<string, unknown> = {};
+    if (dados.email) updateUsuario.email = dados.email;
+    if (senhaHash) updateUsuario.senha_hash = senhaHash;
+    if (Object.keys(updateUsuario).length > 0) {
+      updateUsuario.atualizado_em = new Date();
+      await trx('usuario').where('id', usuarioId).update(updateUsuario);
+    }
+
+    // Atualizar nome na tabela correta
+    if (dados.nome) {
+      if (usuario.tipo === 'cliente') {
+        await trx('cliente').where('usuario_id', usuarioId).update({ nome: dados.nome });
+      } else {
+        await trx('funcionario').where('usuario_id', usuarioId).update({ nome: dados.nome });
+      }
+    }
+  });
+
+  // Retornar dados atualizados
+  return {
+    nome: dados.nome ?? null,
+    email: dados.email ?? (await findUsuarioById(usuarioId))!.email,
+  };
+}
 
 export async function registrar(data: {
   email: string;
@@ -137,8 +214,35 @@ export async function registrar(data: {
     telefone: data.telefone,
   });
 
+  const role = mapearTipoParaRole(usuario.tipo, null);
+
   return {
-    token: gerarToken(),
+    token: gerarTokenJWT(usuario, role),
     user: buildUsuarioDTO(usuario, data.nome, null),
+    role,
+  };
+}
+
+export async function login(data: {
+  email: string;
+  senha: string;
+}): Promise<LoginResponseDTO> {
+  const usuario = await findUsuarioByEmail(data.email);
+  if (!usuario || !usuario.senha_hash) {
+    throw new UnauthorizedError('Credenciais inválidas');
+  }
+
+  const senhaValida = await bcrypt.compare(data.senha, usuario.senha_hash);
+  if (!senhaValida) {
+    throw new UnauthorizedError('Credenciais inválidas');
+  }
+
+  const { nome, cargo } = await resolveNomeECargo(usuario);
+  const role = mapearTipoParaRole(usuario.tipo, cargo);
+
+  return {
+    token: gerarTokenJWT(usuario, role),
+    user: buildUsuarioDTO(usuario, nome, cargo),
+    role,
   };
 }

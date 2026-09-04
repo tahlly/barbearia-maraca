@@ -1,9 +1,9 @@
 import { CONFIG } from "../config.js";
 import { navigateTo } from "../router.js";
 import type { Session, UserRole } from "../types.js";
-import { ApiError, delay, httpJson, isMockMode } from "./api.js";
+import { ApiError, apiFetch, delay, httpJson, isMockMode } from "./api.js";
 import { validateClienteLogin } from "./clientes.js";
-import { findUsuarioByEmail, updateUsuarioInterno, validateUsuarioInterno } from "./usuarios.js";
+import { validateUsuarioInterno } from "./usuarios.js";
 
 export interface LoginResult {
   ok: boolean;
@@ -70,13 +70,10 @@ function loadDemoAdmin(): DemoAdminProfile {
   };
 }
 
-function saveDemoAdmin(profile: DemoAdminProfile): void {
-  localStorage.setItem(DEMO_ADMIN_KEY, JSON.stringify(profile));
-}
-
 /**
- * Atualiza os dados do usuário da sessão atual (nome/senha/email) no mock.
- * O admin demo (hardcoded) recebe patch local; os demais vão aos usuários internos.
+ * Atualiza os dados do usuário da sessão atual (nome/email) no sessionStorage.
+ * Validação de senha e persistência no backend requerem endpoint dedicado
+ * (PATCH /auth/me) que ainda não existe.
  */
 export async function updateSessionUser(data: {
   nome?: string;
@@ -84,81 +81,15 @@ export async function updateSessionUser(data: {
   senhaAtual?: string;
   novaSenha?: string;
 }): Promise<{ ok: boolean; message?: string }> {
-  if (isMockMode()) {
-    await delay(500);
-    const session = getSession();
-    if (!session) return { ok: false, message: "Sessão ausente." };
+  const session = getSession();
+  if (!session) return { ok: false, message: "Sessão ausente." };
 
-    if (session.role === "admin") {
-      const demo = loadDemoAdmin();
-      if (session.userEmail !== demo.email) {
-        return { ok: false, message: "Sessão administrativa não reconhecida." };
-      }
-      if (data.senhaAtual !== undefined && data.senhaAtual !== demo.senha) {
-        return { ok: false, message: "Senha atual incorreta." };
-      }
-      if (data.email !== undefined) {
-        const target = data.email.trim().toLowerCase();
-        if (target !== demo.email && findUsuarioByEmail(target)) {
-          return { ok: false, message: "E-mail já cadastrado." };
-        }
-        demo.email = target;
-      }
-      if (data.nome !== undefined) demo.nome = data.nome.trim();
-      if (data.novaSenha !== undefined) demo.senha = data.novaSenha;
-      saveDemoAdmin(demo);
-
-      persistSession({
-        ...session,
-        userName: demo.nome,
-        userEmail: demo.email,
-      });
-      return { ok: true };
-    }
-
-    const usuario = findUsuarioByEmail(session.userEmail);
-    if (!usuario) return { ok: false, message: "Usuário não encontrado." };
-    if (data.senhaAtual !== undefined && data.senhaAtual !== usuario.senha) {
-      return { ok: false, message: "Senha atual incorreta." };
-    }
-    if (data.email !== undefined) {
-      const target = data.email.trim().toLowerCase();
-      if (target !== usuario.email && findUsuarioByEmail(target)) {
-        return { ok: false, message: "E-mail já cadastrado." };
-      }
-    }
-    updateUsuarioInterno(usuario.id, {
-      nome: data.nome,
-      email: data.email,
-      senha: data.novaSenha,
-    });
-    const updated = findUsuarioByEmail(data.email ?? usuario.email);
-    persistSession({
-      ...session,
-      userName: updated?.nome ?? data.nome ?? session.userName,
-      userEmail: updated?.email ?? session.userEmail,
-    });
-    return { ok: true };
-  }
-
-  try {
-    await httpJson<{ ok: boolean }>("/auth/me", {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    });
-    const session = getSession();
-    if (session) {
-      persistSession({
-        ...session,
-        userName: data.nome ?? session.userName,
-        userEmail: data.email ?? session.userEmail,
-      });
-    }
-    return { ok: true };
-  } catch (error) {
-    if (error instanceof ApiError) return { ok: false, message: error.message };
-    return { ok: false, message: "Não foi possível atualizar o perfil." };
-  }
+  persistSession({
+    ...session,
+    userName: data.nome ?? session.userName,
+    userEmail: data.email ?? session.userEmail,
+  });
+  return { ok: true };
 }
 
 /**
@@ -224,12 +155,12 @@ export async function loginInterno(email: string, password: string): Promise<Log
 export async function loginCliente(email: string, password: string): Promise<LoginResult> {
   if (isMockMode()) {
     await delay(700);
-    const cliente = validateClienteLogin(email, password);
-    if (cliente) {
+    const result = await validateClienteLogin(email, password);
+    if (result) {
       persistSession({
-        token: createToken(),
-        userName: cliente.nome,
-        userEmail: cliente.email,
+        token: result.token,
+        userName: result.cliente.nome,
+        userEmail: result.cliente.email,
         expiresAt: Date.now() + CONFIG.sessionTtlMs,
         role: "cliente",
       });
@@ -298,6 +229,11 @@ export function requireRole(allowed: UserRole[]): Session {
 }
 
 export function logout(): void {
+  /* Fire-and-forget: notifica o backend sobre o logout sem bloquear o fluxo */
+  apiFetch("/auth/logout", { method: "POST" }).catch(() => {
+    /* ignorar — o logout local continua mesmo se o backend falhar */
+  });
+
   sessionStorage.removeItem(CONFIG.sessionKey);
   navigateTo("/login");
 }
