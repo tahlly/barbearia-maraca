@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Barbearia Maracá — cortes clássicos, barba completa e nails designer no Montese, Belém-PA. Agende online em menos de um minuto.">
+  <title>Barbearia Maracá | O cuidado que sua presença exige</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/landing.css">
+  <link rel="stylesheet" href="css/modals.css">
+  <link rel="stylesheet" href="css/auth.css">
+  <link rel="stylesheet" href="css/panel.css">
+  <link rel="stylesheet" href="css/account.css">
+  <link rel="stylesheet" href="css/admin.css">
+  <link rel="stylesheet" href="css/manage.css">
+</head>
+<body>
+
+  <header class="header" id="header">
+    <div class="container header__inner">
+      <a href="#/" class="header__brand">
+        <img src="assets/images/logo-maraca.png" alt="Barbearia Maracá" width="40" height="40" data-logo>
+        <span>Barbearia Maracá</span>
+      </a>
+
+      <nav class="nav" id="nav" aria-label="Navegação principal">
+        <a href="#/" class="is-active">Início</a>
+        <a href="#/servicos">Nossos Serviços</a>
+        <a href="#/sobre">Sobre</a>
+        <a href="#/contato">Contato</a>
+        <div class="nav__cta">
+          <a href="#/login-cliente" class="header__btn header__btn--solid">Realizar ou acompanhar agendamento</a>
+        </div>
+      </nav>
+
+      <div class="header__actions">
+        <a href="#/login-cliente" class="header__btn header__btn--solid">Realizar ou acompanhar agendamento</a>
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Alternar para tema claro">
+          <i class="bx bx-moon"></i>
+        </button>
+      </div>
+
+      <button type="button" class="header__toggle" id="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <main id="app"></main>
+
+  <footer class="footer">
+    <div class="footer__inner">
+      <span class="footer__copy">© <span id="footer-year">2026</span> Barbearia Maracá. Todos os direitos reservados.</span>
+      <nav class="footer__links" aria-label="Links institucionais">
+        <a href="#/login-cliente">Área do Cliente</a>
+        <a href="#/privacidade">Política de Privacidade</a>
+        <a href="#/termos">Termos de Uso</a>
+      </nav>
+      <a href="#/login" class="footer__admin">Acesso Administrativo <span>→</span></a>
+    </div>
+  </footer>
+
+  <div class="modal-overlay" id="booking-modal" aria-hidden="true">
+    <div class="modal modal--lg" role="dialog" aria-modal="true" aria-labelledby="booking-title" tabindex="-1">
+      <div class="modal__header">
+        <div>
+          <h2 class="modal__title" id="booking-title">Agendar horário</h2>
+          <p class="modal__subtitle">Siga os passos para garantir o seu horário.</p>
+        </div>
+        <button type="button" class="modal__close" data-close-modal aria-label="Fechar modal"><i class="bx bx-x"></i></button>
+      </div>
+
+      <ol class="steps" id="booking-steps">
+        <li class="steps__item is-active"><span class="steps__dot">1</span><span class="steps__label">Serviços</span></li>
+        <li class="steps__item"><span class="steps__dot">2</span><span class="steps__label">Profissional &amp; Horário</span></li>
+        <li class="steps__item"><span class="steps__dot">3</span><span class="steps__label">Seus dados</span></li>
+        <li class="steps__item"><span class="steps__dot">4</span><span class="steps__label">Confirmação</span></li>
+      </ol>
+      <div class="steps__track" aria-hidden="true"><span id="booking-progress"></span></div>
+
+      <form id="booking-form" novalidate>
+        <div class="modal__body wizard__body">
+          <section class="wizard__step is-active" data-step="1" aria-label="Passo 1 — Serviços">
+            <h3 class="wizard__heading">Selecione os serviços desejados</h3>
+            <div class="service-options" id="booking-services"></div>
+          </section>
+          <section class="wizard__step" data-step="2" aria-label="Passo 2 — Profissional e horário">
+            <h3 class="wizard__heading">Escolha o profissional</h3>
+            <div class="pro-options" id="booking-professionals"></div>
+            <h3 class="wizard__heading">Data e horário</h3>
+            <div class="field date-field">
+              <label class="field__label" for="booking-date">Data</label>
+              <div class="date-field__control" id="booking-date-control">
+                <input type="date" id="booking-date" aria-label="Escolher data do agendamento">
+                <i class="bx bx-calendar" aria-hidden="true"></i>
+              </div>
+            </div>
+            <p class="slots-hint" id="slots-hint"><i class="bx bx-error-circle" aria-hidden="true"></i><span>Escolha um profissional para ver os horários disponíveis.</span></p>
+            <div class="slots" id="booking-slots" hidden></div>
+          </section>
+          <section class="wizard__step" data-step="3" aria-label="Passo 3 — Seus dados">
+            <h3 class="wizard__heading">Preencha seus dados</h3>
+            <div class="field">
+              <label class="field__label" for="client-name">Nome completo</label>
+              <input type="text" id="client-name" name="name" placeholder="Ex.: João da Silva" autocomplete="name" maxlength="80" required>
+              <span class="field__error">Informe seu nome completo.</span>
+            </div>
+            <div class="field">
+              <label class="field__label" for="client-phone">Telefone / WhatsApp</label>
+              <input type="tel" id="client-phone" name="phone" placeholder="(91) 90000-0000" autocomplete="tel" inputmode="numeric" maxlength="15" required>
+              <span class="field__error">Informe um telefone válido com DDD.</span>
+            </div>
+            <div class="field">
+              <label class="field__label" for="client-email">E-mail</label>
+              <input type="email" id="client-email" name="email" placeholder="voce@email.com" autocomplete="email" maxlength="100" required>
+              <span class="field__error">Informe um e-mail válido.</span>
+            </div>
+          </section>
+          <section class="wizard__step" data-step="4" aria-label="Passo 4 — Confirmação">
+            <div class="success-card">
+              <span class="success-card__icon" aria-hidden="true"><i class="bx bx-check-circle"></i></span>
+              <h3 class="success-card__title" id="booking-success-title">Agendamento confirmado!</h3>
+              <dl class="summary" id="booking-summary"></dl>
+              <button type="button" class="btn btn--outline" id="booking-restart">Voltar ao início</button>
+            </div>
+          </section>
+        </div>
+        <div class="wizard__footer">
+          <div class="wizard__total">
+            <span>Total estimado</span>
+            <strong id="booking-total">R$ 0,00</strong>
+          </div>
+          <div class="wizard__actions">
+            <button type="button" class="btn btn--ghost" id="booking-prev" hidden>Voltar</button>
+            <button type="button" class="btn btn--primary" id="booking-next">Continuar</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
