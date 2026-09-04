@@ -3,7 +3,7 @@ import { apiFetch } from "./api.js";
 
 export async function findClienteByEmail(email: string): Promise<Cliente | null> {
   try {
-    const res = await apiFetch(`/api/clientes/buscar?email=${encodeURIComponent(email)}`);
+    const res = await apiFetch(`/clientes/buscar?email=${encodeURIComponent(email)}`);
     if (!res.ok) return null;
     const data = await res.json();
     return data ?? null;
@@ -18,7 +18,7 @@ export async function registerCliente(data: {
   telefone: string;
   senha: string;
 }): Promise<Cliente> {
-  const res = await apiFetch("/api/auth/register", {
+  const res = await apiFetch("/auth/register", {
     method: "POST",
     body: JSON.stringify({
       email: data.email,
@@ -46,7 +46,7 @@ export async function registerCliente(data: {
 
 export async function validateClienteLogin(email: string, senha: string): Promise<Cliente | null> {
   try {
-    const res = await apiFetch("/api/auth/login", {
+    const res = await apiFetch("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, senha }),
     });
