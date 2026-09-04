@@ -198,6 +198,15 @@ Consulte a especificação funcional completa para detalhes. Esta tabela não au
 - Status HTTP, formato de erro e estrutura de payload devem ser consistentes para consumo previsível pela SPA.
 - Ausência de framework, comandos ou bibliotecas configuradas deve ser reportada; não invente resultados de execução.
 
+## Ambiente Docker para API
+- Leia primeiro a operação canônica em `AGENTS.md` e `README.md`.
+- Backend e Knex usam o `.env` único da raiz. Nunca copie segredos para variáveis `VITE_*` nem para arquivos versionados.
+- Na raiz, `npm run dev:up` inicia banco, migrations, Backend e Frontend na ordem correta.
+- Se a porta `5432` estiver ocupada, defina `$env:COMPOSE_DB_PORT=5433` antes de iniciar; a API continua usando o host interno `db` na porta `5432`.
+- Valide a API em `http://localhost:3000/api/health` e a integração pelo proxy em `http://localhost:5173/api/health`.
+- `npm run dev:seed` é destrutivo e exige autorização explícita; não o use como preparação automática de teste.
+- Use `npm run dev:down` ao terminar. O volume do banco deve ser preservado.
+
 ## Processo de trabalho
 Ao receber uma tarefa:
 1. Leia os arquivos e documentos relevantes.

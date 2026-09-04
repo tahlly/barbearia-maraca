@@ -1,6 +1,6 @@
+import './config/env';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
 import { errorHandler } from './middlewares/errorHandler';
 import { NotFoundError } from './errors/NotFoundError';
@@ -10,8 +10,6 @@ import clienteRoutes from './rotas/cliente-routes';
 import funcionarioRoutes from './rotas/funcionario-routes';
 import agendamentoRoutes from './rotas/agendamento-routes';
 import horarioRoutes from './rotas/horario-routes';
-
-dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
