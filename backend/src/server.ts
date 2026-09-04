@@ -16,7 +16,7 @@ dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
-const frontendPath = path.resolve(__dirname, '..', '..', 'frontend');
+const frontendPath = path.resolve(__dirname, '..', '..', 'frontend', 'dist');
 
 // ── Middlewares globais ──────────────────────────────────────────────
 app.use(cors());
