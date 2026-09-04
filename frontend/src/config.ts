@@ -1,6 +1,6 @@
 export const CONFIG = {
-  useMockApi: true,
-  apiBaseUrl: "http://localhost:3000/api",
+  useMockApi: false,
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? "/api",
   googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "",
   sessionKey: "maraca.session",
   appointmentsKey: "maraca.v2.appointments",
@@ -14,10 +14,10 @@ export const CONFIG = {
   maxLoginAttempts: 5,
   lockoutMs: 30 * 1000,
   bookingHorizonDays: 45,
-  defaultPassword: "123456",
+  defaultPassword: import.meta.env.VITE_DEFAULT_PASSWORD ?? "",
   demoAdmin: {
-    email: "admin@maraca.com",
-    password: "maraca123",
-    name: "Rai Colares",
+    email: import.meta.env.VITE_DEMO_ADMIN_EMAIL ?? "",
+    password: import.meta.env.VITE_DEMO_ADMIN_PASSWORD ?? "",
+    name: import.meta.env.VITE_DEMO_ADMIN_NAME ?? "",
   },
 } as const;

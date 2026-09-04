@@ -7,9 +7,20 @@ export function formatCurrency(value: number): string {
   return brlFormatter.format(value);
 }
 
+/**
+ * Converte string ISO (`YYYY-MM-DD`) para `Date` usando UTC.
+ *
+ * Evita off-by-one causado pelo timezone local: `new Date(2026, 0, 15)`
+ * retorna 14/01 em UTC-3, mas `Date.UTC(2026, 0, 15)` retorna 15/01
+ * independentemente do timezone do navegador.
+ *
+ * Nota: o objeto Date resultante preserva o dia correto em UTC,
+ * mas `.getMonth()` e `.getDate()` retornam valores em local time.
+ * Para formatação, use as funções `formatDate*` que consomem a string ISO diretamente.
+ */
 export function parseIsoDate(iso: string): Date {
   const [year, month, day] = iso.split("-").map(Number);
-  return new Date(year ?? 1970, (month ?? 1) - 1, day ?? 1);
+  return new Date(Date.UTC(year ?? 1970, (month ?? 1) - 1, day ?? 1));
 }
 
 export function toIsoDate(date: Date): string {
@@ -71,4 +82,15 @@ export function formatDateRelative(iso: string): string {
 
 export function isSameIsoDate(a: string, b: string): boolean {
   return a === b;
+}
+
+/**
+ * Retorna a data de hoje no formato ISO (`YYYY-MM-DD`).
+ * Equivalente à função `todayIso()` que existia em `data/mock.ts`.
+ */
+export function todayIso(): string {
+  const date = new Date();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }

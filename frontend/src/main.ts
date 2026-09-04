@@ -3,14 +3,15 @@ import { initTheme } from "./theme.js";
 import { initModals } from "./ui/modal.js";
 import { initNavbar } from "./features/navbar.js";
 import { renderLanding } from "./views/landing.js";
+import { renderPrivacidade } from "./views/privacidade.js";
+import { renderTermos } from "./views/termos.js";
 import { renderLogin } from "./views/login.js";
 import { renderLoginCliente } from "./views/loginCliente.js";
 import { renderMinhaConta } from "./views/minhaConta.js";
 import { renderManage } from "./views/manage.js";
-import { renderPlaceholderPanel } from "./views/placeholderPanel.js";
+import { renderProfissional } from "./views/profissional.js";
 import { ensureSeed } from "./data/seed.js";
-
-const renderProfissional = renderPlaceholderPanel("profissional");
+import { primeCatalog } from "./services/catalog.js";
 
 function init(): void {
   ensureSeed();
@@ -20,18 +21,19 @@ function init(): void {
   initModals();
 
   registerRoute("/", renderLanding);
+  registerRoute("/privacidade", renderPrivacidade);
+  registerRoute("/termos", renderTermos);
   registerRoute("/login", renderLogin);
   registerRoute("/login-cliente", renderLoginCliente);
   registerRoute("/minha-conta", renderMinhaConta);
-  registerRoute("/minha-conta/proximos", renderMinhaConta);
-  registerRoute("/minha-conta/historico", renderMinhaConta);
-  registerRoute("/minha-conta/perfil", renderMinhaConta);
+  registerRoute("/minha-conta/configuracoes", renderMinhaConta);
   registerRoute("/admin", renderManage);
   registerRoute("/admin/agendamentos", renderManage);
   registerRoute("/admin/servicos", renderManage);
   registerRoute("/admin/profissionais", renderManage);
   registerRoute("/admin/configuracoes", renderManage);
   registerRoute("/profissional", renderProfissional);
+  registerRoute("/profissional/configuracoes", renderProfissional);
   registerRoute("/recepcionista", renderManage);
   registerRoute("/recepcionista/agendamentos", renderManage);
   registerRoute("/recepcionista/servicos", renderManage);
@@ -47,6 +49,11 @@ function init(): void {
   if (appContainer) {
     initRouter(appContainer);
   }
+
+  /* Popula o cache de catálogo (serviços e profissionais) no boot.
+     É fire-and-forget: enquanto a resposta não chega, o cache pode estar
+     vazio; as views que dependem dele recarregam assincronamente. */
+  void primeCatalog();
 }
 
 if (document.readyState === "loading") {
