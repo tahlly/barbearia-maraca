@@ -1,15 +1,15 @@
 import { renderPanel } from "../ui/layout.js";
-import { requireRole, getSession, updateSessionUser } from "../services/auth.js";
-import { $, $$, escapeHtml, initials } from "../ui/dom.js";
+import { requireRole, updateSessionUser } from "../services/auth.js";
+import { $, $$, escapeHtml } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { formatDateMedium } from "../ui/format.js";
-import { loadServices, loadProfessionals } from "../services/catalog.js";
-import { listByEmail, cancelAppointment } from "../services/booking.js";
-import { listUsuariosInternos, updateUsuarioInterno } from "../services/usuarios.js";
+import { loadProfessionals } from "../services/catalog.js";
+import { listAppointments, cancelAppointment } from "../services/booking.js";
 import { showToast } from "../ui/toast.js";
 import { confirmDialog } from "../ui/modal.js";
 import { initBookingWizard } from "../features/bookingWizard.js";
-import type { Appointment, Service, Professional } from "../types.js";
+import { renderSettingsForm } from "../features/settingsForm.js";
+import type { Appointment, Professional } from "../types.js";
 
 const STATUS_LABEL: Record<Appointment["status"], string> = {
   confirmado: "Confirmado",
@@ -31,7 +31,7 @@ function statusBadge(status: Appointment["status"]): string {
 }
 
 export function renderMinhaConta(container: HTMLElement): () => void {
-  const session = requireRole(["cliente"]);
+  requireRole(["cliente"]);
 
   const { content, cleanup: cleanupPanel } = renderPanel(container, {
     title: "Minha Conta",
@@ -46,12 +46,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
   const wizard = initBookingWizard({ onBookingCreated: () => renderAgendamentos() });
   const cleanups: Array<() => void> = [];
 
-  let servicesCache: Service[] = loadServices();
   let prosCache: Professional[] = loadProfessionals();
-
-  function serviceName(id: string): string {
-    return servicesCache.find((s) => s.id === id)?.name ?? "-";
-  }
 
   function professionalName(id: string): string {
     return prosCache.find((p) => p.id === id)?.name ?? "-";
@@ -68,14 +63,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
 
   // ------------------------------------------------------------- Agendamentos
   function renderAgendamentos(): void {
-    servicesCache = loadServices();
     prosCache = loadProfessionals();
-
-    const appointments = listByEmail(session.userEmail).sort((a, b) => {
-      const ka = `${a.dateIso}T${a.time}`;
-      const kb = `${b.dateIso}T${b.time}`;
-      return kb.toString().localeCompare(ka.toString());
-    });
 
     const currentYear = new Date().getFullYear();
     const defaultStart = `${currentYear}-01-01`;
@@ -125,7 +113,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
       </div>
 
       <div class="table-wrap" id="conta-agenda-table">
-        ${buildTable(appointments)}
+        <p class="panel__empty">Carregando agendamentos...</p>
       </div>
     `;
 
@@ -137,20 +125,12 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     if (inicio) inicio.value = defaultStart;
     if (fim) fim.value = defaultEnd;
 
-    function rows(): Appointment[] {
-      return listByEmail(session.userEmail).sort((a, b) => {
-        const ka = `${a.dateIso}T${a.time}`;
-        const kb = `${b.dateIso}T${b.time}`;
-        return kb.toString().localeCompare(ka.toString());
-      });
-    }
-
     function applySearch(list: Appointment[]): Appointment[] {
       const q = (search?.value ?? "").trim().toLowerCase();
       if (!q) return list;
       return list.filter((a) => {
-        const names = a.serviceIds.map((id) => serviceName(id)).filter((n) => n !== "-");
-        return names.some((n) => n.toLowerCase().includes(q));
+        const names = a.servicoNome ?? "";
+        return names.toLowerCase().includes(q);
       });
     }
 
@@ -165,30 +145,39 @@ export function renderMinhaConta(container: HTMLElement): () => void {
       const fimv = fim?.value;
       if (!ini && !fimv) return list;
       return list.filter((a) => {
-        if (ini && a.dateIso < ini) return false;
-        if (fimv && a.dateIso > fimv) return false;
+        if (ini && a.data < ini) return false;
+        if (fimv && a.data > fimv) return false;
         return true;
       });
     }
 
-    function refresh(): void {
-      let list = rows();
-      list = applySearch(list);
-      list = applyStatus(list);
-      list = applyDates(list);
-      $("#conta-agenda-table", content)!.innerHTML = buildTable(list);
+    function refresh(list: Appointment[]): void {
+      let filtered = applySearch(list);
+      filtered = applyStatus(filtered);
+      filtered = applyDates(filtered);
+      $("#conta-agenda-table", content)!.innerHTML = buildTable(filtered);
       bindRows();
     }
 
-    const onSearch = (): void => refresh();
-    const onFilter = (): void => refresh();
+    const onSearch = (): void => {
+      void (async () => {
+        refresh(await listAppointments());
+      })();
+    };
+    const onFilter = (): void => {
+      void (async () => {
+        refresh(await listAppointments());
+      })();
+    };
 
     const onClear = (): void => {
       if (inicio) inicio.value = defaultStart;
       if (fim) fim.value = defaultEnd;
       if (search) search.value = "";
       if (filter) filter.value = "todos";
-      refresh();
+      void (async () => {
+        refresh(await listAppointments());
+      })();
     };
 
     search?.addEventListener("input", onSearch);
@@ -199,7 +188,9 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     cleanups.push(() => search?.removeEventListener("input", onSearch));
     cleanups.push(() => filter?.removeEventListener("change", onFilter));
 
-    bindRows();
+    void (async () => {
+      refresh(await listAppointments());
+    })();
   }
 
   function buildTable(appointments: Appointment[]): string {
@@ -220,19 +211,19 @@ export function renderMinhaConta(container: HTMLElement): () => void {
         <tbody>
           ${appointments
             .map((a) => {
-              const names = a.serviceIds.map((id) => serviceName(id)).filter((n) => n !== "-").join(", ") || "-";
+              const name = a.servicoNome ?? "-";
               let actions = `<span class="muted-note">-</span>`;
               if (a.status === "pendente" || a.status === "confirmado") {
                 actions = `<span class="cell-actions">
-                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-reschedule="${escapeHtml(a.code)}">REAGENDAR</button>
-                  <button type="button" class="btn btn--sm btn--danger-outline" data-cancel="${escapeHtml(a.code)}">Cancelar</button>
+                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-reschedule="${escapeHtml(a.id)}">REAGENDAR</button>
+                  <button type="button" class="btn btn--sm btn--danger-outline" data-cancel="${escapeHtml(a.id)}">Cancelar</button>
                 </span>`;
               }
               return `
                 <tr>
-                  <td><strong>${escapeHtml(names)}</strong></td>
-                  <td>${escapeHtml(professionalName(a.professionalId))}</td>
-                  <td>${formatDateMedium(a.dateIso)} · ${a.time}</td>
+                  <td><strong>${escapeHtml(name)}</strong></td>
+                  <td>${escapeHtml(a.funcionarioNome ?? professionalName(a.funcionarioId))}</td>
+                  <td>${formatDateMedium(a.data)} · ${a.hora}</td>
                   <td>${statusBadge(a.status)}</td>
                   <td>${actions}</td>
                 </tr>`;
@@ -244,39 +235,45 @@ export function renderMinhaConta(container: HTMLElement): () => void {
   }
 
   function bindRows(): void {
-    $$("[data-reschedule]", content).forEach((btn) => {
-      const code = btn.getAttribute("data-reschedule")!;
-      const appointment = listByEmail(session.userEmail).find((a) => a.code === code);
-      if (!appointment) return;
-      const h = (): void => wizard.openForReschedule(appointment);
-      btn.addEventListener("click", h);
-      cleanups.push(() => btn.removeEventListener("click", h));
-    });
+    void (async () => {
+      const appointments = await listAppointments();
 
-    $$("[data-cancel]", content).forEach((btn) => {
-      const code = btn.getAttribute("data-cancel")!;
-      const appointment = listByEmail(session.userEmail).find((a) => a.code === code);
-      if (!appointment) return;
-      const h = (): void => {
-        void handleCancel(appointment);
-      };
-      btn.addEventListener("click", h);
-      cleanups.push(() => btn.removeEventListener("click", h));
-    });
+      $$("[data-reschedule]", content).forEach((btn) => {
+        const id = btn.getAttribute("data-reschedule")!;
+        const appointment = appointments.find((a) => a.id === id);
+        if (!appointment) return;
+        const h = (): void => wizard.openForReschedule(appointment);
+        btn.addEventListener("click", h);
+        cleanups.push(() => btn.removeEventListener("click", h));
+      });
+
+      $$("[data-cancel]", content).forEach((btn) => {
+        const id = btn.getAttribute("data-cancel")!;
+        const appointment = appointments.find((a) => a.id === id);
+        if (!appointment) return;
+        const h = (): void => {
+          void handleCancel(appointment);
+        };
+        btn.addEventListener("click", h);
+        cleanups.push(() => btn.removeEventListener("click", h));
+      });
+    })();
   }
 
   async function handleCancel(appointment: Appointment): Promise<void> {
     const confirmed = await confirmDialog({
       title: "Cancelar agendamento",
-      message: `Tem certeza que deseja cancelar o agendamento ${appointment.code}? Essa ação não pode ser desfeita.`,
+      message: `Tem certeza que deseja cancelar o agendamento de ${appointment.servicoNome ?? "serviço"}? Essa ação não pode ser desfeita.`,
       confirmLabel: "Sim, cancelar",
       cancelLabel: "Manter",
       danger: true,
     });
     if (!confirmed) return;
-    const updated = await cancelAppointment(appointment.code);
+    const updated = appointment.status === "pendente" || appointment.status === "confirmado"
+      ? await cancelAppointment(appointment.id)
+      : null;
     if (updated) {
-      showToast(`Agendamento ${updated.code} cancelado.`);
+      showToast("Agendamento cancelado.");
     } else {
       showToast("Não foi possível cancelar. Tente novamente.", "error");
     }
@@ -285,7 +282,6 @@ export function renderMinhaConta(container: HTMLElement): () => void {
 
   // ------------------------------------------------------------- Configurações
   function renderConfiguracoes(): void {
-    const current = getSession();
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -293,173 +289,20 @@ export function renderMinhaConta(container: HTMLElement): () => void {
           <p class="manage-head__sub">Segurança e dados do usuário</p>
         </div>
       </div>
-      <div class="config-card">
-        <div class="config-photo">
-          <span class="avatar avatar--lg">${initials(current?.userName ?? "?")}</span>
-          <input type="file" id="profile-photo" accept="image/*" hidden>
-          <button type="button" class="btn btn--sm btn--gold-outline" id="profile-photo-btn">${icon("upload", 14)} Carregar foto</button>
-        </div>
-
-        <form id="profile-form" novalidate>
-          <div class="field">
-            <label class="field__label" for="profile-name">Nome</label>
-            <input type="text" id="profile-name" value="${escapeHtml(current?.userName ?? "")}" maxlength="80">
-          </div>
-
-          <h4 class="manage-form-title">Alterar Senha</h4>
-          <div class="form-grid">
-            <div class="field">
-              <label class="field__label" for="pw-current">Senha atual</label>
-              <input type="password" id="pw-current" autocomplete="current-password">
-            </div>
-            <div class="field">
-              <label class="field__label" for="pw-new">Nova senha</label>
-              <input type="password" id="pw-new" autocomplete="new-password">
-            </div>
-            <div class="field">
-              <label class="field__label" for="pw-confirm">Confirmar nova senha</label>
-              <input type="password" id="pw-confirm" autocomplete="new-password">
-            </div>
-          </div>
-
-          <h4 class="manage-form-title">Alterar Email de Acesso</h4>
-          <div class="form-grid">
-            <div class="field">
-              <label class="field__label" for="email-current">Email atual</label>
-              <input type="password" id="email-current" autocomplete="current-password">
-            </div>
-            <div class="field">
-              <label class="field__label" for="email-new">Novo email</label>
-              <input type="email" id="email-new" value="${escapeHtml(current?.userEmail ?? "")}" autocapitalize="none" spellcheck="false">
-            </div>
-            <div class="field">
-              <label class="field__label" for="email-confirm">Confirmar novo email</label>
-              <input type="email" id="email-confirm" autocapitalize="none" spellcheck="false">
-            </div>
-          </div>
-
-          <div class="config-actions">
-            <button type="button" class="btn btn--danger" data-profile-cancel>Cancelar</button>
-            <button type="submit" class="btn btn--success">Salvar alterações</button>
-          </div>
-        </form>
-      </div>
     `;
+    const formContainer = document.createElement("div");
+    content.appendChild(formContainer);
 
-    const photoBtn = $<HTMLButtonElement>("#profile-photo-btn", content);
-    const photoInput = $<HTMLInputElement>("#profile-photo", content);
-    const avatar = $<HTMLElement>(".config-photo .avatar", content);
-    if (photoBtn && photoInput && avatar) {
-      const click = (): void => photoInput.click();
-      photoBtn.addEventListener("click", click);
-      cleanups.push(() => photoBtn.removeEventListener("click", click));
-
-      photoInput.addEventListener("change", () => {
-        const file = photoInput.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = reader.result as string;
-          sessionStorage.setItem("maraca.profilePhoto", dataUrl);
-          avatar.style.backgroundImage = `url("${dataUrl}")`;
-          avatar.textContent = "";
-          showToast("Foto atualizada.");
-        };
-        reader.readAsDataURL(file);
-      });
-
-      const savedPhoto = sessionStorage.getItem("maraca.profilePhoto");
-      if (savedPhoto) {
-        avatar.style.backgroundImage = `url("${savedPhoto}")`;
-        avatar.textContent = "";
-      }
-    }
-
-    const usuarioLogado = listUsuariosInternos().find(
-      (u) => u.email.toLowerCase() === (current?.userEmail ?? "").toLowerCase(),
+    cleanups.push(
+      renderSettingsForm(formContainer, async (data) => {
+        const result = await updateSessionUser(data);
+        if (!result.ok) {
+          showToast(result.message ?? "Não foi possível salvar.", "error");
+          return false;
+        }
+        return true;
+      }),
     );
-
-    const form = $<HTMLFormElement>("#profile-form", content);
-    if (form) {
-      const cancelBtn = $<HTMLButtonElement>("[data-profile-cancel]", content);
-      if (cancelBtn) {
-        const cancel = (): void => {
-          const s = getSession();
-          const nameInput = $("#profile-name", content) as HTMLInputElement;
-          nameInput.value = s?.userName ?? "";
-          ($("#email-new", content) as HTMLInputElement).value = s?.userEmail ?? "";
-          (form.querySelectorAll('input[type="password"]') as NodeListOf<HTMLInputElement>).forEach((i) => {
-            i.value = "";
-          });
-          ($("#email-confirm", content) as HTMLInputElement).value = "";
-          showToast("Alterações descartadas.");
-        };
-        cancelBtn.addEventListener("click", cancel);
-        cleanups.push(() => cancelBtn.removeEventListener("click", cancel));
-      }
-
-      const submit = (event: Event): void => {
-        event.preventDefault();
-        const nome = ($("#profile-name", content) as HTMLInputElement).value.trim();
-        const pwCurrent = ($("#pw-current", content) as HTMLInputElement).value;
-        const pwNew = ($("#pw-new", content) as HTMLInputElement).value;
-        const pwConfirm = ($("#pw-confirm", content) as HTMLInputElement).value;
-        const emailPw = ($("#email-current", content) as HTMLInputElement).value;
-        const emailNew = ($("#email-new", content) as HTMLInputElement).value.trim().toLowerCase();
-        const emailConfirm = ($("#email-confirm", content) as HTMLInputElement).value.trim().toLowerCase();
-
-        const wantsPassword = pwCurrent !== "" || pwNew !== "" || pwConfirm !== "";
-        const emailChanged = emailNew !== (current?.userEmail ?? "");
-        const wantsEmail = emailChanged || emailConfirm !== "";
-
-        if (nome.length === 0) {
-          showToast("Informe um nome válido.", "error");
-          return;
-        }
-        if (wantsPassword && pwNew !== pwConfirm) {
-          showToast("As novas senhas não coincidem.", "error");
-          return;
-        }
-        if (wantsPassword && (pwCurrent === "" || pwNew.length === 0)) {
-          showToast("Preencha senha atual e nova senha.", "error");
-          return;
-        }
-        if (wantsEmail) {
-          if (emailPw === "") {
-            showToast("Informe a senha atual para alterar o e-mail.", "error");
-            return;
-          }
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailNew) || emailNew !== emailConfirm) {
-            showToast("Verifique o novo e-mail e a confirmação.", "error");
-            return;
-          }
-        }
-
-        const data: { nome?: string; email?: string; senhaAtual?: string; novaSenha?: string } = { nome };
-        if (wantsPassword) {
-          data.senhaAtual = pwCurrent;
-          data.novaSenha = pwNew;
-        }
-        if (wantsEmail) {
-          data.email = emailNew;
-        }
-
-        void (async () => {
-          const result = await updateSessionUser(data);
-          if (!result.ok) {
-            showToast(result.message ?? "Não foi possível salvar.", "error");
-            return;
-          }
-          if (wantsPassword && usuarioLogado) {
-            updateUsuarioInterno(usuarioLogado.id, { senha: pwNew });
-          }
-          showToast("Alterações salvas.");
-          renderConfiguracoes();
-        })();
-      };
-      form.addEventListener("submit", submit);
-      cleanups.push(() => form.removeEventListener("submit", submit));
-    }
   }
 
   // ------------------------------------------------------------- Tab routing
