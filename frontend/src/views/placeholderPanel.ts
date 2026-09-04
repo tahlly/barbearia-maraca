@@ -14,6 +14,16 @@ const CONFIG_ROLES: Record<string, { allowed: UserRole[]; title: string; label: 
       { href: "#/", label: "Início", icon: "grid" },
     ],
   },
+  recepcionista: {
+    allowed: ["recepcionista"],
+    title: "Painel da Recepcionista",
+    label: "Recepcionista",
+    text: "Esta área está em construção. Em breve a recepcionista poderá gerenciar agendamentos, clientes e profissionais.",
+    links: [
+      { href: "#/recepcionista/agendamentos", label: "Agendamentos", icon: "calendar" },
+      { href: "#/", label: "Início", icon: "grid" },
+    ],
+  },
 };
 
 export function renderPlaceholderPanel(kind: "profissional" | "recepcionista") {
