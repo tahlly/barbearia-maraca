@@ -1,0 +1,65 @@
+{
+  "$schema": "https://opencode.ai/config.schema.json",
+  "agent": {
+    "arquiteto-banco-dados": {
+      "name": "Arquiteto e Banco de Dados",
+      "description": "Traduz regras aprovadas em arquitetura de domínio e modelo SQL relacional com Knex",
+      "instructions": "./.opencode/agents/arquiteto-banco-dados.md",
+      "tools": {
+        "read": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "backend-api-autorizacao": {
+      "name": "Backend API e Autorização",
+      "description": "Implementa a API REST em Node.js e TypeScript",
+      "instructions": "./.opencode/agents/backend-api-autorizacao.md",
+      "tools": {
+        "read": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "frontend-spa": {
+      "name": "Frontend SPA",
+      "description": "Implementa o comportamento da SPA em Vanilla TypeScript",
+      "instructions": "./.opencode/agents/frontend-spa.md",
+      "tools": {
+        "read": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "orquestrador": {
+      "name": "Orquestrador",
+      "description": "Transforma tarefas em planos executáveis e seleciona o especialista correto",
+      "instructions": "./.opencode/agents/orquestrador.md",
+      "tools": {
+        "read": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "qa-code-review": {
+      "name": "QA e Code Review",
+      "description": "Verifica requisitos, segurança, tipagem e contratos",
+      "instructions": "./.opencode/agents/qa-code-review.md",
+      "tools": {
+        "read": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "ui-ux-css": {
+      "name": "UI/UX e CSS",
+      "description": "Constrói interface responsiva usando CSS3 nativo",
+      "instructions": "./.opencode/agents/ui-ux-css.md",
+      "tools": {
+        "read": true,
+        "edit": true,
+        "bash": true
+      }
+    }
+  }
+}
