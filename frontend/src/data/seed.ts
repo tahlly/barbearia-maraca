@@ -1,9 +1,9 @@
 import { CONFIG } from "../config.js";
-import type { Appointment, Professional, Service } from "../types.js";
+import { isMockMode } from "../services/api.js";
+import type { Professional, Service } from "../types.js";
 import { saveCategories, saveProfessionals, saveServices } from "../services/catalog.js";
 import { registerCliente } from "../services/clientes.js";
 import { createUsuarioInterno } from "../services/usuarios.js";
-import { generateCode } from "../services/booking.js";
 
 const DEFAULT_SERVICES: Service[] = [
   {
@@ -75,86 +75,16 @@ const DEFAULT_PROFESSIONALS: Professional[] = [
   },
 ];
 
-function isoOffset(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${date.getFullYear()}-${m}-${d}`;
-}
-
-function isoOffsetPast(days: number): string {
-  return isoOffset(-days);
-}
-
-function buildAppointments(): Appointment[] {
-  const now = new Date().toISOString();
-  const list: Appointment[] = [
-    {
-      code: generateCode([]),
-      clientName: "João Silva",
-      phone: "(91) 98888-1111",
-      email: "cliente@maraca.com",
-      serviceIds: ["svc-corte", "svc-barba"],
-      professionalId: "pro-1",
-      dateIso: isoOffset(1),
-      time: "10:00",
-      status: "confirmado",
-      createdAt: now,
-    },
-    {
-      code: generateCode([]),
-      clientName: "Maria Santos",
-      phone: "(91) 98777-2222",
-      email: "cliente@maraca.com",
-      serviceIds: ["svc-nails"],
-      professionalId: "pro-3",
-      dateIso: isoOffset(2),
-      time: "14:30",
-      status: "pendente",
-      createdAt: now,
-    },
-    {
-      code: generateCode([]),
-      clientName: "João Silva",
-      phone: "(91) 98888-1111",
-      email: "cliente@maraca.com",
-      serviceIds: ["svc-corte"],
-      professionalId: "pro-1",
-      dateIso: isoOffsetPast(6),
-      time: "15:00",
-      status: "concluido",
-      createdAt: now,
-    },
-    {
-      code: generateCode([]),
-      clientName: "Pedro Costa",
-      phone: "(91) 98666-3333",
-      email: "pedro@maraca.com",
-      serviceIds: ["svc-barba"],
-      professionalId: "pro-1",
-      dateIso: isoOffset(1),
-      time: "11:30",
-      status: "pendente",
-      createdAt: now,
-    },
-    {
-      code: generateCode([]),
-      clientName: "Cliente Antigo",
-      phone: "(91) 98555-4444",
-      email: "cliente@maraca.com",
-      serviceIds: ["svc-corte-barba"],
-      professionalId: "pro-1",
-      dateIso: isoOffsetPast(20),
-      time: "09:30",
-      status: "cancelado",
-      createdAt: now,
-    },
-  ];
-  return list;
-}
-
+/**
+ * Popula dados de demonstração no localStorage — APENAS em modo mock.
+ * Em modo real (useMockApi: false) a fonte de verdade é a API/banco de
+ * dados; o seed não deve criar clientes ou usuários no backend.
+ */
 export function ensureSeed(): void {
+  if (!isMockMode()) {
+    return;
+  }
+
   let seeded = false;
 
   const services = localStorage.getItem(CONFIG.servicesKey);
@@ -167,12 +97,6 @@ export function ensureSeed(): void {
   const professionals = localStorage.getItem(CONFIG.professionalsKey);
   if (!professionals || !JSON.parse(professionals).length) {
     saveProfessionals(DEFAULT_PROFESSIONALS);
-    seeded = true;
-  }
-
-  const appointments = localStorage.getItem(CONFIG.appointmentsKey);
-  if (!appointments || !JSON.parse(appointments).length) {
-    localStorage.setItem(CONFIG.appointmentsKey, JSON.stringify(buildAppointments()));
     seeded = true;
   }
 
