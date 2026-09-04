@@ -1,167 +1,142 @@
-import { CONFIG } from "../config.js";
-import type { Appointment, BookingDraft } from "../types.js";
-import { delay, isMockMode } from "./api.js";
+import type { Appointment, AppointmentStatus, BookingDraft } from "../types.js";
 import { httpJson } from "./api.js";
 
-const CODE_LETTERS = "ABCDEFGHJKMNPQRSTUVWXYZ";
-const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+/* ------------------------------------------------------------------ */
+/*  DTO shapes (espelho fiel de AgendamentoDTO em shared/types/index.ts */
+/*  — não importar diretamente por rootDir ser src/ no tsconfig)        */
+/* ------------------------------------------------------------------ */
 
-function randomChar(source: string): string {
-  return source.charAt(crypto.getRandomValues(new Uint32Array(1))[0]! % source.length);
+type AgendamentoStatusDTO = "pendente" | "confirmado" | "cancelado" | "concluido";
+
+interface AgendamentoDTO {
+  id: string;
+  clienteId: string;
+  clienteNome: string | null;
+  funcionarioId: string;
+  funcionarioNome: string | null;
+  servicoId: string;
+  servicoNome: string | null;
+  data: string;
+  hora: string;
+  status: AgendamentoStatusDTO;
+  observacao: string | null;
+  criadoEm?: string;
 }
 
-function loadStored(): Appointment[] {
-  const raw = localStorage.getItem(CONFIG.appointmentsKey);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw) as Appointment[];
-  } catch {
-    return [];
+/**
+ * Mapeia um `AgendamentoDTO` (contrato do backend) para o tipo `Appointment`
+ * do frontend. As views consomem apenas o tipo local.
+ */
+export function mapAppointment(dto: AgendamentoDTO): Appointment {
+  return {
+    id: dto.id,
+    clienteId: dto.clienteId,
+    clienteNome: dto.clienteNome,
+    funcionarioId: dto.funcionarioId,
+    funcionarioNome: dto.funcionarioNome,
+    servicoId: dto.servicoId,
+    servicoNome: dto.servicoNome,
+    data: dto.data,
+    hora: dto.hora,
+    status: mapStatus(dto.status),
+    observacao: dto.observacao ?? undefined,
+    criadoEm: dto.criadoEm,
+  };
+}
+
+function mapStatus(status: AgendamentoStatusDTO): AppointmentStatus {
+  switch (status) {
+    case "confirmado":
+    case "pendente":
+    case "concluido":
+    case "cancelado":
+      return status;
   }
 }
 
-function persist(list: Appointment[]): void {
-  localStorage.setItem(CONFIG.appointmentsKey, JSON.stringify(list));
-}
-
-function loadAll(): Appointment[] {
-  return loadStored();
-}
-
-export function loadAllAppointments(): Appointment[] {
-  return loadStored();
-}
-
-export function occupiedTimes(dateIso: string, professionalId: string): Set<string> {
-  const occupied = new Set<string>();
-  for (const appointment of loadStored()) {
-    if (appointment.dateIso === dateIso && appointment.professionalId === professionalId && appointment.status !== "cancelado") {
-      occupied.add(appointment.time);
-    }
-  }
-  return occupied;
-}
-
-export function listByEmail(email: string): Appointment[] {
-  const normalized = email.trim().toLowerCase();
-  return loadStored().filter((a) => a.email.toLowerCase() === normalized);
-}
-
-export function generateCode(existing: string[] = []): string {
-  const used = new Set(existing);
-  for (let attempt = 0; attempt < 50; attempt++) {
-    let code = "";
-    code += randomChar(CODE_LETTERS);
-    code += randomChar(CODE_LETTERS);
-    code += "-";
-    for (let i = 0; i < 5; i++) {
-      code += randomChar(CODE_CHARS);
-    }
-    if (!used.has(code)) return code;
-  }
-  return `XX-${Date.now().toString(36).toUpperCase().slice(-5)}`;
-}
-
+/**
+ * Cria um agendamento. O backend resolve o cliente autenticado via token.
+ * `draft` recebe os ids já resolvidos (funcionário e serviço únicos).
+ * POST /api/agendamentos
+ */
 export async function createAppointment(draft: BookingDraft): Promise<Appointment> {
-  if (isMockMode()) {
-    await delay(850);
-    const all = loadAll();
-    const appointment: Appointment = {
-      code: generateCode(all.map((a) => a.code)),
-      clientName: draft.clientName.trim(),
-      phone: draft.phone,
-      email: draft.email,
-      serviceIds: [...draft.serviceIds],
-      professionalId: draft.professionalId,
-      dateIso: draft.dateIso,
-      time: draft.time,
-      status: "pendente",
-      createdAt: new Date().toISOString(),
-    };
-    persist([...loadStored(), appointment]);
-    return appointment;
-  }
-  return httpJson<Appointment>("/agendamentos", {
+  const dto = await httpJson<AgendamentoDTO>("/agendamentos", {
     method: "POST",
-    body: JSON.stringify(draft),
+    body: JSON.stringify({
+      funcionario_id: draft.funcionario_id,
+      servico_id: draft.servico_id,
+      data: draft.data,
+      hora: draft.hora,
+      observacao: draft.observacao ?? null,
+    }),
   });
+  return mapAppointment(dto);
 }
 
-export async function findByCode(code: string): Promise<Appointment | null> {
-  if (isMockMode()) {
-    await delay(550);
-    const normalized = code.trim().toUpperCase();
-    return loadAll().find((a) => a.code === normalized) ?? null;
-  }
-  try {
-    return await httpJson<Appointment>(`/agendamentos/${encodeURIComponent(code)}`);
-  } catch {
-    return null;
-  }
+/**
+ * Lista os agendamentos visíveis ao usuário autenticado.
+ * O backend já filtra por papel (cliente vê os seus; barbeiro vê a própria
+ * agenda; recep/admin veem todos). Não é necessário enviar e-mail.
+ * GET /api/agendamentos
+ */
+export async function listAppointments(): Promise<Appointment[]> {
+  const dtos = await httpJson<AgendamentoDTO[]>("/agendamentos");
+  return dtos.map(mapAppointment);
 }
 
-export async function cancelAppointment(code: string): Promise<Appointment | null> {
-  if (isMockMode()) {
-    await delay(500);
-    const stored = loadStored();
-    const index = stored.findIndex((a) => a.code === code.toUpperCase());
-    if (index >= 0) {
-      stored[index]!.status = "cancelado";
-      persist(stored);
-      return stored[index]!;
-    }
-    return null;
-  }
-  return httpJson<Appointment>(`/agendamentos/${encodeURIComponent(code)}/cancelar`, {
+/** Busca um agendamento pelo id filtrando a listagem (não há GET por id dedicado). */
+export async function findById(id: string): Promise<Appointment | null> {
+  const list = await listAppointments();
+  return list.find((a) => a.id === id) ?? null;
+}
+
+/**
+ * Cancela um agendamento.
+ * PATCH /api/agendamentos/:id/cancelar
+ */
+export async function cancelAppointment(id: string): Promise<Appointment | null> {
+  const dto = await httpJson<AgendamentoDTO>(`/agendamentos/${encodeURIComponent(id)}/cancelar`, {
     method: "PATCH",
   });
+  return mapAppointment(dto);
 }
 
-export async function setAppointmentStatus(
-  code: string,
-  status: Appointment["status"],
-): Promise<Appointment | null> {
-  if (isMockMode()) {
-    await delay(450);
-    const stored = loadStored();
-    const index = stored.findIndex((a) => a.code === code.toUpperCase());
-    if (index >= 0) {
-      stored[index]!.status = status;
-      persist(stored);
-      return stored[index]!;
-    }
-    return null;
-  }
-  return httpJson<Appointment>(`/agendamentos/${encodeURIComponent(code)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ status }),
-  });
+/**
+ * Confirma um agendamento (profissional/recep/admin).
+ * PATCH /api/agendamentos/:id/confirmar
+ */
+export async function confirmAppointment(id: string): Promise<Appointment> {
+  const dto = await httpJson<AgendamentoDTO>(
+    `/agendamentos/${encodeURIComponent(id)}/confirmar`,
+    { method: "PATCH" },
+  );
+  return mapAppointment(dto);
 }
 
-export async function rescheduleAppointment(
-  code: string,
-  changes: { professionalId: string; dateIso: string; time: string },
-): Promise<Appointment | null> {
-  if (isMockMode()) {
-    await delay(700);
-    const stored = loadStored();
-    const index = stored.findIndex((a) => a.code === code.toUpperCase());
-    if (index >= 0) {
-      const updated: Appointment = {
-        ...stored[index]!,
-        professionalId: changes.professionalId,
-        dateIso: changes.dateIso,
-        time: changes.time,
-        status: "pendente",
-      };
-      stored[index] = updated;
-      persist(stored);
-      return updated;
-    }
-    return null;
+/**
+ * Conclui um agendamento (profissional/recep/admin).
+ * PATCH /api/agendamentos/:id/concluir
+ */
+export async function concludeAppointment(id: string): Promise<Appointment> {
+  const dto = await httpJson<AgendamentoDTO>(
+    `/agendamentos/${encodeURIComponent(id)}/concluir`,
+    { method: "PATCH" },
+  );
+  return mapAppointment(dto);
+}
+
+/**
+ * Reagendar: não há endpoint próprio no backend. A composição recomendada é
+ * **cancelar o agendamento antigo** e **criar um novo** com os novos dados.
+ * Esta função cancela o antigo e devolve o agendamento cancelado; a view deve
+ * então abrir o wizard de novo (estado "novo") com os dados pré-preenchidos.
+ */
+export async function reschedule(
+  id: string,
+): Promise<{ canceled: Appointment }> {
+  const canceled = await cancelAppointment(id);
+  if (!canceled) {
+    throw new Error("Agendamento não encontrado para reagendar.");
   }
-  return httpJson<Appointment>(`/agendamentos/${encodeURIComponent(code)}/reagendar`, {
-    method: "PATCH",
-    body: JSON.stringify(changes),
-  });
+  return { canceled };
 }
