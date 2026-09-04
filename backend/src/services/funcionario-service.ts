@@ -45,6 +45,37 @@ export async function buscarFuncionarioPorId(
   throw new ForbiddenError('Acesso negado');
 }
 
+/**
+ * Busca um funcionário pelo e-mail aplicando a mesma regra de permissão de
+ * `buscarFuncionarioPorId`:
+ * - admin/recepcionista veem detalhe completo de qualquer funcionário;
+ * - barbeiro (profissional) só encontra o próprio perfil.
+ */
+export async function buscarFuncionarioPorEmail(
+  email: string,
+  requestingUserId?: string,
+  requestingRole?: string,
+): Promise<FuncionarioCompletoDTO> {
+  const funcionario = await funcionarioRepo.buscarPorEmail(email);
+  if (!funcionario) {
+    throw new NotFoundError('Funcionário não encontrado');
+  }
+
+  // Admin e recepcionista veem detalhe completo
+  if (requestingRole === 'admin' || requestingRole === 'recepcionista') {
+    return funcionario;
+  }
+
+  // Barbeiro (profissional) pode ver o próprio perfil
+  if (requestingRole === 'profissional' && requestingUserId) {
+    if (funcionario.usuarioId === requestingUserId) {
+      return funcionario;
+    }
+  }
+
+  throw new ForbiddenError('Acesso negado');
+}
+
 // ── Criação ───────────────────────────────────────────────────
 
 export async function criarFuncionario(dados: {
