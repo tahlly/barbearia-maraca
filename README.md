@@ -41,7 +41,7 @@ barbearia-maraca/
 ├── frontend/         → SPA (Vite + Vanilla TS)
 ├── shared/types/     → contratos HTTP compartilhados (TypeScript)
 ├── docs/             → documentação
-├── docker-compose.yml → banco Postgres
+├── docker-compose.yml → ambiente local completo (Postgres, migrations, API e SPA)
 └── AGENTS.md          → convenções e regras do projeto
 ```
 
@@ -150,46 +150,91 @@ Tabelas principais:
 
 ### Pré-requisitos
 
-- **Docker Desktop** (para o Postgres)
-- **Node.js** (16+) e **npm**
+- **Docker Desktop** com Docker Compose
+- **Node.js** e **npm** apenas para usar os atalhos `npm run dev:*`
 
-### Passo 1 — Subir o banco (Postgres)
-
-Na **raiz** do projeto:
+No Windows, abra o Docker Desktop e espere o motor ficar disponível. Depois abra um novo PowerShell e confirme:
 
 ```powershell
-docker compose up -d
+docker --version
+docker compose version
 ```
 
-Confira:
+Se o Docker estiver aberto, mas o terminal ainda não reconhecer o comando, feche e abra novamente o PowerShell. Como alternativa temporária para a sessão atual:
 
 ```powershell
-docker ps   # deve aparecer barbearia_db (healthy) na porta 5432
+$env:Path = "C:\Program Files\Docker\Docker\resources\bin;$env:Path"
 ```
 
-### Passo 2 — Configurar o `.env` do backend
+### Fluxo recomendado — ambiente completo com Docker
 
-> ⚠️ **O `.env` ativo é `backend/.env`**, não o da raiz. Tanto `knexfile.ts` quanto `server.ts` carregam de `backend/`.
+Na raiz do projeto, este comando constrói e inicia Postgres, migrations, Backend e Frontend na ordem correta:
 
-Crie `backend/.env`:
-
-```env
-# Banco de Dados
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASS=postgres
-DB_NAME=barbearia_maraca
-DB_NAME_TEST=barbearia_maraca_test
-
-# Login com Google (opcional)
-VITE_GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=
+```powershell
+npm run dev:up
 ```
 
-### Passo 3 — Instalar dependências
+Também é possível usar o Docker Compose diretamente:
+
+```powershell
+docker compose up --build
+```
+
+O ambiente fica disponível em:
+
+- Frontend: **http://localhost:5173**
+- Backend: **http://localhost:3000**
+- Health check: **http://localhost:3000/api/health**
+- PostgreSQL: **localhost:5432**
+
+O serviço `migrate` espera o banco ficar saudável e aplica automaticamente apenas migrations pendentes. A seed não faz parte da inicialização normal.
+
+Para acompanhar os logs:
+
+```powershell
+npm run dev:logs
+```
+
+Para encerrar todos os contêineres do projeto:
+
+```powershell
+npm run dev:down
+```
+
+Esse comando encerra Frontend, Backend, migrations e PostgreSQL do Docker, preservando os dados no volume `postgres_data`. Ele não controla um PostgreSQL instalado como serviço do Windows. Não use `docker compose down -v` a menos que queira apagar também o banco Docker local.
+
+#### Seed de desenvolvimento — execução explícita
+
+O seed apaga e recria os dados de demonstração. Execute somente quando quiser reinicializar o conteúdo do banco:
+
+```powershell
+npm run dev:seed
+```
+
+#### Variáveis locais
+
+O projeto usa um único arquivo `.env` na raiz para Docker, Backend e Frontend. Em um clone novo, crie-o sem sobrescrever uma configuração existente:
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+Preencha no `.env` o segredo JWT e, quando necessário, os Client IDs do Google. O Backend e o Knex carregam esse arquivo diretamente; o Vite usa a mesma raiz, mas só expõe ao navegador variáveis iniciadas com `VITE_`.
+
+O Compose lê o mesmo arquivo e repassa apenas as variáveis necessárias a cada serviço. Dentro dos contêineres, ele sobrescreve host, porta e credenciais do banco com os valores `COMPOSE_DB_*`.
+
+Se a porta `5432` já estiver ocupada por um PostgreSQL nativo, encerre esse serviço ou defina outra porta do host antes de subir o Compose:
+
+```powershell
+$env:COMPOSE_DB_PORT=5433
+npm run dev:up
+```
+
+Dentro da rede Docker, o Backend continua acessando o banco em `db:5432`.
+
+### Fluxo alternativo — execução manual
+
+Para executar sem Docker, mantenha um PostgreSQL local ativo e configure as variáveis `DB_*` no `.env` da raiz. Depois instale as dependências:
 
 ```powershell
 # backend/
@@ -199,50 +244,25 @@ npm install
 npm install
 ```
 
-### Passo 4 — Rodar as migrations (criar tabelas)
-
-Na pasta `backend/`:
+Na pasta `backend/`, aplique migrations e inicie a API:
 
 ```powershell
 npm run migrate:latest
+npm run dev
 ```
 
-> Desfazer a última batch: `npm run migrate:rollback`.
-
-### Passo 5 — Popular o banco com dados de teste (seed)
-
-Na pasta `backend/`:
-
-```powershell
-npm run seed
-```
-
-> ⚠️ O seed **apaga e recria** todos os dados (não cria agendamentos).
-
-### Passo 6 — Rodar o backend
-
-Na pasta `backend/`:
+Em outro terminal, na pasta `frontend/`, inicie a SPA:
 
 ```powershell
 npm run dev
 ```
 
-Servidor em **http://localhost:3000**. Teste:
+Teste a conexão:
 
 ```powershell
 Invoke-WebRequest http://localhost:3000/api/health
 # → {"status":"ok","database":"connected"}
 ```
-
-### Passo 7 — Rodar o frontend (SPA)
-
-Em **outro terminal**, na pasta `frontend/`:
-
-```powershell
-npm run dev
-```
-
-Acesse **http://localhost:5173** (o Vite faz proxy de `/api` para o backend em `:3000`).
 
 ---
 
@@ -262,6 +282,15 @@ Todos os usuários usam a senha **`senha123`**:
 ---
 
 ## <a name="comandos-úteis"></a>Comandos úteis
+
+### Ambiente Docker (raiz)
+
+| Comando | Descrição |
+|---------|-----------|
+| `npm run dev:up` | constrói e inicia banco, migrations, Backend e Frontend |
+| `npm run dev:down` | encerra toda a stack e preserva os dados |
+| `npm run dev:logs` | acompanha os logs do Backend e Frontend |
+| `npm run dev:seed` | reinicializa explicitamente os dados de demonstração |
 
 ### Backend (`backend/`)
 
@@ -313,7 +342,7 @@ Pontos de atenção no contrato:
 - **Porta 3000**: o backend usa a porta 3000 por padrão. Se outro serviço (ex.: Whaticket) estiver usando-a, libere a porta antes de subir o projeto.
 - **Seed destrutivo**: `npm run seed` apaga e recria os dados — rode apenas quando quiser dados limpos.
 - **Modo mock**: o `config.ts` do frontend usa `useMockApi: false` (integração real com o backend). Emblemas de mock que ainda existem nos services são formas de desenvolvimento e não ativam por padrão.
-- **Login Google**: requer `VITE_GOOGLE_CLIENT_ID` no frontend e credenciais de OAuth no backend; sem configuração, o fluxo Google fica indisponível.
+- **Login Google**: requer `VITE_GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_ID` no `.env` da raiz; sem configuração, o fluxo Google fica indisponível.
 - **Migrations não devem ser reescritas** após aplicadas — para mudanças, crie uma nova migration.
 
 ---

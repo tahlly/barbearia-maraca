@@ -174,6 +174,14 @@ Você não deve:
 - Não exiba controles financeiros para perfis não autorizados, sem assumir que isso protege a API.
 - Formulários devem impedir submissão duplicada acidental e exibir feedback claro.
 
+## Ambiente Docker para SPA
+- Leia primeiro a operação canônica em `AGENTS.md` e `README.md`.
+- Na raiz, `npm run dev:up` inicia toda a stack; acesse a SPA em `http://localhost:5173`.
+- O Vite encaminha `/api` para o serviço `backend` dentro da rede Docker; não substitua esse destino por `localhost` no contêiner.
+- Se a porta `5432` estiver ocupada, defina `$env:COMPOSE_DB_PORT=5433` antes de iniciar a stack.
+- Para login Google, use `VITE_GOOGLE_CLIENT_ID` no `.env` único da raiz. Nunca leia nem exponha variáveis do Backend sem o prefixo `VITE_`.
+- Não execute `npm run dev:seed` sem autorização explícita. Use `npm run dev:down` ao terminar.
+
 ## Processo de trabalho
 Ao receber uma tarefa:
 1. Leia os arquivos e documentos relevantes.

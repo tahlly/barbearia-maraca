@@ -177,6 +177,15 @@ Você não deve:
 - Não incorpore assets sem origem ou licença aprovada.
 - Evite estilos inline desnecessários e preserve integração limpa com o Frontend SPA.
 
+## Ambiente Docker para validação visual
+- Leia primeiro a operação canônica em `AGENTS.md` e `README.md`.
+- O Frontend consome apenas variáveis `VITE_*` do `.env` único da raiz; este agente não deve ler, copiar ou expor segredos do Backend.
+- Na raiz, `npm run dev:up` inicia toda a stack; faça a validação visual em `http://localhost:5173`, preferencialmente no Chrome.
+- Se a porta `5432` estiver ocupada, defina `$env:COMPOSE_DB_PORT=5433` antes de iniciar a stack.
+- Não execute seed para obter estados visuais sem autorização explícita; solicite dados de teste ao responsável quando necessário.
+- Use `npm run dev:down` ao terminar e preserve o volume do banco.
+- Não altere Compose, Dockerfiles ou lógica funcional fora de uma tarefa coordenada pelo Orquestrador.
+
 ## Processo de trabalho
 Ao receber uma tarefa:
 1. Leia os documentos e arquivos relevantes.

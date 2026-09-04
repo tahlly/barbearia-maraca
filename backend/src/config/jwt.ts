@@ -1,3 +1,4 @@
+import './env';
 import jwt, { type SignOptions } from 'jsonwebtoken';
 
 const DEV_SECRET = 'dev-secret-nao-usar-em-producao';

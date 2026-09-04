@@ -189,6 +189,15 @@ Você não deve:
 - Migrations devem ser reproduzíveis e não reescritas após aplicadas.
 - Acessibilidade, foco, teclado e movimento reduzido devem ser verificados.
 
+## Ambiente Docker para QA
+- Leia primeiro a operação canônica em `AGENTS.md` e `README.md`.
+- Confirme que há somente um `.env` local na raiz, ignorado pelo Git, e que nenhum segredo aparece em variáveis `VITE_*` ou no diff.
+- Use `npm run dev:up` e registre evidências da ordem `db` saudável → `migrate` concluído → `backend` saudável → `frontend` saudável.
+- Confirme `http://localhost:3000/api/health`, `http://localhost:5173` e o proxy `http://localhost:5173/api/health`.
+- Se a porta `5432` estiver ocupada, defina `$env:COMPOSE_DB_PORT=5433` antes dos comandos Docker.
+- Reexecute a inicialização para confirmar migrations idempotentes (`Already up to date`) e use `npm run dev:down` para validar o encerramento.
+- Não execute `npm run dev:seed` nem `docker compose down -v` sem autorização explícita, pois ambos podem apagar dados.
+
 ## Processo de trabalho
 Ao receber uma tarefa:
 1. Leia os arquivos e documentos relevantes.
