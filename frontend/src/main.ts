@@ -11,6 +11,7 @@ import { renderMinhaConta } from "./views/minhaConta.js";
 import { renderManage } from "./views/manage.js";
 import { renderProfissional } from "./views/profissional.js";
 import { ensureSeed } from "./data/seed.js";
+import { primeCatalog } from "./services/catalog.js";
 
 function init(): void {
   ensureSeed();
@@ -48,6 +49,11 @@ function init(): void {
   if (appContainer) {
     initRouter(appContainer);
   }
+
+  /* Popula o cache de catálogo (serviços e profissionais) no boot.
+     É fire-and-forget: enquanto a resposta não chega, o cache pode estar
+     vazio; as views que dependem dele recarregam assincronamente. */
+  void primeCatalog();
 }
 
 if (document.readyState === "loading") {
