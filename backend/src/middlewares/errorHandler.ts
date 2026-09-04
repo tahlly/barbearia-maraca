@@ -2,9 +2,9 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../errors/AppError';
 import { ValidationError } from '../errors/ValidationError';
-import { ForbiddenError } from '../errors/ForbiddenError';
 import { NotFoundError } from '../errors/NotFoundError';
 import { InternalError } from '../errors/InternalError';
+import { UnauthorizedError } from '../errors/UnauthorizedError';
 
 export interface ErrorResponse {
   erro: boolean;
@@ -62,14 +62,16 @@ export function errorHandler(
     return;
   }
 
+  // Trata erros JWT que não passaram pelo UnauthorizedError (ex.: jsonwebtoken
+  // lança erros genéricos com .message contendo "jwt" no middleware de auth).
   if (error.name === 'UnauthorizedError' || error.message.includes('jwt')) {
-    const forbiddenError = new ForbiddenError('Token inválido ou expirado');
+    const unauthorizedError = new UnauthorizedError('Token inválido ou expirado');
     response = {
       erro: true,
-      mensagem: forbiddenError.message,
-      status: forbiddenError.status,
+      mensagem: unauthorizedError.message,
+      status: unauthorizedError.status,
     };
-    res.status(forbiddenError.status).json(response);
+    res.status(unauthorizedError.status).json(response);
     return;
   }
 
