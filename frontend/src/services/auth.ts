@@ -72,8 +72,8 @@ function loadDemoAdmin(): DemoAdminProfile {
 
 /**
  * Atualiza os dados do usuário da sessão atual (nome/email) no sessionStorage.
- * Validação de senha e persistência no backend requerem endpoint dedicado
- * (PATCH /auth/me) que ainda não existe.
+ * O endpoint PATCH /auth/me existe no backend, mas a persistência remota
+ * ainda não é chamada aqui — integração futura.
  */
 export async function updateSessionUser(data: {
   nome?: string;

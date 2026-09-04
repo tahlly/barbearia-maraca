@@ -275,10 +275,6 @@ function slotsForDateFromConfig(
  * - Dias sem registro → `{ open: false }`.
  * - `blockedDates` e `exceptions` são mantidos apenas em localStorage
  *   (o backend não os modela).
- *
- * PENDÊNCIA: A assinatura mudou para `async` + parâmetro opcional
- * `funcionarioId`. As chamadas síncronas em `manage.ts` e
- * `bookingWizard.ts` precisarão ser adaptadas para usar `await`.
  */
 export async function loadSchedule(
   funcionarioId?: string,
@@ -308,9 +304,8 @@ export async function loadSchedule(
  * `blockedDates` e `exceptions` continuam sendo gravados em localStorage
  * (o backend não os suporta).
  *
- * PENDÊNCIA: A assinatura agora requer `funcionarioId` em modo API.
- * A chamada em `manage.ts` será quebrada até o modal ser atualizado
- * para suportar configuração por funcionário.
+ * O modal de agenda em `manage.ts` resolve o `funcionarioId` do usuário
+ * logado e o repassa para esta função.
  */
 export async function saveSchedule(
   config: ScheduleConfig,
@@ -401,10 +396,6 @@ export async function saveSchedule(
  * Clientes não autenticados (booking wizard público) não poderão
  * obter slots via API até o backend disponibilizar acesso público
  * ou `authenticateOptional` neste endpoint.
- *
- * PENDÊNCIA: A assinatura mudou para `async` + `funcionarioId`.
- * `bookingWizard.ts` chama `slotsForDate(dateIso)` sem `funcionarioId`;
- * precisa ser atualizado para passar `state.professionalId`.
  */
 export async function slotsForDate(
   dateIso: string,
@@ -448,7 +439,6 @@ export async function slotsForDate(
  * **Modo API:** delega para `slotsForDate` (verifica se há ao menos 1 slot).
  *
  * PENDÊNCIA: Mesma restrição de autenticação que `slotsForDate`.
- * PENDÊNCIA: Mesma mudança de assinatura (`async` + `funcionarioId`).
  */
 export async function isDateOpen(
   dateIso: string,

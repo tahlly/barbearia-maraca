@@ -287,11 +287,6 @@ export function renderManage(container: HTMLElement): () => void {
 
   function dashboardMetricsHTML(appointments: Appointment[]): string {
     const filtered = appointments.filter(matchesFilter);
-    let revenue = 0;
-    for (const a of filtered) {
-      if (a.status === "cancelado") continue;
-      revenue += serviceTotal(a.servicoId);
-    }
     const counts: Record<Appointment["status"], number> = {
       confirmado: 0,
       pendente: 0,
@@ -300,12 +295,20 @@ export function renderManage(container: HTMLElement): () => void {
     };
     for (const a of filtered) counts[a.status] += 1;
 
-    const sold: Record<string, number> = {};
-    for (const a of filtered) {
-      if (a.status === "cancelado") continue;
-      sold[a.servicoId] = (sold[a.servicoId] ?? 0) + 1;
-    }
-    const top = Object.entries(sold).sort((x, y) => y[1] - x[1]).slice(0, 3);
+    // Bloco financeiro restrito ao Administrador (PRD: recepcionista não tem acesso financeiro).
+    const financial = isAdmin
+      ? (() => {
+          let revenue = 0;
+          const sold: Record<string, number> = {};
+          for (const a of filtered) {
+            if (a.status === "cancelado") continue;
+            revenue += serviceTotal(a.servicoId);
+            sold[a.servicoId] = (sold[a.servicoId] ?? 0) + 1;
+          }
+          const top = Object.entries(sold).sort((x, y) => y[1] - x[1]).slice(0, 3);
+          return { revenue, top };
+        })()
+      : null;
 
     return `
       <div class="kpi-grid">
@@ -313,20 +316,21 @@ export function renderManage(container: HTMLElement): () => void {
         <div class="kpi-card"><span class="kpi-card__label">${icon("check-circle", 16)} Confirmados</span><span class="kpi-card__value kpi-card__value--success">${counts.confirmado}</span></div>
         <div class="kpi-card"><span class="kpi-card__label">${icon("clock", 16)} Pendentes</span><span class="kpi-card__value kpi-card__value--gold">${counts.pendente}</span></div>
         <div class="kpi-card"><span class="kpi-card__label">${icon("x", 16)} Cancelados</span><span class="kpi-card__value kpi-card__value--danger">${counts.cancelado}</span></div>
-        <div class="kpi-card"><span class="kpi-card__label">${icon("dollar", 16)} Faturamento</span><span class="kpi-card__value kpi-card__value--gold">${formatCurrency(revenue)}</span></div>
+        ${financial ? `<div class="kpi-card"><span class="kpi-card__label">${icon("dollar", 16)} Faturamento</span><span class="kpi-card__value kpi-card__value--gold">${formatCurrency(financial.revenue)}</span></div>` : ""}
       </div>
+      ${financial ? `
       <div class="panel__section">
         <h3 class="panel__section-title">Serviços mais vendidos</h3>
         <div class="card">
-          ${top.length === 0 ? `<p class="panel__empty">Ainda não há dados suficientes.</p>` : ""}
-          ${top
+          ${financial.top.length === 0 ? `<p class="panel__empty">Ainda não há dados suficientes.</p>` : ""}
+          ${financial.top
             .map(
               ([id, count]) =>
                 `<div class="top-service"><span>${escapeHtml(serviceName(id))}</span><strong>${count}×</strong></div>`,
             )
             .join("")}
         </div>
-      </div>
+      </div>` : ""}
     `;
   }
 
@@ -603,7 +607,14 @@ export function renderManage(container: HTMLElement): () => void {
 
   // ------------------------------------------------------- Agenda config modal
   async function openScheduleModal(): Promise<void> {
-    const config = await loadSchedule();
+    // Em modo API, horários são por funcionário; resolve o perfil do usuário logado.
+    const usuario = await findUsuarioByEmail(session.userEmail);
+    const professionalId = usuario?.professionalId ?? null;
+    if (!professionalId) {
+      showToast("Não foi possível identificar seu perfil de funcionário.", "error");
+      return;
+    }
+    const config = await loadSchedule(professionalId);
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.setAttribute("aria-hidden", "true");
@@ -697,7 +708,7 @@ export function renderManage(container: HTMLElement): () => void {
       if (!blocked.includes(dateIso)) {
         blocked = [...blocked, dateIso];
         const newConfig: ScheduleConfig = { ...config, blockedDates: blocked };
-        void saveSchedule(newConfig).then(() => {
+        void saveSchedule(newConfig, professionalId).then(() => {
           showToast("Data bloqueada.");
         });
         (overlay.querySelector("[data-blocked-list]") as HTMLUListElement).insertAdjacentHTML(
@@ -718,7 +729,7 @@ export function renderManage(container: HTMLElement): () => void {
       }
       let exceptions = config.exceptions.filter((e) => e.dateIso !== dateIso);
       exceptions = [...exceptions, { dateIso, start, end }];
-      void saveSchedule({ ...config, exceptions }).then(() => {
+      void saveSchedule({ ...config, exceptions }, professionalId).then(() => {
         showToast("Abertura excepcional adicionada.");
       });
       (overlay.querySelector("[data-exception-list]") as HTMLUListElement).insertAdjacentHTML(
@@ -738,7 +749,7 @@ export function renderManage(container: HTMLElement): () => void {
         ...config,
         blockedDates: config.blockedDates.filter((d) => d !== dateIso),
       };
-      void saveSchedule(newConfig).then(() => {
+      void saveSchedule(newConfig, professionalId).then(() => {
         btn.closest("li")?.remove();
         showToast("Data desbloqueada.");
       });
@@ -752,7 +763,7 @@ export function renderManage(container: HTMLElement): () => void {
         ...config,
         exceptions: config.exceptions.filter((e) => e.dateIso !== dateIso),
       };
-      void saveSchedule(newConfig).then(() => {
+      void saveSchedule(newConfig, professionalId).then(() => {
         btn.closest("li")?.remove();
         showToast("Exceção removida.");
       });
@@ -769,7 +780,7 @@ export function renderManage(container: HTMLElement): () => void {
           end: (overlay.querySelector<HTMLInputElement>(`[data-day-end="${day}"]`)!).value,
         };
       }
-      void saveSchedule({ ...config, weekly }).then(() => {
+      void saveSchedule({ ...config, weekly }, professionalId).then(() => {
         showToast("Agenda configurada.");
         finish();
       });
@@ -828,15 +839,22 @@ export function renderManage(container: HTMLElement): () => void {
   // --------------------------------------------------------------- Serviços
   function renderServicos(): void {
     refreshCaches();
+    const actionsHeader = isAdmin ? `<th>Ações</th>` : "";
+    const actionsCell = (id: string): string =>
+      isAdmin
+        ? `<td><span class="cell-actions"><button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-service="${escapeHtml(id)}">Editar</button><button type="button" class="btn btn--sm btn--danger-outline" data-delete-service="${escapeHtml(id)}">Excluir</button></span></td>`
+        : "";
+
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
           <h3 class="panel__section-title">Serviços</h3>
           <p class="manage-head__sub">Gerencie os serviços oferecidos pelo salão</p>
         </div>
+        ${isAdmin ? `
         <div class="toolbar">
           <button type="button" class="btn btn--primary" data-new-service>${icon("plus", 16)} Novo serviço</button>
-        </div>
+        </div>` : ""}
       </div>
       <div class="table-wrap">
         <table class="table">
@@ -846,7 +864,7 @@ export function renderManage(container: HTMLElement): () => void {
               <th>Categoria</th>
               <th>Duração</th>
               <th>Preço</th>
-              <th>Ações</th>
+              ${actionsHeader}
             </tr>
           </thead>
           <tbody>
@@ -858,7 +876,7 @@ export function renderManage(container: HTMLElement): () => void {
                     <td>${escapeHtml(s.category || "-")}</td>
                     <td>${s.durationMin} min</td>
                     <td>${formatCurrency(s.price)}</td>
-                    <td><span class="cell-actions"><button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-service="${escapeHtml(s.id)}">Editar</button><button type="button" class="btn btn--sm btn--danger-outline" data-delete-service="${escapeHtml(s.id)}">Excluir</button></span></td>
+                    ${actionsCell(s.id)}
                   </tr>`,
               )
               .join("")}
@@ -898,6 +916,7 @@ export function renderManage(container: HTMLElement): () => void {
   }
 
   async function handleDeleteService(service: Service): Promise<void> {
+    if (!isAdmin) return; // Recepcionista não altera serviços (PRD).
     const confirmed = await confirmDialog({
       title: "Excluir serviço",
       message: `Excluir o serviço "${service.name}"? Esta ação não pode ser desfeita.`,
@@ -915,6 +934,7 @@ export function renderManage(container: HTMLElement): () => void {
   }
 
   function openServiceModal(service: Service | null): void {
+    if (!isAdmin) return; // Recepcionista não altera serviços (PRD).
     const isEdit = Boolean(service);
     const categories = loadCategories();
     const overlay = document.createElement("div");
@@ -1192,7 +1212,7 @@ export function renderManage(container: HTMLElement): () => void {
         try {
           const existing = await findByProfessionalId(pro.id);
           if (existing) {
-            // Backend só aceita nome, cargo e especialidade no PUT /funcionarios.
+            // PUT /funcionarios aceita nome, cargo, especialidade, email e senha.
             // role é o `cargo` do backend (barbeiro/recepcionista/administrador).
             const cargo: "barbeiro" | "recepcionista" | "administrador" =
               role.toLowerCase().includes("recepcion") ? "recepcionista" : "barbeiro";

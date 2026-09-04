@@ -290,10 +290,9 @@ export async function createUsuarioInterno(data: {
  * **Modo mock:** atualiza no `localStorage`.
  * **Modo API:** chama `PUT /funcionarios/:id`.
  *
- * PENDÊNCIA: O backend só aceita `nome`, `telefone`, `cargo`, `especialidade`,
- * `foto` e `descricao` no `PUT`. Atualização de `email` e `senha` NÃO é
- * suportada pelo endpoint de funcionário. Somente `nome` será atualizado
- * efetivamente.
+ * O `PUT /funcionarios/:id` aceita `nome`, `telefone`, `cargo`, `especialidade`,
+ * `foto`, `descricao`, `email` e `senha`. `email` e `senha` são opcionais e
+ * só são enviados quando o chamador os fornece (o backend aplica quando presente).
  *
  * PENDÊNCIA: O parâmetro `id` é o `usuarioId` do frontend, mas o backend
  * espera o `funcionarioId`. A função tenta resolver internamente via busca.
