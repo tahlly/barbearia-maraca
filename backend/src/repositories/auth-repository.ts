@@ -55,6 +55,33 @@ export function criarCliente(data: { usuarioId: string; nome: string }): Promise
   });
 }
 
+export function criarUsuarioComSenha(data: {
+  email: string;
+  senhaHash: string;
+  tipo: string;
+}): Promise<UsuarioRow> {
+  return db('usuario')
+    .insert({
+      email: data.email,
+      senha_hash: data.senhaHash,
+      tipo: data.tipo,
+    })
+    .returning('*')
+    .then((rows) => rows[0] as UsuarioRow);
+}
+
+export function criarClienteCompleto(data: {
+  usuarioId: string;
+  nome: string;
+  telefone?: string;
+}): Promise<void> {
+  return db('cliente').insert({
+    usuario_id: data.usuarioId,
+    nome: data.nome,
+    telefone: data.telefone || null,
+  });
+}
+
 export async function obterClienteNome(usuarioId: string): Promise<string | null> {
   const row = await db('cliente').where('usuario_id', usuarioId).first();
   return row?.nome ?? null;

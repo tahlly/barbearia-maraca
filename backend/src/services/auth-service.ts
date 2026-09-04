@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
 import { ValidationError } from '../errors/ValidationError';
 import { ForbiddenError } from '../errors/ForbiddenError';
@@ -6,8 +7,10 @@ import {
   findUsuarioByEmail,
   findUsuarioByGoogleId,
   criarUsuarioGoogle,
+  criarUsuarioComSenha,
   vincularGoogleAUsuario,
   criarCliente,
+  criarClienteCompleto,
   obterClienteNome,
   obterFuncionarioNome,
   type UsuarioRow,
@@ -104,5 +107,38 @@ export async function autenticarComGoogle(idToken: string): Promise<LoginRespons
   return {
     token: gerarToken(),
     user: buildUsuarioDTO(usuario, nome, cargo),
+  };
+}
+
+const SALT_ROUNDS = 10;
+
+export async function registrar(data: {
+  email: string;
+  senha: string;
+  nome: string;
+  telefone?: string;
+}): Promise<LoginResponseDTO> {
+  const existing = await findUsuarioByEmail(data.email);
+  if (existing) {
+    throw new ValidationError('Email ja cadastrado');
+  }
+
+  const senhaHash = await bcrypt.hash(data.senha, SALT_ROUNDS);
+
+  const usuario = await criarUsuarioComSenha({
+    email: data.email,
+    senhaHash,
+    tipo: 'cliente',
+  });
+
+  await criarClienteCompleto({
+    usuarioId: usuario.id,
+    nome: data.nome,
+    telefone: data.telefone,
+  });
+
+  return {
+    token: gerarToken(),
+    user: buildUsuarioDTO(usuario, data.nome, null),
   };
 }
