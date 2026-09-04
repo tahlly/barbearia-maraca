@@ -91,3 +91,28 @@ export async function obterFuncionarioNome(usuarioId: string): Promise<{ nome: s
   const row = await db('funcionario').where('usuario_id', usuarioId).first();
   return row ? { nome: row.nome, cargo: row.cargo } : null;
 }
+
+export async function findUsuarioById(id: string): Promise<UsuarioRow | undefined> {
+  const row = await db('usuario').where('id', id).first();
+  return row as UsuarioRow | undefined;
+}
+
+export async function atualizarUsuario(
+  id: string,
+  dados: { email?: string; senhaHash?: string }
+): Promise<void> {
+  const update: Record<string, unknown> = {};
+  if (dados.email !== undefined) update.email = dados.email;
+  if (dados.senhaHash !== undefined) update.senha_hash = dados.senhaHash;
+  if (Object.keys(update).length === 0) return;
+  update.atualizado_em = new Date();
+  await db('usuario').where('id', id).update(update);
+}
+
+export async function atualizarClienteNome(usuarioId: string, nome: string): Promise<void> {
+  await db('cliente').where('usuario_id', usuarioId).update({ nome });
+}
+
+export async function atualizarFuncionarioNome(usuarioId: string, nome: string): Promise<void> {
+  await db('funcionario').where('usuario_id', usuarioId).update({ nome });
+}

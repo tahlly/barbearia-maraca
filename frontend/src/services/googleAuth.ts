@@ -167,10 +167,10 @@ async function mockGoogleLogin(): Promise<GoogleAuthResult> {
 
   const email = "cliente.google@maraca.com";
   const nome = "Cliente do Google";
-  let cliente = findClienteByEmail(email);
+  let cliente = await findClienteByEmail(email);
 
   if (!cliente) {
-    cliente = registerCliente({
+    cliente = await registerCliente({
       nome,
       email,
       telefone: "",
