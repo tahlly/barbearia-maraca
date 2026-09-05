@@ -10,12 +10,9 @@ import { renderLoginCliente } from "./views/loginCliente.js";
 import { renderMinhaConta } from "./views/minhaConta.js";
 import { renderManage } from "./views/manage.js";
 import { renderProfissional } from "./views/profissional.js";
-import { ensureSeed } from "./data/seed.js";
 import { primeCatalog } from "./services/catalog.js";
 
 function init(): void {
-  ensureSeed();
-
   initTheme();
   initNavbar();
   initModals();

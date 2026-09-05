@@ -26,7 +26,6 @@ export async function findClienteByEmail(email: string): Promise<Cliente | null>
       nome: data.nome,
       email: data.email,
       telefone: data.telefone ?? "",
-      senha: "",
       createdAt: new Date().toISOString(),
     };
   } catch {
@@ -88,7 +87,6 @@ export async function registerCliente(data: {
     nome: result.user.nome,
     email: result.user.email,
     telefone: data.telefone,
-    senha: "",
     createdAt: new Date().toISOString(),
   };
 }
@@ -127,7 +125,6 @@ export async function validateClienteLogin(email: string, senha: string): Promis
         nome: data.user.nome || data.user.name || "",
         email: data.user.email,
         telefone: "",
-        senha: "",
         createdAt: new Date().toISOString(),
       },
       token: data.token,

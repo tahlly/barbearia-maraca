@@ -70,7 +70,6 @@ export interface Cliente {
   nome: string;
   email: string;
   telefone: string;
-  senha: string;
   createdAt: string;
   googleId?: string;
   avatarUrl?: string;

@@ -15,8 +15,6 @@ export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
 
-export const isMockMode = (): boolean => CONFIG.useMockApi;
-
 /**
  * Lê o token Bearer armazenado na sessão (sessionStorage).
  * Retorna `null` se a sessão não existir ou o parse falhar.

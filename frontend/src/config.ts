@@ -1,23 +1,11 @@
 export const CONFIG = {
-  useMockApi: false,
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? "/api",
   googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "",
   sessionKey: "maraca.session",
-  appointmentsKey: "maraca.v2.appointments",
-  categoriesKey: "maraca.v2.categories",
-  servicesKey: "maraca.v2.services",
-  professionalsKey: "maraca.v2.professionals",
   scheduleKey: "maraca.v2.schedule",
-  clientesKey: "maraca.v2.clientes",
-  usuariosKey: "maraca.v2.usuarios",
   sessionTtlMs: 30 * 60 * 1000,
   maxLoginAttempts: 5,
   lockoutMs: 30 * 1000,
   bookingHorizonDays: 45,
   defaultPassword: import.meta.env.VITE_DEFAULT_PASSWORD ?? "",
-  demoAdmin: {
-    email: import.meta.env.VITE_DEMO_ADMIN_EMAIL ?? "",
-    password: import.meta.env.VITE_DEMO_ADMIN_PASSWORD ?? "",
-    name: import.meta.env.VITE_DEMO_ADMIN_NAME ?? "",
-  },
 } as const;
