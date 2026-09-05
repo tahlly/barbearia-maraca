@@ -79,8 +79,7 @@
       <ol class="steps" id="booking-steps">
         <li class="steps__item is-active"><span class="steps__dot">1</span><span class="steps__label">Serviços</span></li>
         <li class="steps__item"><span class="steps__dot">2</span><span class="steps__label">Profissional &amp; Horário</span></li>
-        <li class="steps__item"><span class="steps__dot">3</span><span class="steps__label">Seus dados</span></li>
-        <li class="steps__item"><span class="steps__dot">4</span><span class="steps__label">Confirmação</span></li>
+        <li class="steps__item"><span class="steps__dot">3</span><span class="steps__label">Confirmação</span></li>
       </ol>
       <div class="steps__track" aria-hidden="true"><span id="booking-progress"></span></div>
 
@@ -104,25 +103,7 @@
             <p class="slots-hint" id="slots-hint"><i class="bx bx-error-circle" aria-hidden="true"></i><span>Escolha um profissional para ver os horários disponíveis.</span></p>
             <div class="slots" id="booking-slots" hidden></div>
           </section>
-          <section class="wizard__step" data-step="3" aria-label="Passo 3 — Seus dados">
-            <h3 class="wizard__heading">Preencha seus dados</h3>
-            <div class="field">
-              <label class="field__label" for="client-name">Nome completo</label>
-              <input type="text" id="client-name" name="name" placeholder="Ex.: João da Silva" autocomplete="name" maxlength="80" required>
-              <span class="field__error">Informe seu nome completo.</span>
-            </div>
-            <div class="field">
-              <label class="field__label" for="client-phone">Telefone / WhatsApp</label>
-              <input type="tel" id="client-phone" name="phone" placeholder="(91) 90000-0000" autocomplete="tel" inputmode="numeric" maxlength="15" required>
-              <span class="field__error">Informe um telefone válido com DDD.</span>
-            </div>
-            <div class="field">
-              <label class="field__label" for="client-email">E-mail</label>
-              <input type="email" id="client-email" name="email" placeholder="voce@email.com" autocomplete="email" maxlength="100" required>
-              <span class="field__error">Informe um e-mail válido.</span>
-            </div>
-          </section>
-          <section class="wizard__step" data-step="4" aria-label="Passo 4 — Confirmação">
+          <section class="wizard__step" data-step="3" aria-label="Passo 3 — Confirmação">
             <div class="success-card">
               <span class="success-card__icon" aria-hidden="true"><i class="bx bx-check-circle"></i></span>
               <h3 class="success-card__title" id="booking-success-title">Agendamento confirmado!</h3>

@@ -94,6 +94,7 @@ export function deleteUsuarioInterno(id: string): void {
 
 export function roleLabel(role: UserRole): string {
   const map: Record<UserRole, string> = {
+    superusuario: "Superusuário",
     admin: "Administrador",
     recepcionista: "Recepcionista",
     profissional: "Profissional",

@@ -37,6 +37,7 @@ interface DashboardFilter {
   mes: number;
   inicio: string;
   fim: string;
+  professionalId: string;
 }
 
 const STATUS_LABEL: Record<Appointment["status"], string> = {
@@ -134,6 +135,7 @@ export function renderManage(container: HTMLElement): () => void {
     mes: new Date().getMonth() + 1,
     inicio: "",
     fim: "",
+    professionalId: "todos",
   };
 
   function handleTab(tab: ManageTab): void {
@@ -193,6 +195,18 @@ export function renderManage(container: HTMLElement): () => void {
             <label class="field__label" for="dashboard-fim">Até</label>
             <input type="date" class="input" id="dashboard-fim" value="${state.fim}">
           </div>
+          <div class="field">
+            <label class="field__label" for="dashboard-profissional">Profissional</label>
+            <select class="input" id="dashboard-profissional" aria-label="Filtrar por profissional">
+              <option value="todos" ${state.professionalId === "todos" ? "selected" : ""}>Todos os profissionais</option>
+              ${prosCache
+                .map(
+                  (p) =>
+                    `<option value="${escapeHtml(p.id)}" ${p.id === state.professionalId ? "selected" : ""}>${escapeHtml(p.name)}</option>`,
+                )
+                .join("")}
+            </select>
+          </div>
         </div>
       </div>
       <div id="dashboard-metrics">${dashboardMetricsHTML(appointments)}</div>
@@ -203,6 +217,7 @@ export function renderManage(container: HTMLElement): () => void {
     const mesSelect = $<HTMLSelectElement>("#dashboard-mes", content);
     const inicioInput = $<HTMLInputElement>("#dashboard-inicio", content);
     const fimInput = $<HTMLInputElement>("#dashboard-fim", content);
+    const profissionalSelect = $<HTMLSelectElement>("#dashboard-profissional", content);
     const anoWrap = $("#dashboard-ano-wrap", content);
     const mesWrap = $("#dashboard-mes-wrap", content);
     const periodoWrap = $("#dashboard-periodo-wrap", content);
@@ -247,21 +262,29 @@ export function renderManage(container: HTMLElement): () => void {
       state.fim = fimInput.value;
       refresh();
     };
+    const profissionalHandler = (): void => {
+      if (!profissionalSelect) return;
+      state.professionalId = profissionalSelect.value;
+      refresh();
+    };
 
     modeSelect?.addEventListener("change", modeHandler);
     anoSelect?.addEventListener("change", anoHandler);
     mesSelect?.addEventListener("change", mesHandler);
     inicioInput?.addEventListener("change", inicioHandler);
     fimInput?.addEventListener("change", fimHandler);
+    profissionalSelect?.addEventListener("change", profissionalHandler);
 
     cleanups.push(() => modeSelect?.removeEventListener("change", modeHandler));
     cleanups.push(() => anoSelect?.removeEventListener("change", anoHandler));
     cleanups.push(() => mesSelect?.removeEventListener("change", mesHandler));
     cleanups.push(() => inicioInput?.removeEventListener("change", inicioHandler));
     cleanups.push(() => fimInput?.removeEventListener("change", fimHandler));
+    cleanups.push(() => profissionalSelect?.removeEventListener("change", profissionalHandler));
   }
 
   function matchesFilter(a: Appointment): boolean {
+    if (state.professionalId !== "todos" && a.professionalId !== state.professionalId) return false;
     const m = monthOf(a.dateIso);
     const y = yearOf(a.dateIso);
     switch (state.mode) {
@@ -301,6 +324,25 @@ export function renderManage(container: HTMLElement): () => void {
     }
     const top = Object.entries(sold).sort((x, y) => y[1] - x[1]).slice(0, 3);
 
+    const concluidos = filtered.filter((a) => a.status === "concluido").length;
+
+    let destaque: Professional | null = null;
+    let destaqueConcluidos = 0;
+    const countsByPro: Record<string, number> = {};
+    for (const a of filtered) {
+      if (a.status !== "concluido") continue;
+      countsByPro[a.professionalId] = (countsByPro[a.professionalId] ?? 0) + 1;
+    }
+    const idsByCount = Object.entries(countsByPro).sort((x, y) => {
+      if (y[1] !== x[1]) return y[1] - x[1];
+      return topProResult(x[0], y[0], filtered);
+    });
+    if (idsByCount.length > 0) {
+      const [id, count] = idsByCount[0]!;
+      destaque = prosCache.find((p) => p.id === id) ?? null;
+      destaqueConcluidos = count;
+    }
+
     return `
       <div class="kpi-grid">
         <div class="kpi-card"><span class="kpi-card__label">${icon("calendar", 16)} Total</span><span class="kpi-card__value">${filtered.length}</span></div>
@@ -308,6 +350,10 @@ export function renderManage(container: HTMLElement): () => void {
         <div class="kpi-card"><span class="kpi-card__label">${icon("clock", 16)} Pendentes</span><span class="kpi-card__value kpi-card__value--gold">${counts.pendente}</span></div>
         <div class="kpi-card"><span class="kpi-card__label">${icon("x", 16)} Cancelados</span><span class="kpi-card__value kpi-card__value--danger">${counts.cancelado}</span></div>
         <div class="kpi-card"><span class="kpi-card__label">${icon("dollar", 16)} Faturamento</span><span class="kpi-card__value kpi-card__value--gold">${formatCurrency(revenue)}</span></div>
+        <div class="kpi-card kpi-card--destaque">
+          <span class="kpi-card__label">${icon("star", 16)} Profissional destaque do mês</span>
+          ${destaque ? destaqueCardHTML(destaque, destaqueConcluidos) : `<p class="panel__empty kpi-card__empty">${concluidos === 0 ? "Sem atendimentos concluídos nesse recorte." : "Nenhum profissional encontrado."}</p>`}
+        </div>
       </div>
       <div class="panel__section">
         <h3 class="panel__section-title">Serviços mais vendidos</h3>
@@ -332,6 +378,35 @@ export function renderManage(container: HTMLElement): () => void {
   function yearOf(iso: string): number {
     const y = Number(iso.slice(0, 4));
     return Number.isNaN(y) ? -1 : y;
+  }
+
+  /** Critério de desempate para o destaque do mês: atendimento concluído mais recente. */
+  function topProResult(a: string, b: string, list: Appointment[]): number {
+    const latest = (id: string) => {
+      const matches = list
+        .filter((x) => x.professionalId === id && x.status === "concluido")
+        .map((x) => `${x.dateIso}T${x.time}|${x.createdAt}`)
+        .sort();
+      return matches[matches.length - 1] ?? "";
+    };
+    const va = latest(a);
+    const vb = latest(b);
+    return vb.localeCompare(va);
+  }
+
+  function destaqueCardHTML(pro: Professional, concluidos: number): string {
+    const avatar = pro.photoUrl
+      ? `<span class="avatar avatar--lg avatar--photo" style="background-image:url('${pro.photoUrl}')"></span>`
+      : `<span class="avatar avatar--lg">${initials(pro.name)}</span>`;
+    return `
+      <div class="destaque-pro">
+        ${avatar}
+        <div class="destaque-pro__meta">
+          <strong class="destaque-pro__name">${escapeHtml(pro.name)}</strong>
+          <span class="destaque-pro__count">${concluidos} atendimento${concluidos === 1 ? "" : "s"} concluído${concluidos === 1 ? "" : "s"}</span>
+        </div>
+      </div>
+    `;
   }
 
   function availableYears(appointments: Appointment[]): number[] {
@@ -1008,7 +1083,9 @@ export function renderManage(container: HTMLElement): () => void {
             (p) => `
               <div class="pro-card">
                 <div class="pro-card__head">
-                  <span class="avatar">${initials(p.name)}</span>
+                  ${p.photoUrl
+                    ? `<span class="avatar avatar--photo" style="background-image:url('${p.photoUrl}')"></span>`
+                    : `<span class="avatar">${initials(p.name)}</span>`}
                   <div class="pro-card__meta">
                     <strong>${escapeHtml(p.name)}</strong>
                     <span class="pro-card__role">${escapeHtml(p.role)}</span>
