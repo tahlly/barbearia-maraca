@@ -11,7 +11,8 @@
     "seed": "npx tsx node_modules/knex/bin/cli.js seed:run --knexfile src/knexfile.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "swagger": "npx tsx swagger.ts"
   },
   "keywords": [],
   "author": "",
@@ -26,6 +27,7 @@
     "jsonwebtoken": "^9.0.3",
     "knex": "^3.3.0",
     "pg": "^8.23.0",
+    "swagger-ui-express": "^5.0.1",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -35,7 +37,10 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/knex": "^0.15.2",
     "@types/node": "^26.4.0",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
     "cross-env": "^10.1.0",
+    "swagger-jsdoc": "^6.3.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
