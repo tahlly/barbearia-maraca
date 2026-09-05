@@ -1,7 +1,6 @@
 import { CONFIG } from "../config.js";
 import type { Session, UserRole } from "../types.js";
-import { ApiError, delay, httpJson, isMockMode } from "./api.js";
-import { findClienteByEmail, registerCliente } from "./clientes.js";
+import { ApiError, httpJson } from "./api.js";
 
 export interface GoogleAuthResult {
   ok: boolean;
@@ -119,18 +118,14 @@ export function decodeGoogleProfile(idToken: string): GoogleProfilePayload | nul
 /**
  * Inicia o fluxo de autenticação com Google.
  *
- * Em modo real, dispara o fluxo do Google Identity Services (GIS), que abre o
- * seletor de contas do Google e devolve um ID token; o token é enviado ao
- * backend para validação. Em modo mock, simula a autenticação criando ou
- * autenticando um cliente localmente.
+ * Dispara o fluxo do Google Identity Services (GIS), que abre o seletor de
+ * contas do Google e devolve um ID token; o token é enviado ao backend para
+ * validação.
  */
 export async function loginWithGoogle(
   googleToken?: string,
   googleProfile?: { sub: string; nome: string; email: string; avatarUrl?: string },
 ): Promise<GoogleAuthResult> {
-  if (isMockMode()) {
-    return mockGoogleLogin();
-  }
 
   if (!googleToken || !googleProfile) {
     return { ok: false, message: "Autenticação do Google não concluída." };
@@ -160,31 +155,4 @@ export async function loginWithGoogle(
     if (error instanceof ApiError) return { ok: false, message: error.message };
     return { ok: false, message: "Falha ao autenticar com Google. Tente novamente." };
   }
-}
-
-async function mockGoogleLogin(): Promise<GoogleAuthResult> {
-  await delay(900);
-
-  const email = "cliente.google@maraca.com";
-  const nome = "Cliente do Google";
-  let cliente = await findClienteByEmail(email);
-
-  if (!cliente) {
-    cliente = await registerCliente({
-      nome,
-      email,
-      telefone: "",
-      senha: "",
-    });
-  }
-
-  const session: Session = {
-    token: "google-mock-" + Math.random().toString(36).slice(2),
-    userName: cliente.nome,
-    userEmail: cliente.email,
-    expiresAt: Date.now() + CONFIG.sessionTtlMs,
-    role: "cliente",
-  };
-  sessionStorage.setItem(CONFIG.sessionKey, JSON.stringify(session));
-  return { ok: true, session };
 }

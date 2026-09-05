@@ -1,9 +1,7 @@
 import { CONFIG } from "../config.js";
 import { navigateTo } from "../router.js";
 import type { Session, UserRole } from "../types.js";
-import { ApiError, apiFetch, delay, httpJson, isMockMode } from "./api.js";
-import { validateClienteLogin } from "./clientes.js";
-import { validateUsuarioInterno } from "./usuarios.js";
+import { ApiError, apiFetch, httpJson } from "./api.js";
 
 export interface LoginResult {
   ok: boolean;
@@ -27,14 +25,6 @@ export function redirectForRole(role: UserRole): void {
   navigateTo(ROLE_REDIRECTS[role] ?? "/");
 }
 
-function createToken(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 function persistSession(session: Session): void {
   sessionStorage.setItem(CONFIG.sessionKey, JSON.stringify(session));
 }
@@ -43,37 +33,12 @@ function normalize(email: string): string {
   return email.trim().toLowerCase();
 }
 
-const DEMO_ADMIN_KEY = "maraca.v2.demoAdmin";
-
-interface DemoAdminProfile {
-  nome: string;
-  email: string;
-  senha: string;
-}
-
-function loadDemoAdmin(): DemoAdminProfile {
-  const raw = localStorage.getItem(DEMO_ADMIN_KEY);
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as DemoAdminProfile;
-      if (parsed && typeof parsed.nome === "string" && typeof parsed.email === "string" && typeof parsed.senha === "string") {
-        return parsed;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  return {
-    nome: CONFIG.demoAdmin.name,
-    email: CONFIG.demoAdmin.email,
-    senha: CONFIG.demoAdmin.password,
-  };
-}
-
 /**
- * Atualiza os dados do usuário da sessão atual (nome/email) no sessionStorage.
- * O endpoint PATCH /auth/me existe no backend, mas a persistência remota
- * ainda não é chamada aqui — integração futura.
+ * Atualiza os dados do usuário da sessão atual via `PATCH /auth/me`.
+ *
+ * O backend aceita `{ nome?, email?, senha? }` e nunca devolve a senha.
+ * A senha atual não é enviada porque o endpoint ainda não a valida
+ * (pendência de segurança registrada — fora deste escopo).
  */
 export async function updateSessionUser(data: {
   nome?: string;
@@ -84,12 +49,33 @@ export async function updateSessionUser(data: {
   const session = getSession();
   if (!session) return { ok: false, message: "Sessão ausente." };
 
-  persistSession({
-    ...session,
-    userName: data.nome ?? session.userName,
-    userEmail: data.email ?? session.userEmail,
-  });
-  return { ok: true };
+  const body: { nome?: string; email?: string; senha?: string } = {};
+  if (data.nome !== undefined && data.nome.trim() !== "") body.nome = data.nome.trim();
+  if (data.email !== undefined && data.email.trim() !== "") body.email = data.email.trim().toLowerCase();
+  if (data.novaSenha !== undefined && data.novaSenha !== "") body.senha = data.novaSenha;
+
+  if (Object.keys(body).length === 0) {
+    return { ok: false, message: "Nenhuma alteração informada." };
+  }
+
+  try {
+    const result = await httpJson<{ success: boolean; user: { nome: string | null; email: string } }>(
+      "/auth/me",
+      { method: "PATCH", body: JSON.stringify(body) },
+    );
+
+    persistSession({
+      ...session,
+      userName: result.user.nome ?? session.userName,
+      userEmail: result.user.email,
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return { ok: false, message: error.message };
+    }
+    return { ok: false, message: "Não foi possível salvar as alterações." };
+  }
 }
 
 /**
@@ -97,36 +83,6 @@ export async function updateSessionUser(data: {
  * Retorna o papel para direcionamento; em caso de falha retorna mensagem.
  */
 export async function loginInterno(email: string, password: string): Promise<LoginResult> {
-  if (isMockMode()) {
-    await delay(700);
-    const norm = normalize(email);
-
-    const demo = loadDemoAdmin();
-    if (norm === demo.email && password === demo.senha) {
-      persistSession({
-        token: createToken(),
-        userName: demo.nome,
-        userEmail: norm,
-        expiresAt: Date.now() + CONFIG.sessionTtlMs,
-        role: "admin",
-      });
-      return { ok: true, role: "admin" };
-    }
-
-    const usuario = validateUsuarioInterno(email, password);
-    if (usuario) {
-      persistSession({
-        token: createToken(),
-        userName: usuario.nome,
-        userEmail: usuario.email,
-        expiresAt: Date.now() + CONFIG.sessionTtlMs,
-        role: usuario.role,
-      });
-      return { ok: true, role: usuario.role };
-    }
-
-    return { ok: false, message: "Credenciais inválidas. Verifique e tente novamente." };
-  }
 
   try {
     const data = await httpJson<{ token: string; userName: string; userEmail: string; expiresAt?: number; role: UserRole }>(
@@ -153,22 +109,6 @@ export async function loginInterno(email: string, password: string): Promise<Log
  * Login da área do cliente (conta cadastrada).
  */
 export async function loginCliente(email: string, password: string): Promise<LoginResult> {
-  if (isMockMode()) {
-    await delay(700);
-    const result = await validateClienteLogin(email, password);
-    if (result) {
-      persistSession({
-        token: result.token,
-        userName: result.cliente.nome,
-        userEmail: result.cliente.email,
-        expiresAt: Date.now() + CONFIG.sessionTtlMs,
-        role: "cliente",
-      });
-      return { ok: true, role: "cliente" };
-    }
-    return { ok: false, message: "Credenciais inválidas. Verifique e tente novamente." };
-  }
-
   try {
     const data = await httpJson<{ token: string; userName: string; userEmail: string; expiresAt?: number; role: UserRole }>(
       "/auth/login",

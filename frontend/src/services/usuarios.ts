@@ -1,5 +1,4 @@
-import { CONFIG } from "../config.js";
-import { httpJson, isMockMode } from "./api.js";
+import { httpJson } from "./api.js";
 
 // ── Tipos de contrato HTTP (espelho de shared/types — mantidos localmente
 // para evitar import fora do rootDir do frontend) ────────────────────────
@@ -103,27 +102,6 @@ function funcionarioToUsuario(f: FuncionarioDTO): UsuarioInterno {
   };
 }
 
-// ── Helpers de mock (localStorage, comportamento legado) ─────────────────
-
-function readList(): UsuarioInterno[] {
-  const raw = localStorage.getItem(CONFIG.usuariosKey);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as UsuarioInterno[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeList(list: UsuarioInterno[]): void {
-  localStorage.setItem(CONFIG.usuariosKey, JSON.stringify(list));
-}
-
-function createId(): string {
-  return `USR-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-}
-
 // ── Cache de funcionários (API mode) ────────────────────────────────────
 
 /**
@@ -162,9 +140,6 @@ async function fetchAllFromApi(): Promise<UsuarioInterno[]> {
  * **Modo API:** busca todos os funcionários via API e mapeia.
  */
 export async function listUsuariosInternos(): Promise<UsuarioInterno[]> {
-  if (isMockMode()) {
-    return readList();
-  }
   return fetchAllFromApi();
 }
 
@@ -179,12 +154,6 @@ export async function listUsuariosInternos(): Promise<UsuarioInterno[]> {
 export async function findUsuarioByEmail(
   email: string,
 ): Promise<UsuarioInterno | null> {
-  if (isMockMode()) {
-    const normalized = email.trim().toLowerCase();
-    return (
-      readList().find((u) => u.email.toLowerCase() === normalized) ?? null
-    );
-  }
 
   try {
     const funcionario = await httpJson<FuncionarioDTO>(
@@ -199,26 +168,9 @@ export async function findUsuarioByEmail(
 /**
  * Valida credenciais de um usuário interno.
  *
- * **Modo mock:** compara email/senha no `localStorage`.
- * **Modo API:** retorna `null` — autenticação é tratada pelo endpoint
- * `POST /auth/login` no backend. Esta função NÃO é chamada em modo API
- * (o `auth.ts` só a invoca dentro de `isMockMode()`).
+ * Não é mais usada: a autenticação é tratada pelo endpoint `POST /auth/login`
+ * no backend.
  */
-export function validateUsuarioInterno(
-  email: string,
-  senha: string,
-): UsuarioInterno | null {
-  // Em modo API, autenticação é feita via /auth/login (auth.ts).
-  // Esta função é chamada apenas no path mock de auth.ts.
-  if (isMockMode()) {
-    const usuario = readList().find(
-      (u) => u.email.toLowerCase() === email.trim().toLowerCase(),
-    );
-    if (!usuario) return null;
-    return usuario.senha === senha ? usuario : null;
-  }
-  return null;
-}
 
 /**
  * Cria um novo usuário interno.
@@ -241,20 +193,6 @@ export async function createUsuarioInterno(data: {
   role: "admin" | "profissional" | "recepcionista";
   professionalId?: string;
 }): Promise<UsuarioInterno> {
-  if (isMockMode()) {
-    const usuario: UsuarioInterno = {
-      id: createId(),
-      nome: data.nome.trim(),
-      email: data.email.trim().toLowerCase(),
-      senha: data.senha,
-      role: data.role,
-      professionalId: data.professionalId,
-      createdAt: new Date().toISOString(),
-    };
-    writeList([...readList(), usuario]);
-    return usuario;
-  }
-
   const response = await httpJson<{
     id: string;
     usuarioId: string;
@@ -303,24 +241,6 @@ export async function updateUsuarioInterno(
   id: string,
   data: { nome?: string; email?: string; senha?: string; especialidade?: string; cargo?: CargoFuncionario },
 ): Promise<UsuarioInterno | null> {
-  if (isMockMode()) {
-    const list = readList();
-    const index = list.findIndex((u) => u.id === id);
-    if (index < 0) return null;
-    const current = list[index]!;
-    const updated: UsuarioInterno = {
-      ...current,
-      nome: data.nome !== undefined ? data.nome.trim() : current.nome,
-      email:
-        data.email !== undefined
-          ? data.email.trim().toLowerCase()
-          : current.email,
-      senha: data.senha !== undefined ? data.senha : current.senha,
-    };
-    list[index] = updated;
-    writeList(list);
-    return updated;
-  }
 
   // No modo API, precisamos do funcionarioId (não do usuarioId).
   // Busca o usuário na lista para obter o professionalId.
@@ -359,9 +279,6 @@ export async function updateUsuarioInterno(
 export async function findByProfessionalId(
   professionalId: string,
 ): Promise<UsuarioInterno | null> {
-  if (isMockMode()) {
-    return readList().find((u) => u.professionalId === professionalId) ?? null;
-  }
 
   try {
     const funcionario = await httpJson<FuncionarioDTO>(
@@ -386,10 +303,6 @@ export async function findByProfessionalId(
  * internamente para o `funcionarioId` via busca.
  */
 export async function deleteUsuarioInterno(id: string): Promise<void> {
-  if (isMockMode()) {
-    writeList(readList().filter((u) => u.id !== id));
-    return;
-  }
 
   const usuarios = await fetchAllFromApi();
   const usuario = usuarios.find((u) => u.id === id);

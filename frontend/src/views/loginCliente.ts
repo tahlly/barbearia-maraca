@@ -4,7 +4,7 @@ import { registerCliente } from "../services/clientes.js";
 import { getSession, loginCliente, redirectForRole } from "../services/auth.js";
 import { loginWithGoogle, promptGoogleIdToken, decodeGoogleProfile } from "../services/googleAuth.js";
 import { showToast } from "../ui/toast.js";
-import { delay, isMockMode } from "../services/api.js";
+import { delay } from "../services/api.js";
 import { attachPhoneMask } from "../ui/mask.js";
 
 type ViewName = "login" | "cadastro" | "recover" | "recover-sent";
@@ -246,17 +246,6 @@ export function renderLoginCliente(container: HTMLElement): () => void {
     googleBtn.classList.add("is-loading");
 
     try {
-      if (isMockMode()) {
-        const result = await loginWithGoogle();
-        if (result.ok && result.session) {
-          showToast("Bem-vindo(a)!", "success");
-          redirectForRole(result.session.role);
-        } else {
-          loginAlert.textContent = result.message ?? "Não foi possível entrar com o Google.";
-          loginAlert.hidden = false;
-        }
-        return;
-      }
 
       const idToken = await promptGoogleIdToken();
       const profile = decodeGoogleProfile(idToken);
