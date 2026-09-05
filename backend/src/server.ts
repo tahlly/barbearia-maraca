@@ -1,14 +1,15 @@
-import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+
+dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
 import db from './database/connection';
 import servicoRoutes from './rotas/servico-routes';
 import authRoutes from './rotas/auth-routes';
 import { errorHandler } from './middlewares/errorHandler';
 import { NotFoundError } from './errors/NotFoundError';
-
-dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;

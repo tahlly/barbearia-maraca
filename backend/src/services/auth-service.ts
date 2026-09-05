@@ -19,9 +19,14 @@ import type { LoginResponseDTO, Papel, UsuarioDTO } from '../dtos/auth-dto';
 
 export const SESSAO_TTL_MS = 30 * 60 * 1000;
 
-const DEFAULT_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+let client: OAuth2Client | undefined;
 
-const client = new OAuth2Client(DEFAULT_CLIENT_ID);
+function getGoogleClient(): OAuth2Client {
+  if (!client) {
+    client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || '');
+  }
+  return client;
+}
 
 export interface GoogleProfile {
   sub: string;
@@ -64,10 +69,10 @@ export function validarTokenGoogle(idToken: string): Promise<GoogleProfile> {
   if (!idToken) {
     throw new ValidationError('Token do Google ausente');
   }
-  return client
+  return getGoogleClient()
     .verifyIdToken({
       idToken,
-      audience: DEFAULT_CLIENT_ID,
+      audience: process.env.GOOGLE_CLIENT_ID || '',
     })
     .then((ticket) => {
       const payload = ticket.getPayload();
