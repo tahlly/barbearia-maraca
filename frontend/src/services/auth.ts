@@ -1,6 +1,7 @@
 import { CONFIG } from "../config.js";
 import { navigateTo } from "../router.js";
 import type { Session, UserRole } from "../types.js";
+import { findAdminByEmail, updateAdmin, validateAdminLogin } from "./admins.js";
 import { ApiError, delay, httpJson, isMockMode } from "./api.js";
 import { validateClienteLogin } from "./clientes.js";
 import { findUsuarioByEmail, updateUsuarioInterno, validateUsuarioInterno } from "./usuarios.js";
@@ -17,6 +18,7 @@ export interface AuthRedirect {
 }
 
 export const ROLE_REDIRECTS: Record<UserRole, string> = {
+  superusuario: "/superusuario",
   admin: "/admin",
   recepcionista: "/recepcionista",
   profissional: "/profissional",
@@ -43,40 +45,9 @@ function normalize(email: string): string {
   return email.trim().toLowerCase();
 }
 
-const DEMO_ADMIN_KEY = "maraca.v2.demoAdmin";
-
-interface DemoAdminProfile {
-  nome: string;
-  email: string;
-  senha: string;
-}
-
-function loadDemoAdmin(): DemoAdminProfile {
-  const raw = localStorage.getItem(DEMO_ADMIN_KEY);
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as DemoAdminProfile;
-      if (parsed && typeof parsed.nome === "string" && typeof parsed.email === "string" && typeof parsed.senha === "string") {
-        return parsed;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  return {
-    nome: CONFIG.demoAdmin.name,
-    email: CONFIG.demoAdmin.email,
-    senha: CONFIG.demoAdmin.password,
-  };
-}
-
-function saveDemoAdmin(profile: DemoAdminProfile): void {
-  localStorage.setItem(DEMO_ADMIN_KEY, JSON.stringify(profile));
-}
-
 /**
  * Atualiza os dados do usuário da sessão atual (nome/senha/email) no mock.
- * O admin demo (hardcoded) recebe patch local; os demais vão aos usuários internos.
+ * O admin busca na lista de administradores; os demais vão aos usuários internos.
  */
 export async function updateSessionUser(data: {
   nome?: string;
@@ -90,28 +61,29 @@ export async function updateSessionUser(data: {
     if (!session) return { ok: false, message: "Sessão ausente." };
 
     if (session.role === "admin") {
-      const demo = loadDemoAdmin();
-      if (session.userEmail !== demo.email) {
+      const admin = findAdminByEmail(session.userEmail);
+      if (!admin) {
         return { ok: false, message: "Sessão administrativa não reconhecida." };
       }
-      if (data.senhaAtual !== undefined && data.senhaAtual !== demo.senha) {
+      if (data.senhaAtual !== undefined && data.senhaAtual !== admin.senha) {
         return { ok: false, message: "Senha atual incorreta." };
       }
       if (data.email !== undefined) {
         const target = data.email.trim().toLowerCase();
-        if (target !== demo.email && findUsuarioByEmail(target)) {
+        if (target !== admin.email && (findAdminByEmail(target) || findUsuarioByEmail(target))) {
           return { ok: false, message: "E-mail já cadastrado." };
         }
-        demo.email = target;
       }
-      if (data.nome !== undefined) demo.nome = data.nome.trim();
-      if (data.novaSenha !== undefined) demo.senha = data.novaSenha;
-      saveDemoAdmin(demo);
-
+      updateAdmin(admin.id, {
+        nome: data.nome,
+        email: data.email,
+        senha: data.novaSenha,
+      });
+      const updated = findAdminByEmail(data.email ?? admin.email);
       persistSession({
         ...session,
-        userName: demo.nome,
-        userEmail: demo.email,
+        userName: updated?.nome ?? data.nome ?? session.userName,
+        userEmail: updated?.email ?? session.userEmail,
       });
       return { ok: true };
     }
@@ -170,12 +142,24 @@ export async function loginInterno(email: string, password: string): Promise<Log
     await delay(700);
     const norm = normalize(email);
 
-    const demo = loadDemoAdmin();
-    if (norm === demo.email && password === demo.senha) {
+    const superAdmin = CONFIG.demoSuperAdmin;
+    if (norm === superAdmin.email && password === superAdmin.password) {
       persistSession({
         token: createToken(),
-        userName: demo.nome,
+        userName: superAdmin.name,
         userEmail: norm,
+        expiresAt: Date.now() + CONFIG.sessionTtlMs,
+        role: "superusuario",
+      });
+      return { ok: true, role: "superusuario" };
+    }
+
+    const admin = validateAdminLogin(email, password);
+    if (admin) {
+      persistSession({
+        token: createToken(),
+        userName: admin.nome,
+        userEmail: admin.email,
         expiresAt: Date.now() + CONFIG.sessionTtlMs,
         role: "admin",
       });

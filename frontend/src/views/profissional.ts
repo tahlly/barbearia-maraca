@@ -3,7 +3,7 @@ import { requireRole, getSession, updateSessionUser } from "../services/auth.js"
 import { $, escapeHtml, initials } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { formatDateMedium } from "../ui/format.js";
-import { loadServices, loadProfessionals } from "../services/catalog.js";
+import { loadServices, loadProfessionals, saveProfessionals } from "../services/catalog.js";
 import { loadAllAppointments } from "../services/booking.js";
 import { listUsuariosInternos, updateUsuarioInterno } from "../services/usuarios.js";
 import { showToast } from "../ui/toast.js";
@@ -321,6 +321,13 @@ export function renderProfissional(container: HTMLElement): () => void {
         reader.onload = () => {
           const dataUrl = reader.result as string;
           sessionStorage.setItem("maraca.profilePhoto", dataUrl);
+          if (professionalId) {
+            const pros = loadProfessionals().map((p) =>
+              p.id === professionalId ? { ...p, photoUrl: dataUrl } : p,
+            );
+            saveProfessionals(pros);
+            prosCache = pros;
+          }
           avatar.style.backgroundImage = `url("${dataUrl}")`;
           avatar.textContent = "";
           showToast("Foto atualizada.");
