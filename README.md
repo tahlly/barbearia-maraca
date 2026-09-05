@@ -14,6 +14,9 @@ SPA full-stack para gestão de uma barbearia — agendamentos online, operação
 - [Comandos disponíveis](#comandos-úteis)
 - [Regras de domínio e autorização](#regras-de-domínio-e-autorização)
 - [Contratos compartilhados](#contratos-compartilhados)
+- [Documentação da API (Swagger)](#documentação-da-api-swagger)
+- [Estado atual do projeto — avaliação de QA](#estado-atual-do-projeto--avaliação-de-qa)
+- [Outras documentações](#outras-documentações)
 - [Observações importantes](#observações-importantes)
 
 ---
@@ -303,6 +306,7 @@ Todos os usuários usam a senha **`senha123`**:
 | `npm run migrate:rollback` | desfaz a última batch |
 | `npm run migrate:make -- nome` | cria nova migration |
 | `npm run seed` | popula dados de teste |
+| `npm run swagger` | regenera `backend/openapi.json` a partir das anotações das rotas |
 
 ### Frontend (`frontend/`)
 
@@ -337,11 +341,132 @@ Pontos de atenção no contrato:
 
 ---
 
+## <a name="documentação-da-api-swagger"></a>Documentação da API (Swagger)
+
+O projeto usa **OpenAPI 3.0** para documentar a API REST. A UI interativa fica em:
+
+- **UI Swagger:** `http://localhost:3000/api/docs` (backend rodando)
+- **Spec gerado:** `backend/openapi.json`
+
+### Como funciona
+
+1. As rotas express são anotadas com blocos JSDoc `@openapi` dentro dos arquivos em `backend/src/rotas/`.
+2. O script `backend/swagger.ts` usa **swagger-jsdoc** para escanear esses arquivos e gerar `backend/openapi.json`.
+3. O `server.ts` lê `backend/openapi.json` em runtime e expõe a UI em `/api/docs` via swagger-ui-express.
+
+> O `openapi.json` é gerado a partir das anotações e **commitado** no repositório. Sempre que uma rota mudar, regenere o arquivo e inclua a alteração no PR.
+
+### Fluxo rápido
+
+```sh
+# dentro de backend/
+npm run swagger        # regenera backend/openapi.json
+npm run dev            # ou reinicie o backend já em execução
+# acesse http://localhost:3000/api/docs
+```
+
+### Como criar uma nova rota para ela aparecer no Swagger
+
+Follow os 5 passos abaixo. O passo **3 é o mais fácil de esquecer** — o swagger-jsdoc só escaneia os arquivos listados em `backend/swagger.ts`.
+
+**1. Implemente a rota no Express** em `backend/src/rotas/meu-recurso-routes.ts` e monte-a no `server.ts`:
+
+```ts
+// backend/src/rotas/meu-recurso-routes.ts
+import { Router } from 'express';
+import { autenticar, fazerX } from '../controllers/meu-recurso-controller';
+
+const meuRecursoRoutes = Router();
+meuRecursoRoutes.get('/', autenticar, fazerX);
+export default meuRecursoRoutes;
+```
+
+```ts
+// backend/src/server.ts
+import meuRecursoRoutes from './rotas/meu-recurso-routes';
+// ...
+app.use('/api/meu-recurso', meuRecursoRoutes);
+```
+
+**2. Anote o arquivo com JSDoc `@openapi`** — defina os schemas e os paths no topo do arquivo de rotas:
+
+```ts
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     MeuRecurso:
+ *       type: object
+ *       properties:
+ *         id: { type: string }
+ *         nome: { type: string }
+ *
+ * /api/meu-recurso:
+ *   get:
+ *     tags: [MeuRecurso]
+ *     summary: Lista recursos
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       '200':
+ *         description: Lista de recursos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/MeuRecurso' }
+ *       '401':
+ *         $ref: '#/components/responses/Erro401'
+ */
+```
+
+**3. Registre o arquivo na lista `apis:` do `backend/swagger.ts`**:
+
+```ts
+apis: [
+  path.join(__dirname, 'src', 'server.ts'),
+  // ...existing routes...
+  path.join(__dirname, 'src', 'rotas', 'meu-recurso-routes.ts'), // ← adicione aqui
+],
+```
+
+**4. Regenerar a spec e validar:**
+
+```sh
+cd backend
+npm run swagger
+# confira que o novo path apareceu em backend/openapi.json
+```
+
+**5. Reinicie o backend e visualize** em `http://localhost:3000/api/docs`.
+
+### Boas práticas nas anotações
+
+- Reutilize os schemas já definidos em `server.ts` (`Erro`, `Erro400`, `Erro401`, `Erro403`, `Erro404`, `Erro500`) via `$ref: '#/components/responses/Erro400'`.
+- Rotas autenticadas precisam de `security: [{ bearerAuth: [] }]` (o scheme é definido em `server.ts`).
+- Rotas públicas (ex.: disponibilidade de horários) devem **omitir** `security`.
+- Defina `tags` para agrupar os endpoints na UI.
+- Se o endpoint retorna um shape novo, declare um `schema` novo no bloco `components.schemas` do mesmo arquivo de rotas.
+
+
+## <a name="outras-documentações"></a>Outras documentações
+
+| Documento | Conteúdo |
+|-----------|----------|
+| [`docs/DER-MODELO-INICIAL.md`](docs/DER-MODELO-INICIAL.md) | Modelo de dados inicial (DER) |
+| [`docs/documentacao_spa_barbearia_MVP.md`](docs/documentacao_spa_barbearia_MVP.md) | Especificação funcional / MVP da SPA |
+| [`docs/SETUP_BANCO.md`](docs/SETUP_BANCO.md) | Setup do PostgreSQL e migrations passo a passo |
+| [`docs/COMO-FAZER-COMMIT-COM-HUSKY.md`](docs/COMO-FAZER-COMMIT-COM-HUSKY.md) | Fluxo de commit com Husky + Commitlint |
+| [`docs/GUIA-PROFISSIONAL-DOS-AGENTES.md`](docs/GUIA-PROFISSIONAL-DOS-AGENTES.md) | Arquitetura de agentes, ownership e fluxo de revisão |
+| [`AGENTS.md`](AGENTS.md) | Regras executáveis e fonte de verdade do projeto |
+
+---
+
 ## <a name="observações-importantes"></a>Observações importantes
 
 - **Porta 3000**: o backend usa a porta 3000 por padrão. Se outro serviço (ex.: Whaticket) estiver usando-a, libere a porta antes de subir o projeto.
 - **Seed destrutivo**: `npm run seed` apaga e recria os dados — rode apenas quando quiser dados limpos.
-- **Modo mock**: o `config.ts` do frontend usa `useMockApi: false` (integração real com o backend). Emblemas de mock que ainda existem nos services são formas de desenvolvimento e não ativam por padrão.
+- **Modo mock**: o `config.ts` do frontend usa `useMockApi: false` (integração real com o backend). A variável `VITE_USE_MOCK_API` está documentada no `.env.example`, mas **não é lida** pelo código — mudá-la não tem efeito (pendência) e a aplicação sempre funciona em modo API.
 - **Login Google**: requer `VITE_GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_ID` no `.env` da raiz; sem configuração, o fluxo Google fica indisponível.
 - **Migrations não devem ser reescritas** após aplicadas — para mudanças, crie uma nova migration.
 
