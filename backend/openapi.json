@@ -1,0 +1,2159 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Barbearia Maraca API",
+    "version": "1.0.0",
+    "description": "API REST da barbearia"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Verifica a saude do servidor e do banco",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "database": {
+                      "type": "string",
+                      "example": "connected"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/Erro500"
+          }
+        }
+      }
+    },
+    "/api/auth/google": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login com conta Google",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleLoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login realizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleLoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          }
+        }
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Registrar novo usuario (cliente)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthRegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Conta criada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthRegisterResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Login local (email e senha)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthLoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login realizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthLoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Realizar logout",
+        "responses": {
+          "200": {
+            "description": "Logout realizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthLogoutResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "patch": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Atualizar perfil do usuario autenticado",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtualizarPerfilRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Perfil atualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "user": {
+                      "$ref": "#/components/schemas/Usuario"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          }
+        }
+      }
+    },
+    "/api/servicos": {
+      "get": {
+        "tags": [
+          "Servicos"
+        ],
+        "summary": "Lista servicos ativos (publico)",
+        "responses": {
+          "200": {
+            "description": "Lista de servicos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServicoPublico"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Servicos"
+        ],
+        "summary": "Cria um servico (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServicoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Servico criado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Servico"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/servicos/{id}": {
+      "get": {
+        "tags": [
+          "Servicos"
+        ],
+        "summary": "Obtem um servico (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Servico encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Servico"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Servicos"
+        ],
+        "summary": "Atualiza um servico (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateServicoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Servico atualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Servico"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/servicos/{id}/status": {
+      "patch": {
+        "tags": [
+          "Servicos"
+        ],
+        "summary": "Alterna status ativo/inativo de um servico (admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateServicoStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status atualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Servico"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/clientes": {
+      "get": {
+        "tags": [
+          "Clientes"
+        ],
+        "summary": "Lista todos os clientes (recepcionista/admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "busca",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de clientes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Cliente"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Clientes"
+        ],
+        "summary": "Cria um cliente (recepcionista/admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClienteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cliente criado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cliente"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/clientes/buscar": {
+      "get": {
+        "tags": [
+          "Clientes"
+        ],
+        "summary": "Busca cliente por email",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "email"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cliente encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cliente"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          }
+        }
+      }
+    },
+    "/api/clientes/{id}": {
+      "get": {
+        "tags": [
+          "Clientes"
+        ],
+        "summary": "Obtem um cliente",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cliente encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cliente"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Clientes"
+        ],
+        "summary": "Atualiza um cliente",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClienteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cliente atualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cliente"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          }
+        }
+      }
+    },
+    "/api/funcionarios": {
+      "get": {
+        "tags": [
+          "Funcionarios"
+        ],
+        "summary": "Lista funcionarios ativos (publico)",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cargo",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "barbeiro",
+                "recepcionista",
+                "administrador"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de funcionarios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FuncionarioPublico"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Funcionarios"
+        ],
+        "summary": "Cria um funcionario (recepcionista/admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFuncionarioRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Funcionario criado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Funcionario"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/funcionarios/detalhes": {
+      "get": {
+        "tags": [
+          "Funcionarios"
+        ],
+        "summary": "Lista funcionarios com dados completos (recepcionista/admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista completa de funcionarios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Funcionario"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/funcionarios/buscar": {
+      "get": {
+        "tags": [
+          "Funcionarios"
+        ],
+        "summary": "Busca funcionario por email",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "email"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Funcionario encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Funcionario"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          }
+        }
+      }
+    },
+    "/api/funcionarios/{id}": {
+      "get": {
+        "tags": [
+          "Funcionarios"
+        ],
+        "summary": "Obtem um funcionario",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Funcionario encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Funcionario"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Funcionarios"
+        ],
+        "summary": "Atualiza um funcionario (recepcionista/admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFuncionarioRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Funcionario atualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Funcionario"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/funcionarios/{id}/status": {
+      "patch": {
+        "tags": [
+          "Funcionarios"
+        ],
+        "summary": "Alterna status ativo/inativo de um funcionario (recepcionista/admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFuncionarioStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status atualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/agendamentos": {
+      "post": {
+        "tags": [
+          "Agendamentos"
+        ],
+        "summary": "Cria um agendamento",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAgendamentoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Agendamento criado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agendamento"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Agendamentos"
+        ],
+        "summary": "Lista agendamentos",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "data",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AgendamentoStatus"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de agendamentos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Agendamento"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agendamentos/{id}": {
+      "get": {
+        "tags": [
+          "Agendamentos"
+        ],
+        "summary": "Obtem um agendamento",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agendamento encontrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agendamento"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404"
+          }
+        }
+      }
+    },
+    "/api/agendamentos/{id}/cancelar": {
+      "patch": {
+        "tags": [
+          "Agendamentos"
+        ],
+        "summary": "Cancela um agendamento",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agendamento cancelado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agendamento"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          }
+        }
+      }
+    },
+    "/api/agendamentos/{id}/confirmar": {
+      "patch": {
+        "tags": [
+          "Agendamentos"
+        ],
+        "summary": "Confirma um agendamento (profissional/recepcionista/admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agendamento confirmado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agendamento"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/agendamentos/{id}/concluir": {
+      "patch": {
+        "tags": [
+          "Agendamentos"
+        ],
+        "summary": "Conclui um agendamento (profissional/recepcionista/admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agendamento concluido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agendamento"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/horarios/funcionario-disponibilidade": {
+      "get": {
+        "tags": [
+          "Horarios"
+        ],
+        "summary": "Obtem disponibilidade de horarios de um funcionario (publico)",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "funcionario_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "data",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Disponibilidade",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Disponibilidade"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          }
+        }
+      }
+    },
+    "/api/horarios": {
+      "get": {
+        "tags": [
+          "Horarios"
+        ],
+        "summary": "Lista horarios de trabalho",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "funcionario_id",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dia_semana",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de horarios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HorarioTrabalho"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Horarios"
+        ],
+        "summary": "Cria um horario de trabalho",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateHorarioRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Horario criado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HorarioTrabalho"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          }
+        }
+      }
+    },
+    "/api/horarios/{id}": {
+      "put": {
+        "tags": [
+          "Horarios"
+        ],
+        "summary": "Atualiza um horario de trabalho",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHorarioRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Horario atualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HorarioTrabalho"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Horarios"
+        ],
+        "summary": "Exclui um horario de trabalho",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Horario excluido"
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Erro": {
+        "type": "object",
+        "required": [
+          "erro",
+          "mensagem",
+          "status"
+        ],
+        "properties": {
+          "erro": {
+            "type": "boolean",
+            "example": true
+          },
+          "mensagem": {
+            "type": "string"
+          },
+          "status": {
+            "type": "number"
+          },
+          "detalhes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Usuario": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string"
+          },
+          "nome": {
+            "type": "string",
+            "nullable": true
+          },
+          "cargo": {
+            "type": "string",
+            "nullable": true
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "AuthLoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "cliente@email.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "senha123"
+          }
+        }
+      },
+      "AuthLoginResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string",
+            "nullable": true
+          },
+          "userEmail": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "number"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "recepcionista",
+              "profissional",
+              "cliente"
+            ]
+          },
+          "user": {
+            "$ref": "#/components/schemas/Usuario"
+          }
+        }
+      },
+      "AuthRegisterRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "senha",
+          "nome"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "novo@email.com"
+          },
+          "senha": {
+            "type": "string",
+            "format": "password",
+            "minLength": 6
+          },
+          "nome": {
+            "type": "string"
+          },
+          "telefone": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "AuthRegisterResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "nome": {
+                "type": "string",
+                "nullable": true
+              },
+              "tipo": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "GoogleLoginRequest": {
+        "type": "object",
+        "required": [
+          "idToken"
+        ],
+        "properties": {
+          "idToken": {
+            "type": "string"
+          }
+        }
+      },
+      "GoogleLoginResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string",
+            "nullable": true
+          },
+          "userEmail": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "number"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "recepcionista",
+              "profissional",
+              "cliente"
+            ]
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "AtualizarPerfilRequest": {
+        "type": "object",
+        "minProperties": 1,
+        "properties": {
+          "nome": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "senha": {
+            "type": "string",
+            "format": "password",
+            "minLength": 6
+          }
+        }
+      },
+      "AuthLogoutResponse": {
+        "type": "object",
+        "properties": {
+          "mensagem": {
+            "type": "string",
+            "example": "Logout realizado"
+          }
+        }
+      },
+      "ServicoPublico": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nome": {
+            "type": "string"
+          },
+          "descricao": {
+            "type": "string",
+            "nullable": true
+          },
+          "duracao_minutos": {
+            "type": "integer",
+            "example": 30
+          },
+          "preco": {
+            "type": "string",
+            "example": "50.00"
+          }
+        }
+      },
+      "Servico": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nome": {
+            "type": "string"
+          },
+          "descricao": {
+            "type": "string",
+            "nullable": true
+          },
+          "duracao_minutos": {
+            "type": "integer",
+            "example": 30
+          },
+          "preco": {
+            "type": "string",
+            "example": "50.00"
+          },
+          "ativo": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CreateServicoRequest": {
+        "type": "object",
+        "required": [
+          "nome",
+          "duracao_minutos",
+          "preco"
+        ],
+        "properties": {
+          "nome": {
+            "type": "string"
+          },
+          "descricao": {
+            "type": "string",
+            "nullable": true
+          },
+          "duracao_minutos": {
+            "type": "integer",
+            "example": 30
+          },
+          "preco": {
+            "oneOf": [
+              {
+                "type": "number",
+                "example": 50
+              },
+              {
+                "type": "string",
+                "example": "50.00"
+              }
+            ]
+          }
+        }
+      },
+      "UpdateServicoRequest": {
+        "type": "object",
+        "minProperties": 1,
+        "properties": {
+          "nome": {
+            "type": "string"
+          },
+          "descricao": {
+            "type": "string",
+            "nullable": true
+          },
+          "duracao_minutos": {
+            "type": "integer",
+            "example": 30
+          },
+          "preco": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "UpdateServicoStatusRequest": {
+        "type": "object",
+        "required": [
+          "ativo"
+        ],
+        "properties": {
+          "ativo": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Cliente": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nome": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "telefone": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "CreateClienteRequest": {
+        "type": "object",
+        "required": [
+          "nome",
+          "email",
+          "senha"
+        ],
+        "properties": {
+          "nome": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "telefone": {
+            "type": "string"
+          },
+          "senha": {
+            "type": "string",
+            "format": "password",
+            "minLength": 6
+          }
+        }
+      },
+      "UpdateClienteRequest": {
+        "type": "object",
+        "minProperties": 1,
+        "properties": {
+          "nome": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "telefone": {
+            "type": "string"
+          }
+        }
+      },
+      "FuncionarioPublico": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nome": {
+            "type": "string"
+          },
+          "especialidade": {
+            "type": "string",
+            "nullable": true
+          },
+          "foto": {
+            "type": "string",
+            "nullable": true
+          },
+          "descricao": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "Funcionario": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "usuarioId": {
+            "type": "string"
+          },
+          "nome": {
+            "type": "string"
+          },
+          "telefone": {
+            "type": "string",
+            "nullable": true
+          },
+          "cargo": {
+            "type": "string",
+            "enum": [
+              "barbeiro",
+              "recepcionista",
+              "administrador"
+            ]
+          },
+          "especialidade": {
+            "type": "string",
+            "nullable": true
+          },
+          "foto": {
+            "type": "string",
+            "nullable": true
+          },
+          "descricao": {
+            "type": "string",
+            "nullable": true
+          },
+          "ativo": {
+            "type": "boolean"
+          },
+          "email": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateFuncionarioRequest": {
+        "type": "object",
+        "required": [
+          "nome",
+          "email",
+          "senha"
+        ],
+        "properties": {
+          "nome": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "senha": {
+            "type": "string",
+            "format": "password",
+            "minLength": 6
+          },
+          "telefone": {
+            "type": "string"
+          },
+          "cargo": {
+            "type": "string",
+            "enum": [
+              "barbeiro",
+              "recepcionista",
+              "administrador"
+            ]
+          },
+          "especialidade": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateFuncionarioRequest": {
+        "type": "object",
+        "minProperties": 1,
+        "properties": {
+          "nome": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "senha": {
+            "type": "string",
+            "format": "password",
+            "minLength": 6
+          },
+          "telefone": {
+            "type": "string"
+          },
+          "cargo": {
+            "type": "string",
+            "enum": [
+              "barbeiro",
+              "recepcionista",
+              "administrador"
+            ]
+          },
+          "especialidade": {
+            "type": "string"
+          },
+          "foto": {
+            "type": "string"
+          },
+          "descricao": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateFuncionarioStatusRequest": {
+        "type": "object",
+        "required": [
+          "ativo"
+        ],
+        "properties": {
+          "ativo": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StatusResponse": {
+        "type": "object",
+        "properties": {
+          "mensagem": {
+            "type": "string"
+          },
+          "ativo": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AgendamentoStatus": {
+        "type": "string",
+        "enum": [
+          "pendente",
+          "confirmado",
+          "cancelado",
+          "concluido"
+        ]
+      },
+      "Agendamento": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "clienteId": {
+            "type": "string"
+          },
+          "clienteNome": {
+            "type": "string",
+            "nullable": true
+          },
+          "funcionarioId": {
+            "type": "string"
+          },
+          "funcionarioNome": {
+            "type": "string",
+            "nullable": true
+          },
+          "servicoId": {
+            "type": "string"
+          },
+          "servicoNome": {
+            "type": "string",
+            "nullable": true
+          },
+          "data": {
+            "type": "string",
+            "format": "date"
+          },
+          "hora": {
+            "type": "string",
+            "example": "09:00"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgendamentoStatus"
+          },
+          "observacao": {
+            "type": "string",
+            "nullable": true
+          },
+          "criadoEm": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateAgendamentoRequest": {
+        "type": "object",
+        "required": [
+          "funcionario_id",
+          "servico_id",
+          "data",
+          "hora"
+        ],
+        "properties": {
+          "funcionario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "servico_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "data": {
+            "type": "string",
+            "format": "date"
+          },
+          "hora": {
+            "type": "string",
+            "example": "09:00"
+          },
+          "observacao": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "HorarioTrabalho": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "funcionario_id": {
+            "type": "string"
+          },
+          "funcionario_nome": {
+            "type": "string"
+          },
+          "dia_semana": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6,
+            "example": 1
+          },
+          "hora_inicio": {
+            "type": "string",
+            "example": "09:00:00"
+          },
+          "hora_fim": {
+            "type": "string",
+            "example": "18:00:00"
+          },
+          "ativo": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateHorarioRequest": {
+        "type": "object",
+        "required": [
+          "funcionario_id",
+          "dia_semana",
+          "hora_inicio",
+          "hora_fim"
+        ],
+        "properties": {
+          "funcionario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "dia_semana": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "hora_inicio": {
+            "type": "string",
+            "example": "09:00:00"
+          },
+          "hora_fim": {
+            "type": "string",
+            "example": "18:00:00"
+          }
+        }
+      },
+      "UpdateHorarioRequest": {
+        "type": "object",
+        "minProperties": 1,
+        "properties": {
+          "dia_semana": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "hora_inicio": {
+            "type": "string",
+            "example": "09:00:00"
+          },
+          "hora_fim": {
+            "type": "string",
+            "example": "18:00:00"
+          }
+        }
+      },
+      "Disponibilidade": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "responses": {
+      "Erro400": {
+        "description": "Requisicao invalida",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erro"
+            }
+          }
+        }
+      },
+      "Erro401": {
+        "description": "Nao autenticado",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erro"
+            }
+          }
+        }
+      },
+      "Erro403": {
+        "description": "Acesso negado",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erro"
+            }
+          }
+        }
+      },
+      "Erro404": {
+        "description": "Nao encontrado",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erro"
+            }
+          }
+        }
+      },
+      "Erro500": {
+        "description": "Erro interno",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Erro"
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": []
+}
