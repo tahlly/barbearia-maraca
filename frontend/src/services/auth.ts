@@ -1,9 +1,10 @@
 import { CONFIG } from "../config.js";
 import { navigateTo } from "../router.js";
 import type { Session, UserRole } from "../types.js";
-import { ApiError, delay, httpJson, isMockMode } from "./api.js";
+import { ApiError, apiFetch, delay, httpJson, isMockMode } from "./api.js";
+import { validateAdminLogin } from "./admins.js";
 import { validateClienteLogin } from "./clientes.js";
-import { validateUsuarioInterno } from "./usuarios.js";
+import { findUsuarioByEmail, updateUsuarioInterno, validateUsuarioInterno } from "./usuarios.js";
 
 export interface LoginResult {
   ok: boolean;
@@ -88,6 +89,7 @@ export async function updateSessionUser(data: {
   const session = getSession();
   if (!session) return { ok: false, message: "Sessão ausente." };
 
+  if (isMockMode()) {
     if (session.role === "admin") {
       const demo = loadDemoAdmin();
       if (session.userEmail !== demo.email) {
@@ -98,7 +100,7 @@ export async function updateSessionUser(data: {
       }
       if (data.email !== undefined) {
         const target = data.email.trim().toLowerCase();
-        if (target !== demo.email && findUsuarioByEmail(target)) {
+        if (target !== demo.email && (await findUsuarioByEmail(target))) {
           return { ok: false, message: "E-mail já cadastrado." };
         }
         demo.email = target;
@@ -115,23 +117,23 @@ export async function updateSessionUser(data: {
       return { ok: true };
     }
 
-    const usuario = findUsuarioByEmail(session.userEmail);
+    const usuario = await findUsuarioByEmail(session.userEmail);
     if (!usuario) return { ok: false, message: "Usuário não encontrado." };
     if (data.senhaAtual !== undefined && data.senhaAtual !== usuario.senha) {
       return { ok: false, message: "Senha atual incorreta." };
     }
     if (data.email !== undefined) {
       const target = data.email.trim().toLowerCase();
-      if (target !== usuario.email && findUsuarioByEmail(target)) {
+      if (target !== usuario.email && (await findUsuarioByEmail(target))) {
         return { ok: false, message: "E-mail já cadastrado." };
       }
     }
-    updateUsuarioInterno(usuario.id, {
+    await updateUsuarioInterno(usuario.id, {
       nome: data.nome,
       email: data.email,
       senha: data.novaSenha,
     });
-    const updated = findUsuarioByEmail(data.email ?? usuario.email);
+    const updated = await findUsuarioByEmail(data.email ?? usuario.email);
     persistSession({
       ...session,
       userName: updated?.nome ?? data.nome ?? session.userName,

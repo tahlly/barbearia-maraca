@@ -1,13 +1,11 @@
 import { renderPanel } from "../ui/layout.js";
 import { requireRole, updateSessionUser } from "../services/auth.js";
-import { $, escapeHtml } from "../ui/dom.js";
+import { $, escapeHtml, initials } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { formatDateMedium } from "../ui/format.js";
-import { loadServices, loadProfessionals } from "../services/catalog.js";
-import { loadAllAppointments } from "../services/booking.js";
-import { listUsuariosInternos, updateUsuarioInterno } from "../services/usuarios.js";
+import { listAppointments } from "../services/booking.js";
+import { listUsuariosInternos } from "../services/usuarios.js";
 import { showToast } from "../ui/toast.js";
-import { renderSettingsForm } from "../features/settingsForm.js";
 import type { Appointment } from "../types.js";
 
 const STATUS_LABEL: Record<Appointment["status"], string> = {
@@ -216,7 +214,7 @@ export function renderProfissional(container: HTMLElement): () => void {
       </div>
       <div class="config-card">
         <div class="config-photo">
-          <span class="avatar avatar--lg">${initials(current?.userName ?? "?")}</span>
+          <span class="avatar avatar--lg">${initials(session?.userName ?? "?")}</span>
           <input type="file" id="profile-photo" accept="image/*" hidden>
           <button type="button" class="btn btn--sm btn--gold-outline" id="profile-photo-btn">${icon("upload", 14)} Carregar foto</button>
         </div>
@@ -224,7 +222,7 @@ export function renderProfissional(container: HTMLElement): () => void {
         <form id="profile-form" novalidate>
           <div class="field">
             <label class="field__label" for="profile-name">Nome</label>
-            <input type="text" id="profile-name" value="${escapeHtml(current?.userName ?? "")}" maxlength="80">
+            <input type="text" id="profile-name" value="${escapeHtml(session?.userName ?? "")}" maxlength="80">
           </div>
 
           <h4 class="manage-form-title">Alterar Senha</h4>
@@ -251,7 +249,7 @@ export function renderProfissional(container: HTMLElement): () => void {
             </div>
             <div class="field">
               <label class="field__label" for="email-new">Novo email</label>
-              <input type="email" id="email-new" value="${escapeHtml(current?.userEmail ?? "")}" autocapitalize="none" spellcheck="false">
+              <input type="email" id="email-new" value="${escapeHtml(session?.userEmail ?? "")}" autocapitalize="none" spellcheck="false">
             </div>
             <div class="field">
               <label class="field__label" for="email-confirm">Confirmar novo email</label>
@@ -301,10 +299,9 @@ export function renderProfissional(container: HTMLElement): () => void {
       const cancelBtn = $<HTMLButtonElement>("[data-profile-cancel]", content);
       if (cancelBtn) {
         const cancel = (): void => {
-          const s = getSession();
           const nameInput = $("#profile-name", content) as HTMLInputElement;
-          nameInput.value = s?.userName ?? "";
-          ($("#email-new", content) as HTMLInputElement).value = s?.userEmail ?? "";
+          nameInput.value = session?.userName ?? "";
+          ($("#email-new", content) as HTMLInputElement).value = session?.userEmail ?? "";
           (form.querySelectorAll('input[type="password"]') as NodeListOf<HTMLInputElement>).forEach((i) => {
             i.value = "";
           });
@@ -326,7 +323,7 @@ export function renderProfissional(container: HTMLElement): () => void {
         const emailConfirm = ($("#email-confirm", content) as HTMLInputElement).value.trim().toLowerCase();
 
         const wantsPassword = pwCurrent !== "" || pwNew !== "" || pwConfirm !== "";
-        const emailChanged = emailNew !== (current?.userEmail ?? "");
+        const emailChanged = emailNew !== (session?.userEmail ?? "");
         const wantsEmail = emailChanged || emailConfirm !== "";
 
         if (nome.length === 0) {
@@ -366,9 +363,6 @@ export function renderProfissional(container: HTMLElement): () => void {
           if (!result.ok) {
             showToast(result.message ?? "Não foi possível salvar.", "error");
             return;
-          }
-          if (wantsPassword && usuarioLogado) {
-            updateUsuarioInterno(usuarioLogado.id, { senha: pwNew });
           }
           showToast("Alterações salvas.");
           renderConfiguracoes();

@@ -200,7 +200,7 @@ export function renderSuperusuario(container: HTMLElement): () => void {
         showToast("Já existe um administrador com este e-mail.", "error");
         return;
       }
-      if (findUsuarioByEmail(email) && email !== admin?.email) {
+      if ((await findUsuarioByEmail(email)) && email !== admin?.email) {
         showToast("Este e-mail já é usado por outro perfil.", "error");
         return;
       }

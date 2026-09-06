@@ -354,11 +354,11 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       "-";
     const total = catalogServices.find((s) => s.id === appointment.servicoId)?.price ?? 0;
     const rows: Array<[string, string]> = [
-      ["Serviço(s)", serviceNames],
-      ["Profissional", professional?.name ?? "-"],
-      ["Data", formatDateLong(appointment.dateIso)],
-      ["Horário", appointment.time],
-      ["Cliente", appointment.clientName],
+      ["Serviço(s)", serviceName],
+      ["Profissional", professional],
+      ["Data", formatDateLong(appointment.data)],
+      ["Horário", appointment.hora],
+      ["Cliente", appointment.clienteNome ?? "-"],
       ["Total", formatCurrency(total)],
     ];
     summaryEl.innerHTML = rows
@@ -371,16 +371,13 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
 
   async function submit(): Promise<void> {
     if (!validateStep(3, true)) return;
-    if (!state.professionalId || !state.dateIso || !state.time) return;
+    if (!state.professionalId || !state.serviceId || !state.dateIso || !state.time) return;
 
     const draft: BookingDraft = {
-      serviceIds: [...state.serviceIds],
-      professionalId: state.professionalId,
-      dateIso: state.dateIso,
-      time: state.time,
-      clientName: nameInput.value,
-      phone: phoneInput.value,
-      email: emailInput.value,
+      funcionario_id: state.professionalId,
+      servico_id: state.serviceId,
+      data: state.dateIso,
+      hora: state.time,
     };
 
     nextBtn.disabled = true;
@@ -469,24 +466,29 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
 
   async function openForReschedule(appointment: Appointment): Promise<void> {
     refreshCatalog();
-    resetWizard();
-    state.rescheduleCode = appointment.code;
-    state.serviceIds = new Set(appointment.serviceIds);
-    state.professionalId = appointment.professionalId;
-    nameInput.value = appointment.clientName;
-    phoneInput.value = appointment.phone;
-    emailInput.value = appointment.email;
+    await resetWizard();
+    state.rescheduleId = appointment.id;
+    if (appointment.servicoId) {
+      state.serviceId = appointment.servicoId;
+      const input = servicesBox.querySelector<HTMLInputElement>(
+        `input[value="${appointment.servicoId}"]`,
+      );
+      if (input) input.checked = true;
+      updateTotal();
+    }
+    state.professionalId = appointment.funcionarioId;
+    nameInput.value = appointment.clienteNome ?? "";
     renderServices();
     renderProfessionals();
-    const rescheduleIso =
-      appointment.dateIso >= minIso &&
-      appointment.dateIso <= maxIso &&
-      isDateEnabled(appointment.dateIso)
-        ? appointment.dateIso
-        : defaultDateIso();
-    state.dateIso = rescheduleIso;
-    dateInput.value = rescheduleIso;
-    state.time = appointment.dateIso === rescheduleIso ? appointment.time : null;
+
+    let rescheduleIso = appointment.data;
+    if (rescheduleIso >= minIso && rescheduleIso <= maxIso && (await isDateEnabled(rescheduleIso))) {
+      state.dateIso = rescheduleIso;
+    } else {
+      state.dateIso = await defaultDateIso();
+    }
+    dateInput.value = state.dateIso;
+    state.time = appointment.data === state.dateIso ? appointment.hora : null;
     renderSlots();
     goToStep(2);
     openModal(overlay);
