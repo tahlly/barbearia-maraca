@@ -290,11 +290,9 @@ export function renderManage(container: HTMLElement): () => void {
   }
 
   function matchesFilter(a: Appointment): boolean {
+    if (state.professionalId !== "todos" && a.funcionarioId !== state.professionalId) return false;
     const m = monthOf(a.data);
     const y = yearOf(a.data);
-    if (state.professionalId !== "todos" && a.professionalId !== state.professionalId) return false;
-    const m = monthOf(a.dateIso);
-    const y = yearOf(a.dateIso);
     switch (state.mode) {
       case "ano":
         return y === state.ano;
@@ -334,13 +332,6 @@ export function renderManage(container: HTMLElement): () => void {
           return { revenue, top };
         })()
       : null;
-    const sold: Record<string, number> = {};
-    for (const a of filtered) {
-      if (a.status === "cancelado") continue;
-      for (const id of a.serviceIds) sold[id] = (sold[id] ?? 0) + 1;
-    }
-    const top = Object.entries(sold).sort((x, y) => y[1] - x[1]).slice(0, 3);
-
     const concluidos = filtered.filter((a) => a.status === "concluido").length;
 
     let destaque: Professional | null = null;
@@ -348,7 +339,7 @@ export function renderManage(container: HTMLElement): () => void {
     const countsByPro: Record<string, number> = {};
     for (const a of filtered) {
       if (a.status !== "concluido") continue;
-      countsByPro[a.professionalId] = (countsByPro[a.professionalId] ?? 0) + 1;
+      countsByPro[a.funcionarioId] = (countsByPro[a.funcionarioId] ?? 0) + 1;
     }
     const idsByCount = Object.entries(countsByPro).sort((x, y) => {
       if (y[1] !== x[1]) return y[1] - x[1];
@@ -367,7 +358,6 @@ export function renderManage(container: HTMLElement): () => void {
         <div class="kpi-card"><span class="kpi-card__label">${icon("clock", 16)} Pendentes</span><span class="kpi-card__value kpi-card__value--gold">${counts.pendente}</span></div>
         <div class="kpi-card"><span class="kpi-card__label">${icon("x", 16)} Cancelados</span><span class="kpi-card__value kpi-card__value--danger">${counts.cancelado}</span></div>
         ${financial ? `<div class="kpi-card"><span class="kpi-card__label">${icon("dollar", 16)} Faturamento</span><span class="kpi-card__value kpi-card__value--gold">${formatCurrency(financial.revenue)}</span></div>` : ""}
-        <div class="kpi-card"><span class="kpi-card__label">${icon("dollar", 16)} Faturamento</span><span class="kpi-card__value kpi-card__value--gold">${formatCurrency(revenue)}</span></div>
         <div class="kpi-card kpi-card--destaque">
           <span class="kpi-card__label">${icon("star", 16)} Profissional destaque do mês</span>
           ${destaque ? destaqueCardHTML(destaque, destaqueConcluidos) : `<p class="panel__empty kpi-card__empty">${concluidos === 0 ? "Sem atendimentos concluídos nesse recorte." : "Nenhum profissional encontrado."}</p>`}
@@ -403,8 +393,8 @@ export function renderManage(container: HTMLElement): () => void {
   function topProResult(a: string, b: string, list: Appointment[]): number {
     const latest = (id: string) => {
       const matches = list
-        .filter((x) => x.professionalId === id && x.status === "concluido")
-        .map((x) => `${x.dateIso}T${x.time}|${x.createdAt}`)
+        .filter((x) => x.funcionarioId === id && x.status === "concluido")
+        .map((x) => `${x.data}T${x.hora}|${x.criadoEm ?? ""}`)
         .sort();
       return matches[matches.length - 1] ?? "";
     };

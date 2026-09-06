@@ -1,5 +1,7 @@
 import { CONFIG } from "../config.js";
-import type { Appointment, Professional, Service } from "../types.js";
+import type { Professional, Service } from "../types.js";
+import { isMockMode } from "../services/api.js";
+import { listAdmins } from "../services/admins.js";
 import { saveCategories, saveProfessionals, saveServices } from "../services/catalog.js";
 import { registerCliente } from "../services/clientes.js";
 import { createUsuarioInterno } from "../services/usuarios.js";
