@@ -4,7 +4,6 @@ import { $, escapeHtml, initials } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { formatDateMedium } from "../ui/format.js";
 import { listAppointments } from "../services/booking.js";
-import { listUsuariosInternos } from "../services/usuarios.js";
 import { showToast } from "../ui/toast.js";
 import type { Appointment } from "../types.js";
 
@@ -40,8 +39,6 @@ export function renderProfissional(container: HTMLElement): () => void {
   });
 
   const cleanups: Array<() => void> = [];
-
-  let professionalId = "";
 
   type ManageTab = "agendamentos" | "configuracoes";
 
@@ -115,7 +112,7 @@ export function renderProfissional(container: HTMLElement): () => void {
     if (fim) fim.value = defaultEnd;
 
     function applyFilters(appointments: Appointment[]): Appointment[] {
-      let list = appointments.filter((a) => a.funcionarioId === professionalId);
+      let list = appointments;
       const q = (search?.value ?? "").trim().toLowerCase();
       if (q) {
         list = list.filter(
@@ -380,16 +377,9 @@ export function renderProfissional(container: HTMLElement): () => void {
     else handleTab("agendamentos");
   };
 
-  // Resolve o professionalId do usuário logado antes de renderizar.
-  void (async () => {
-    const usuarios = await listUsuariosInternos();
-    const usuarioLogado =
-      usuarios.find(
-        (u) => u.email.toLowerCase() === (session?.userEmail ?? "").toLowerCase(),
-      ) ?? null;
-    professionalId = usuarioLogado?.professionalId ?? "";
-    linkHandler();
-  })();
+  // O filtro por professionalId foi removido: o backend já restringe
+  // listAppointments() aos agendamentos do próprio barbeiro.
+  linkHandler();
 
   window.addEventListener("hashchange", linkHandler);
   cleanups.push(() => window.removeEventListener("hashchange", linkHandler));
