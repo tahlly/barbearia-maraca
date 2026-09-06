@@ -3,14 +3,13 @@ import type { Appointment, BookingDraft } from "../types.js";
 import { loadProfessionals, loadServices } from "../services/catalog.js";
 import { createAppointment, reschedule } from "../services/booking.js";
 import { isDateOpen, slotsForDate } from "../services/schedule.js";
-import { $, $$, clearElement, clearFormErrors, escapeHtml, initials } from "../ui/dom.js";
+import { $, $$, clearElement, clearFormErrors, escapeHtml, initials, setFieldError } from "../ui/dom.js";
 import { icon, serviceIcon } from "../ui/icons.js";
 import { formatCurrency, formatDateLong, toIsoDate } from "../ui/format.js";
-import { attachPhoneMask } from "../ui/mask.js";
 import { closeModal, openModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 3;
 
 interface WizardState {
   step: number;
@@ -52,9 +51,12 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   const slotsHint = $("#slots-hint")!;
   const totalEl = $("#booking-total")!;
   const footer = $(".wizard__footer", form)!;
+  const bodyScroll = $(".wizard__body", form)!;
   const prevBtn = $<HTMLButtonElement>("#booking-prev")!;
   const nextBtn = $<HTMLButtonElement>("#booking-next")!;
+  const nameInput = $<HTMLInputElement>("#client-name")!;
   const phoneInput = $<HTMLInputElement>("#client-phone")!;
+  const emailInput = $<HTMLInputElement>("#client-email")!;
   const successTitle = $("#booking-success-title")!;
   const summaryEl = $("#booking-summary")!;
 
@@ -73,8 +75,6 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   const horizon = new Date(today);
   horizon.setDate(horizon.getDate() + CONFIG.bookingHorizonDays);
   const maxIso = toIsoDate(horizon);
-
-  attachPhoneMask(phoneInput);
 
   async function isDateEnabled(iso: string): Promise<boolean> {
     if (!state.professionalId) return false;
@@ -285,12 +285,13 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     prevBtn.hidden = step === 1 || step === TOTAL_STEPS;
     nextBtn.hidden = step === TOTAL_STEPS;
     footer.classList.toggle("wizard__footer--summary", step === TOTAL_STEPS);
-    nextBtn.textContent = step === 3 ? "Confirmar agendamento" : "Continuar";
+    nextBtn.textContent = step === 2 ? "Confirmar agendamento" : "Continuar";
     if (step === 2) {
       void renderSlots();
     }
     const activePanel = panels.find((p) => Number(p.dataset.step) === step);
     if (activePanel) activePanel.scrollTop = 0;
+    bodyScroll.scrollTop = 0;
   }
 
   function validateStep(step: number, report: boolean): boolean {
@@ -312,7 +313,32 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       return valid;
     }
     if (step === 3) {
-      return true;
+      let valid = true;
+      const name = nameInput.value.trim();
+      const digits = phoneInput.value.replace(/\D/g, "");
+      const email = emailInput.value.trim();
+
+      if (name.length < 3 || !name.includes(" ")) {
+        if (report) setFieldError(nameInput, "Informe seu nome completo.");
+        valid = false;
+      } else if (report) {
+        setFieldError(nameInput, null);
+      }
+
+      if (digits.length < 10) {
+        if (report) setFieldError(phoneInput, "Informe um telefone válido com DDD.");
+        valid = false;
+      } else if (report) {
+        setFieldError(phoneInput, null);
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+        if (report) setFieldError(emailInput, "Informe um e-mail válido.");
+        valid = false;
+      } else if (report) {
+        setFieldError(emailInput, null);
+      }
+      return valid;
     }
     return true;
   }
@@ -328,11 +354,11 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       "-";
     const total = catalogServices.find((s) => s.id === appointment.servicoId)?.price ?? 0;
     const rows: Array<[string, string]> = [
-      ["Serviço", serviceName],
-      ["Profissional", professional],
-      ["Data", formatDateLong(appointment.data)],
-      ["Horário", appointment.hora],
-      ["Cliente", appointment.clienteNome ?? "-"],
+      ["Serviço(s)", serviceNames],
+      ["Profissional", professional?.name ?? "-"],
+      ["Data", formatDateLong(appointment.dateIso)],
+      ["Horário", appointment.time],
+      ["Cliente", appointment.clientName],
       ["Total", formatCurrency(total)],
     ];
     summaryEl.innerHTML = rows
@@ -344,15 +370,17 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   }
 
   async function submit(): Promise<void> {
-    if (state.step === TOTAL_STEPS) return;
     if (!validateStep(3, true)) return;
-    if (!state.professionalId || !state.dateIso || !state.time || !state.serviceId) return;
+    if (!state.professionalId || !state.dateIso || !state.time) return;
 
     const draft: BookingDraft = {
-      funcionario_id: state.professionalId,
-      servico_id: state.serviceId,
-      data: state.dateIso,
-      hora: state.time,
+      serviceIds: [...state.serviceIds],
+      professionalId: state.professionalId,
+      dateIso: state.dateIso,
+      time: state.time,
+      clientName: nameInput.value,
+      phone: phoneInput.value,
+      email: emailInput.value,
     };
 
     nextBtn.disabled = true;
@@ -405,8 +433,10 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   });
 
   nextBtn.addEventListener("click", () => {
-    if (state.step === 3) {
-      void submit();
+    if (state.step === 2) {
+      if (validateStep(2, true)) {
+        void submit();
+      }
       return;
     }
     if (validateStep(state.step, true)) {
@@ -439,35 +469,25 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
 
   async function openForReschedule(appointment: Appointment): Promise<void> {
     refreshCatalog();
-    await resetWizard();
-    state.rescheduleId = appointment.id;
-    state.rescheduleAppointment = appointment;
-    // Preenche com o serviço e profissional do agendamento atual.
-    state.serviceId = appointment.servicoId;
-    const servInput = servicesBox.querySelector<HTMLInputElement>(
-      `input[value="${appointment.servicoId}"]`,
-    );
-    if (servInput) servInput.checked = true;
-    updateTotal();
-
-    if (state.professionalId !== appointment.funcionarioId) {
-      state.professionalId = appointment.funcionarioId;
-      const proInput = prosBox.querySelector<HTMLInputElement>(
-        `input[value="${appointment.funcionarioId}"]`,
-      );
-      if (proInput) proInput.checked = true;
-    }
-
-    const reIso =
-      appointment.data >= minIso &&
-      appointment.data <= maxIso &&
-      (await isDateEnabled(appointment.data))
-        ? appointment.data
-        : await defaultDateIso();
-    state.dateIso = reIso;
-    dateInput.value = reIso;
-    state.time = null;
-    await renderSlots();
+    resetWizard();
+    state.rescheduleCode = appointment.code;
+    state.serviceIds = new Set(appointment.serviceIds);
+    state.professionalId = appointment.professionalId;
+    nameInput.value = appointment.clientName;
+    phoneInput.value = appointment.phone;
+    emailInput.value = appointment.email;
+    renderServices();
+    renderProfessionals();
+    const rescheduleIso =
+      appointment.dateIso >= minIso &&
+      appointment.dateIso <= maxIso &&
+      isDateEnabled(appointment.dateIso)
+        ? appointment.dateIso
+        : defaultDateIso();
+    state.dateIso = rescheduleIso;
+    dateInput.value = rescheduleIso;
+    state.time = appointment.dateIso === rescheduleIso ? appointment.time : null;
+    renderSlots();
     goToStep(2);
     openModal(overlay);
   }

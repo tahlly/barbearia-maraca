@@ -1,7 +1,7 @@
 import { CONFIG } from "../config.js";
 import { navigateTo } from "../router.js";
 import type { Session, UserRole } from "../types.js";
-import { ApiError, apiFetch, delay, httpJson, isMockMode } from "./api.js";
+import { ApiError, delay, httpJson, isMockMode } from "./api.js";
 import { validateClienteLogin } from "./clientes.js";
 import { validateUsuarioInterno } from "./usuarios.js";
 
@@ -17,6 +17,7 @@ export interface AuthRedirect {
 }
 
 export const ROLE_REDIRECTS: Record<UserRole, string> = {
+  superusuario: "/superusuario",
   admin: "/admin",
   recepcionista: "/recepcionista",
   profissional: "/profissional",
@@ -70,10 +71,13 @@ function loadDemoAdmin(): DemoAdminProfile {
   };
 }
 
+function saveDemoAdmin(profile: DemoAdminProfile): void {
+  localStorage.setItem(DEMO_ADMIN_KEY, JSON.stringify(profile));
+}
+
 /**
- * Atualiza os dados do usuário da sessão atual (nome/email) no sessionStorage.
- * O endpoint PATCH /auth/me existe no backend, mas a persistência remota
- * ainda não é chamada aqui — integração futura.
+ * Atualiza os dados do usuário da sessão atual (nome/senha/email) no mock.
+ * O admin demo (hardcoded) recebe patch local; os demais vão aos usuários internos.
  */
 export async function updateSessionUser(data: {
   nome?: string;
@@ -84,12 +88,76 @@ export async function updateSessionUser(data: {
   const session = getSession();
   if (!session) return { ok: false, message: "Sessão ausente." };
 
-  persistSession({
-    ...session,
-    userName: data.nome ?? session.userName,
-    userEmail: data.email ?? session.userEmail,
-  });
-  return { ok: true };
+    if (session.role === "admin") {
+      const demo = loadDemoAdmin();
+      if (session.userEmail !== demo.email) {
+        return { ok: false, message: "Sessão administrativa não reconhecida." };
+      }
+      if (data.senhaAtual !== undefined && data.senhaAtual !== demo.senha) {
+        return { ok: false, message: "Senha atual incorreta." };
+      }
+      if (data.email !== undefined) {
+        const target = data.email.trim().toLowerCase();
+        if (target !== demo.email && findUsuarioByEmail(target)) {
+          return { ok: false, message: "E-mail já cadastrado." };
+        }
+        demo.email = target;
+      }
+      if (data.nome !== undefined) demo.nome = data.nome.trim();
+      if (data.novaSenha !== undefined) demo.senha = data.novaSenha;
+      saveDemoAdmin(demo);
+
+      persistSession({
+        ...session,
+        userName: demo.nome,
+        userEmail: demo.email,
+      });
+      return { ok: true };
+    }
+
+    const usuario = findUsuarioByEmail(session.userEmail);
+    if (!usuario) return { ok: false, message: "Usuário não encontrado." };
+    if (data.senhaAtual !== undefined && data.senhaAtual !== usuario.senha) {
+      return { ok: false, message: "Senha atual incorreta." };
+    }
+    if (data.email !== undefined) {
+      const target = data.email.trim().toLowerCase();
+      if (target !== usuario.email && findUsuarioByEmail(target)) {
+        return { ok: false, message: "E-mail já cadastrado." };
+      }
+    }
+    updateUsuarioInterno(usuario.id, {
+      nome: data.nome,
+      email: data.email,
+      senha: data.novaSenha,
+    });
+    const updated = findUsuarioByEmail(data.email ?? usuario.email);
+    persistSession({
+      ...session,
+      userName: updated?.nome ?? data.nome ?? session.userName,
+      userEmail: updated?.email ?? session.userEmail,
+    });
+    return { ok: true };
+  }
+
+  try {
+    await httpJson<{ ok: boolean }>("/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+    const session = getSession();
+    if (session) {
+      persistSession({
+        ...session,
+        userName: data.nome ?? session.userName,
+        userEmail: data.email ?? session.userEmail,
+      });
+    }
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError) return { ok: false, message: error.message };
+    return { ok: false, message: "Não foi possível atualizar o perfil." };
+  }
 }
 
 /**
@@ -101,12 +169,24 @@ export async function loginInterno(email: string, password: string): Promise<Log
     await delay(700);
     const norm = normalize(email);
 
-    const demo = loadDemoAdmin();
-    if (norm === demo.email && password === demo.senha) {
+    const superAdmin = CONFIG.demoSuperAdmin;
+    if (norm === superAdmin.email && password === superAdmin.password) {
       persistSession({
         token: createToken(),
-        userName: demo.nome,
+        userName: superAdmin.name,
         userEmail: norm,
+        expiresAt: Date.now() + CONFIG.sessionTtlMs,
+        role: "superusuario",
+      });
+      return { ok: true, role: "superusuario" };
+    }
+
+    const admin = validateAdminLogin(email, password);
+    if (admin) {
+      persistSession({
+        token: createToken(),
+        userName: admin.nome,
+        userEmail: admin.email,
         expiresAt: Date.now() + CONFIG.sessionTtlMs,
         role: "admin",
       });

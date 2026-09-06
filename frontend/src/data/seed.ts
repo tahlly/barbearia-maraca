@@ -1,6 +1,5 @@
 import { CONFIG } from "../config.js";
-import { isMockMode } from "../services/api.js";
-import type { Professional, Service } from "../types.js";
+import type { Appointment, Professional, Service } from "../types.js";
 import { saveCategories, saveProfessionals, saveServices } from "../services/catalog.js";
 import { registerCliente } from "../services/clientes.js";
 import { createUsuarioInterno } from "../services/usuarios.js";
@@ -86,6 +85,12 @@ export function ensureSeed(): void {
   }
 
   let seeded = false;
+
+  const admins = localStorage.getItem(CONFIG.adminsKey);
+  if (!admins || !JSON.parse(admins).length) {
+    listAdmins();
+    seeded = true;
+  }
 
   const services = localStorage.getItem(CONFIG.servicesKey);
   if (!services || !JSON.parse(services).length) {

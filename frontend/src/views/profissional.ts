@@ -3,8 +3,9 @@ import { requireRole, updateSessionUser } from "../services/auth.js";
 import { $, escapeHtml } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { formatDateMedium } from "../ui/format.js";
-import { listAppointments } from "../services/booking.js";
-import { listUsuariosInternos } from "../services/usuarios.js";
+import { loadServices, loadProfessionals } from "../services/catalog.js";
+import { loadAllAppointments } from "../services/booking.js";
+import { listUsuariosInternos, updateUsuarioInterno } from "../services/usuarios.js";
 import { showToast } from "../ui/toast.js";
 import { renderSettingsForm } from "../features/settingsForm.js";
 import type { Appointment } from "../types.js";
@@ -213,20 +214,169 @@ export function renderProfissional(container: HTMLElement): () => void {
           <p class="manage-head__sub">Segurança e dados do usuário</p>
         </div>
       </div>
-    `;
-    const formContainer = document.createElement("div");
-    content.appendChild(formContainer);
+      <div class="config-card">
+        <div class="config-photo">
+          <span class="avatar avatar--lg">${initials(current?.userName ?? "?")}</span>
+          <input type="file" id="profile-photo" accept="image/*" hidden>
+          <button type="button" class="btn btn--sm btn--gold-outline" id="profile-photo-btn">${icon("upload", 14)} Carregar foto</button>
+        </div>
 
-    cleanups.push(
-      renderSettingsForm(formContainer, async (data) => {
-        const result = await updateSessionUser(data);
-        if (!result.ok) {
-          showToast(result.message ?? "Não foi possível salvar.", "error");
-          return false;
+        <form id="profile-form" novalidate>
+          <div class="field">
+            <label class="field__label" for="profile-name">Nome</label>
+            <input type="text" id="profile-name" value="${escapeHtml(current?.userName ?? "")}" maxlength="80">
+          </div>
+
+          <h4 class="manage-form-title">Alterar Senha</h4>
+          <div class="form-grid">
+            <div class="field">
+              <label class="field__label" for="pw-current">Senha atual</label>
+              <input type="password" id="pw-current" autocomplete="current-password">
+            </div>
+            <div class="field">
+              <label class="field__label" for="pw-new">Nova senha</label>
+              <input type="password" id="pw-new" autocomplete="new-password">
+            </div>
+            <div class="field">
+              <label class="field__label" for="pw-confirm">Confirmar nova senha</label>
+              <input type="password" id="pw-confirm" autocomplete="new-password">
+            </div>
+          </div>
+
+          <h4 class="manage-form-title">Alterar Email de Acesso</h4>
+          <div class="form-grid">
+            <div class="field">
+              <label class="field__label" for="email-current">Email atual</label>
+              <input type="password" id="email-current" autocomplete="current-password">
+            </div>
+            <div class="field">
+              <label class="field__label" for="email-new">Novo email</label>
+              <input type="email" id="email-new" value="${escapeHtml(current?.userEmail ?? "")}" autocapitalize="none" spellcheck="false">
+            </div>
+            <div class="field">
+              <label class="field__label" for="email-confirm">Confirmar novo email</label>
+              <input type="email" id="email-confirm" autocapitalize="none" spellcheck="false">
+            </div>
+          </div>
+
+          <div class="config-actions">
+            <button type="button" class="btn btn--danger" data-profile-cancel>Cancelar</button>
+            <button type="submit" class="btn btn--success">Salvar alterações</button>
+          </div>
+        </form>
+      </div>
+    `;
+
+    const photoBtn = $<HTMLButtonElement>("#profile-photo-btn", content);
+    const photoInput = $<HTMLInputElement>("#profile-photo", content);
+    const avatar = $<HTMLElement>(".config-photo .avatar", content);
+    if (photoBtn && photoInput && avatar) {
+      const click = (): void => photoInput.click();
+      photoBtn.addEventListener("click", click);
+      cleanups.push(() => photoBtn.removeEventListener("click", click));
+
+      photoInput.addEventListener("change", () => {
+        const file = photoInput.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          sessionStorage.setItem("maraca.profilePhoto", dataUrl);
+          avatar.style.backgroundImage = `url("${dataUrl}")`;
+          avatar.textContent = "";
+          showToast("Foto atualizada.");
+        };
+        reader.readAsDataURL(file);
+      });
+
+      const savedPhoto = sessionStorage.getItem("maraca.profilePhoto");
+      if (savedPhoto) {
+        avatar.style.backgroundImage = `url("${savedPhoto}")`;
+        avatar.textContent = "";
+      }
+    }
+
+    const form = $<HTMLFormElement>("#profile-form", content);
+    if (form) {
+      const cancelBtn = $<HTMLButtonElement>("[data-profile-cancel]", content);
+      if (cancelBtn) {
+        const cancel = (): void => {
+          const s = getSession();
+          const nameInput = $("#profile-name", content) as HTMLInputElement;
+          nameInput.value = s?.userName ?? "";
+          ($("#email-new", content) as HTMLInputElement).value = s?.userEmail ?? "";
+          (form.querySelectorAll('input[type="password"]') as NodeListOf<HTMLInputElement>).forEach((i) => {
+            i.value = "";
+          });
+          ($("#email-confirm", content) as HTMLInputElement).value = "";
+          showToast("Alterações descartadas.");
+        };
+        cancelBtn.addEventListener("click", cancel);
+        cleanups.push(() => cancelBtn.removeEventListener("click", cancel));
+      }
+
+      const submit = (event: Event): void => {
+        event.preventDefault();
+        const nome = ($("#profile-name", content) as HTMLInputElement).value.trim();
+        const pwCurrent = ($("#pw-current", content) as HTMLInputElement).value;
+        const pwNew = ($("#pw-new", content) as HTMLInputElement).value;
+        const pwConfirm = ($("#pw-confirm", content) as HTMLInputElement).value;
+        const emailPw = ($("#email-current", content) as HTMLInputElement).value;
+        const emailNew = ($("#email-new", content) as HTMLInputElement).value.trim().toLowerCase();
+        const emailConfirm = ($("#email-confirm", content) as HTMLInputElement).value.trim().toLowerCase();
+
+        const wantsPassword = pwCurrent !== "" || pwNew !== "" || pwConfirm !== "";
+        const emailChanged = emailNew !== (current?.userEmail ?? "");
+        const wantsEmail = emailChanged || emailConfirm !== "";
+
+        if (nome.length === 0) {
+          showToast("Informe um nome válido.", "error");
+          return;
         }
-        return true;
-      }),
-    );
+        if (wantsPassword && pwNew !== pwConfirm) {
+          showToast("As novas senhas não coincidem.", "error");
+          return;
+        }
+        if (wantsPassword && (pwCurrent === "" || pwNew.length === 0)) {
+          showToast("Preencha senha atual e nova senha.", "error");
+          return;
+        }
+        if (wantsEmail) {
+          if (emailPw === "") {
+            showToast("Informe a senha atual para alterar o e-mail.", "error");
+            return;
+          }
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailNew) || emailNew !== emailConfirm) {
+            showToast("Verifique o novo e-mail e a confirmação.", "error");
+            return;
+          }
+        }
+
+        const data: { nome?: string; email?: string; senhaAtual?: string; novaSenha?: string } = { nome };
+        if (wantsPassword) {
+          data.senhaAtual = pwCurrent;
+          data.novaSenha = pwNew;
+        }
+        if (wantsEmail) {
+          data.email = emailNew;
+        }
+
+        void (async () => {
+          const result = await updateSessionUser(data);
+          if (!result.ok) {
+            showToast(result.message ?? "Não foi possível salvar.", "error");
+            return;
+          }
+          if (wantsPassword && usuarioLogado) {
+            updateUsuarioInterno(usuarioLogado.id, { senha: pwNew });
+          }
+          showToast("Alterações salvas.");
+          renderConfiguracoes();
+        })();
+      };
+      form.addEventListener("submit", submit);
+      cleanups.push(() => form.removeEventListener("submit", submit));
+    }
   }
 
   // ------------------------------------------------------------ Tab routing

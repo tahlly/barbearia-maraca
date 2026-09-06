@@ -1,6 +1,6 @@
 export type ServiceIcon = "scissors" | "beard" | "layers" | "sparkle";
 
-export type UserRole = "admin" | "recepcionista" | "profissional" | "cliente";
+export type UserRole = "superusuario" | "admin" | "recepcionista" | "profissional" | "cliente";
 
 export interface Service {
   id: string;
@@ -22,6 +22,7 @@ export interface Professional {
   email?: string;
   photo?: string;
   userRole?: "profissional" | "recepcionista";
+  photoUrl?: string;
 }
 
 export type AppointmentStatus = "confirmado" | "pendente" | "concluido" | "cancelado";

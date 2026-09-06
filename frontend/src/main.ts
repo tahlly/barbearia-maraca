@@ -10,6 +10,7 @@ import { renderLoginCliente } from "./views/loginCliente.js";
 import { renderMinhaConta } from "./views/minhaConta.js";
 import { renderManage } from "./views/manage.js";
 import { renderProfissional } from "./views/profissional.js";
+import { renderSuperusuario } from "./views/superusuario.js";
 import { ensureSeed } from "./data/seed.js";
 import { primeCatalog } from "./services/catalog.js";
 
@@ -32,6 +33,8 @@ function init(): void {
   registerRoute("/admin/servicos", renderManage);
   registerRoute("/admin/profissionais", renderManage);
   registerRoute("/admin/configuracoes", renderManage);
+  registerRoute("/superusuario", renderSuperusuario);
+  registerRoute("/superusuario/usuarios", renderSuperusuario);
   registerRoute("/profissional", renderProfissional);
   registerRoute("/profissional/configuracoes", renderProfissional);
   registerRoute("/recepcionista", renderManage);
