@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { AppError } from '../errors/AppError';
 import { ValidationError } from '../errors/ValidationError';
-import { ForbiddenError } from '../errors/ForbiddenError';
 import { NotFoundError } from '../errors/NotFoundError';
 import { InternalError } from '../errors/InternalError';
 import { UnauthorizedError } from '../errors/UnauthorizedError';
@@ -36,8 +35,6 @@ export function errorHandler(
 
   let response: ErrorResponse;
 
-  // Qualquer AppError (incluindo UnauthorizedError 401 e ForbiddenError 403)
-  // responde com o próprio status, sem conversão adicional.
   if (error instanceof AppError) {
     response = {
       erro: true,
@@ -65,10 +62,9 @@ export function errorHandler(
     return;
   }
 
-  // Bloco legado para erros 401 genéricos de bibliotecas externas (ex.: jwt).
-  // Não altera o status de AppError, tratado acima; aqui o correto é 401 e
-  // nunca converter um não-autenticado em 403.
-  if (error.name === 'UnauthorizedError' || error.message.toLowerCase().includes('jwt')) {
+  // Trata erros JWT que não passaram pelo UnauthorizedError (ex.: jsonwebtoken
+  // lança erros genéricos com .message contendo "jwt" no middleware de auth).
+  if (error.name === 'UnauthorizedError' || error.message.includes('jwt')) {
     const unauthorizedError = new UnauthorizedError('Token inválido ou expirado');
     response = {
       erro: true,

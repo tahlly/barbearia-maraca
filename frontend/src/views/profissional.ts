@@ -1,13 +1,12 @@
 import { renderPanel } from "../ui/layout.js";
-import { requireRole, getSession, updateSessionUser } from "../services/auth.js";
+import { requireRole, updateSessionUser } from "../services/auth.js";
 import { $, escapeHtml, initials } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { formatDateMedium } from "../ui/format.js";
-import { loadServices, loadProfessionals } from "../services/catalog.js";
-import { loadAllAppointments } from "../services/booking.js";
-import { listUsuariosInternos, updateUsuarioInterno } from "../services/usuarios.js";
+import { listAppointments } from "../services/booking.js";
+import { listUsuariosInternos } from "../services/usuarios.js";
 import { showToast } from "../ui/toast.js";
-import type { Appointment, Service, Professional } from "../types.js";
+import type { Appointment } from "../types.js";
 
 const STATUS_LABEL: Record<Appointment["status"], string> = {
   confirmado: "Confirmado",
@@ -42,21 +41,7 @@ export function renderProfissional(container: HTMLElement): () => void {
 
   const cleanups: Array<() => void> = [];
 
-  const usuarioLogado = listUsuariosInternos().find(
-    (u) => u.email.toLowerCase() === (session?.userEmail ?? "").toLowerCase(),
-  );
-  const professionalId = usuarioLogado?.professionalId ?? "";
-
-  let servicesCache: Service[] = loadServices();
-  let prosCache: Professional[] = loadProfessionals();
-
-  function serviceName(id: string): string {
-    return servicesCache.find((s) => s.id === id)?.name ?? "-";
-  }
-
-  function professionalName(id: string): string {
-    return prosCache.find((p) => p.id === id)?.name ?? "-";
-  }
+  let professionalId = "";
 
   type ManageTab = "agendamentos" | "configuracoes";
 
@@ -69,17 +54,6 @@ export function renderProfissional(container: HTMLElement): () => void {
 
   // ------------------------------------------------------------ Agendamentos
   function renderAgendamentos(): void {
-    servicesCache = loadServices();
-    prosCache = loadProfessionals();
-
-    const appointments = loadAllAppointments()
-      .filter((a) => a.professionalId === professionalId)
-      .sort((a, b) => {
-        const ka = `${a.dateIso}T${a.time}`;
-        const kb = `${b.dateIso}T${b.time}`;
-        return kb.toString().localeCompare(ka.toString());
-      });
-
     const currentYear = new Date().getFullYear();
     const defaultStart = `${currentYear}-01-01`;
     const defaultEnd = `${currentYear}-12-31`;
@@ -128,7 +102,7 @@ export function renderProfissional(container: HTMLElement): () => void {
       </div>
 
       <div class="table-wrap" id="pro-agenda-table">
-        ${buildTable(appointments)}
+        <p class="panel__empty">Carregando agendamentos...</p>
       </div>
     `;
 
@@ -137,64 +111,55 @@ export function renderProfissional(container: HTMLElement): () => void {
     const inicio = $<HTMLInputElement>("[data-inicio]", content);
     const fim = $<HTMLInputElement>("[data-fim]", content);
 
-    // Por padrão, mostra apenas os agendamentos do profissional logado.
     if (inicio) inicio.value = defaultStart;
     if (fim) fim.value = defaultEnd;
 
-    function rows(): Appointment[] {
-      return loadAllAppointments()
-        .filter((a) => a.professionalId === professionalId)
-        .sort((a, b) => {
-          const ka = `${a.dateIso}T${a.time}`;
-          const kb = `${b.dateIso}T${b.time}`;
-          return kb.toString().localeCompare(ka.toString());
-        });
-    }
-
-    function applySearch(): Appointment[] {
+    function applyFilters(appointments: Appointment[]): Appointment[] {
+      let list = appointments.filter((a) => a.funcionarioId === professionalId);
       const q = (search?.value ?? "").trim().toLowerCase();
-      let list = rows();
       if (q) {
-        list = list.filter((a) => a.clientName.toLowerCase().includes(q) || a.phone.includes(q));
+        list = list.filter(
+          (a) => (a.clienteNome ?? "").toLowerCase().includes(q) || (a.clienteId ?? "").toLowerCase().includes(q),
+        );
       }
-      return list;
-    }
-
-    function applyStatus(list: Appointment[]): Appointment[] {
       const status = filter?.value ?? "todos";
-      if (status !== "todos") return list.filter((a) => a.status === status);
-      return list;
-    }
-
-    function applyDates(list: Appointment[]): Appointment[] {
+      if (status !== "todos") list = list.filter((a) => a.status === status);
       const ini = inicio?.value;
       const fimv = fim?.value;
-      if (!ini && !fimv) return list;
-      return list.filter((a) => {
-        if (ini && a.dateIso < ini) return false;
-        if (fimv && a.dateIso > fimv) return false;
-        return true;
+      if (ini) list = list.filter((a) => a.data >= ini);
+      if (fimv) list = list.filter((a) => a.data <= fimv);
+      return [...list].sort((a, b) => {
+        const ka = `${a.data}T${a.hora}`;
+        const kb = `${b.data}T${b.hora}`;
+        return kb.toString().localeCompare(ka.toString());
       });
     }
 
-    function refresh(): void {
-      let list = applySearch();
-      list = applyStatus(list);
-      list = applyDates(list);
-      $("#pro-agenda-table", content)!.innerHTML = buildTable(list);
+    function refresh(appointments: Appointment[]): void {
+      $("#pro-agenda-table", content)!.innerHTML = buildTable(applyFilters(appointments));
     }
 
-    const onSearch = (): void => refresh();
-    const onFilter = (): void => refresh();
+    void (async () => {
+      const appointments = await listAppointments();
+      refresh(appointments);
+    })();
 
-    const onConsult = (): void => refresh();
+    const onSearch = (): void => {
+      void (async () => refresh(await listAppointments()))();
+    };
+    const onFilter = (): void => {
+      void (async () => refresh(await listAppointments()))();
+    };
+    const onConsult = (): void => {
+      void (async () => refresh(await listAppointments()))();
+    };
 
     const onClear = (): void => {
       if (inicio) inicio.value = defaultStart;
       if (fim) fim.value = defaultEnd;
       if (search) search.value = "";
       if (filter) filter.value = "todos";
-      refresh();
+      void (async () => refresh(await listAppointments()))();
     };
 
     search?.addEventListener("input", onSearch);
@@ -215,8 +180,6 @@ export function renderProfissional(container: HTMLElement): () => void {
         <thead>
           <tr>
             <th>Cliente</th>
-            <th>Telefone</th>
-            <th>Profissional</th>
             <th>Serviço</th>
             <th>Data/Hora</th>
             <th>Status</th>
@@ -225,15 +188,12 @@ export function renderProfissional(container: HTMLElement): () => void {
         <tbody>
           ${appointments
             .map((a) => {
-              const names =
-                a.serviceIds.map((id) => serviceName(id)).filter((n) => n !== "-").join(", ") || "-";
+              const name = a.servicoNome ?? "-";
               return `
                 <tr>
-                  <td><strong>${escapeHtml(a.clientName)}</strong></td>
-                  <td>${escapeHtml(a.phone)}</td>
-                  <td>${escapeHtml(professionalName(a.professionalId))}</td>
-                  <td>${escapeHtml(names)}</td>
-                  <td>${formatDateMedium(a.dateIso)} · ${a.time}</td>
+                  <td><strong>${escapeHtml(a.clienteNome ?? "-")}</strong></td>
+                  <td>${escapeHtml(name)}</td>
+                  <td>${formatDateMedium(a.data)} · ${a.hora}</td>
                   <td>${statusBadge(a.status)}</td>
                 </tr>`;
             })
@@ -245,7 +205,6 @@ export function renderProfissional(container: HTMLElement): () => void {
 
   // ----------------------------------------------------------- Configurações
   function renderConfiguracoes(): void {
-    const current = getSession();
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -255,7 +214,7 @@ export function renderProfissional(container: HTMLElement): () => void {
       </div>
       <div class="config-card">
         <div class="config-photo">
-          <span class="avatar avatar--lg">${initials(current?.userName ?? "?")}</span>
+          <span class="avatar avatar--lg">${initials(session?.userName ?? "?")}</span>
           <input type="file" id="profile-photo" accept="image/*" hidden>
           <button type="button" class="btn btn--sm btn--gold-outline" id="profile-photo-btn">${icon("upload", 14)} Carregar foto</button>
         </div>
@@ -263,7 +222,7 @@ export function renderProfissional(container: HTMLElement): () => void {
         <form id="profile-form" novalidate>
           <div class="field">
             <label class="field__label" for="profile-name">Nome</label>
-            <input type="text" id="profile-name" value="${escapeHtml(current?.userName ?? "")}" maxlength="80">
+            <input type="text" id="profile-name" value="${escapeHtml(session?.userName ?? "")}" maxlength="80">
           </div>
 
           <h4 class="manage-form-title">Alterar Senha</h4>
@@ -290,7 +249,7 @@ export function renderProfissional(container: HTMLElement): () => void {
             </div>
             <div class="field">
               <label class="field__label" for="email-new">Novo email</label>
-              <input type="email" id="email-new" value="${escapeHtml(current?.userEmail ?? "")}" autocapitalize="none" spellcheck="false">
+              <input type="email" id="email-new" value="${escapeHtml(session?.userEmail ?? "")}" autocapitalize="none" spellcheck="false">
             </div>
             <div class="field">
               <label class="field__label" for="email-confirm">Confirmar novo email</label>
@@ -340,10 +299,9 @@ export function renderProfissional(container: HTMLElement): () => void {
       const cancelBtn = $<HTMLButtonElement>("[data-profile-cancel]", content);
       if (cancelBtn) {
         const cancel = (): void => {
-          const s = getSession();
           const nameInput = $("#profile-name", content) as HTMLInputElement;
-          nameInput.value = s?.userName ?? "";
-          ($("#email-new", content) as HTMLInputElement).value = s?.userEmail ?? "";
+          nameInput.value = session?.userName ?? "";
+          ($("#email-new", content) as HTMLInputElement).value = session?.userEmail ?? "";
           (form.querySelectorAll('input[type="password"]') as NodeListOf<HTMLInputElement>).forEach((i) => {
             i.value = "";
           });
@@ -365,7 +323,7 @@ export function renderProfissional(container: HTMLElement): () => void {
         const emailConfirm = ($("#email-confirm", content) as HTMLInputElement).value.trim().toLowerCase();
 
         const wantsPassword = pwCurrent !== "" || pwNew !== "" || pwConfirm !== "";
-        const emailChanged = emailNew !== (current?.userEmail ?? "");
+        const emailChanged = emailNew !== (session?.userEmail ?? "");
         const wantsEmail = emailChanged || emailConfirm !== "";
 
         if (nome.length === 0) {
@@ -406,9 +364,6 @@ export function renderProfissional(container: HTMLElement): () => void {
             showToast(result.message ?? "Não foi possível salvar.", "error");
             return;
           }
-          if (wantsPassword && usuarioLogado) {
-            updateUsuarioInterno(usuarioLogado.id, { senha: pwNew });
-          }
           showToast("Alterações salvas.");
           renderConfiguracoes();
         })();
@@ -424,7 +379,18 @@ export function renderProfissional(container: HTMLElement): () => void {
     if (path === `${base}/configuracoes`) handleTab("configuracoes");
     else handleTab("agendamentos");
   };
-  linkHandler();
+
+  // Resolve o professionalId do usuário logado antes de renderizar.
+  void (async () => {
+    const usuarios = await listUsuariosInternos();
+    const usuarioLogado =
+      usuarios.find(
+        (u) => u.email.toLowerCase() === (session?.userEmail ?? "").toLowerCase(),
+      ) ?? null;
+    professionalId = usuarioLogado?.professionalId ?? "";
+    linkHandler();
+  })();
+
   window.addEventListener("hashchange", linkHandler);
   cleanups.push(() => window.removeEventListener("hashchange", linkHandler));
 

@@ -50,19 +50,21 @@ cd backend
 npm install
 ```
 
-## 5. Configurar o arquivo .env
+## 5. Configurar o arquivo `.env` da raiz
 
-Copie o exemplo e preencha com suas credenciais:
+Volte para a raiz do repositório, copie o exemplo somente se o `.env` ainda não existir e preencha suas credenciais:
 
 ```bash
 # Windows (PowerShell)
-copy ..\.env.example .env
+cd ..
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 # Mac/Linux
-cp ../.env.example .env
+cd ..
+[ -f .env ] || cp .env.example .env
 ```
 
-Edite o `backend/.env` e ajuste as variáveis:
+Edite apenas o `.env` da raiz e ajuste as variáveis de execução manual do Backend:
 
 ```env
 DB_HOST=localhost
@@ -75,9 +77,12 @@ DB_NAME_TEST=barbearia_maraca_test
 
 > **ATENÇÃO:** O arquivo `.env` é **pessoal e nunca deve ser commitado**. Ele já está no `.gitignore`. Nunca mande sua senha para o repositório.
 
+O Backend, o Knex, o Vite e o Docker Compose usam esse mesmo arquivo. Não crie `backend/.env` nem `frontend/.env`. Somente variáveis iniciadas por `VITE_` podem ser disponibilizadas ao navegador.
+
 ## 6. Rodar as migrations
 
 ```bash
+cd backend
 npm run migrate:latest
 ```
 

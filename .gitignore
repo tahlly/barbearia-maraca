@@ -3,3 +3,6 @@ node_modules/
 dist/
 .vscode/
 docker-compose.override.yml
+
+# Logs de desenvolvimento
+*.log

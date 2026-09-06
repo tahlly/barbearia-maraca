@@ -127,3 +127,26 @@ Fonte e trecho do requisito:
 Critérios de aceite:
 Restrições:
 Prazo/prioridade:
+Responsáveis:
+Dependências:
+Evidências esperadas:
+```
+
+## Ambiente Docker padronizado
+- Leia e faça os especialistas seguirem a operação canônica em `AGENTS.md` e `README.md`.
+- Existe um único `.env` local na raiz; impeça a recriação de arquivos de ambiente dentro de `backend/` ou `frontend/`.
+- Garanta que apenas variáveis `VITE_*` sejam disponibilizadas ao navegador e que nenhum segredo seja versionado.
+- O fluxo normal na raiz é `npm run dev:up`: Postgres saudável → migrations concluídas → Backend saudável → Frontend.
+- Se a porta `5432` estiver ocupada por PostgreSQL nativo, registre a decisão e use `$env:COMPOSE_DB_PORT=5433` antes dos comandos Docker.
+- O encerramento canônico é `npm run dev:down`, que para a stack e preserva o volume do banco.
+- `npm run dev:seed` é destrutivo, separado do início normal e exige autorização humana explícita.
+- `docker compose down -v` também exige autorização humana explícita porque remove o banco Docker.
+- Mudanças em `docker-compose.yml`, Dockerfiles, scripts de ambiente ou portas são tarefas de infraestrutura multidomínio e precisam de QA e PR para `developer`.
+
+## Evidências mínimas do ambiente
+- `docker compose config --quiet` concluído sem erro;
+- Backend em `http://localhost:3000/api/health` com banco conectado;
+- Frontend em `http://localhost:5173` respondendo;
+- proxy em `http://localhost:5173/api/health` respondendo;
+- segunda inicialização com migrations `Already up to date`;
+- encerramento sem contêineres ativos e com `postgres_data` preservado.

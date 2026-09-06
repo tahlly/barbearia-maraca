@@ -13,6 +13,7 @@ export interface LoginResponseDTO {
   token: string;
   expiresAt: number;
   user: UsuarioDTO;
+  role: string;
 }
 
 export interface GoogleLoginRequestDTO {

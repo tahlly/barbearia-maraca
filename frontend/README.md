@@ -29,6 +29,7 @@ npm run preview    # pré-visualiza o build de produção
 | `#/minha-conta/configuracoes` | Painel do Cliente — **Configurações** (foto, nome, senha, e-mail) |
 | `#/admin` | Painel de gestão — Administrador (dashboard, agendamentos, serviços, profissionais, configurações) |
 | `#/admin/*` | Abas do painel do Administrador |
+| `#/superusuario` | Painel do Superusuário — **Lista de usuários** (CRUD de perfis administradores) |
 | `#/profissional` | Painel do Profissional — **Agendamentos** (somente leitura) |
 | `#/profissional/configuracoes` | Painel do Profissional — **Configurações** |
 | `#/recepcionista` | Painel de gestão compartilhado com o Admin (sem dashboard/financeiro — abre em Agendamentos) |
@@ -67,8 +68,13 @@ frontend/
 
 - **Agendamento em 4 passos** (wizard modal): serviços → profissional/horário → dados → confirmação, com código gerado.
 - **Autenticação por papel (mock/localStorage)**: login administrativo redireciona por papel
-  (admin → `#/admin`, recepcionista → `#/recepcionista`, profissional → `#/profissional`); cliente → `#/minha-conta`.
+  (superusuário → `#/superusuario`, admin → `#/admin`, recepcionista → `#/recepcionista`, profissional → `#/profissional`); cliente → `#/minha-conta`.
   Inclui **login com conta Google** na área do cliente (botão "LOGIN COM GOOGLE").
+- **Painel do Superusuário** (`views/superusuario.ts`): menu único **Lista de usuários** — lista os
+  **perfis administradores** cadastrados (em `maraca.v2.admins`), com **adicionar**, **editar**
+  (nome, e-mail e senha) e **excluir**. Proteções: impede excluir o último administrador e
+  bloqueia e-mails duplicados com outros perfis. O admin demo herdado de `maraca.v2.demoAdmin`
+  é migrado para essa lista automaticamente ao primeiro acesso.
 - **Painel compartilhado (Admin + Recepcionista)** em `views/manage.ts`: abas de agendamentos
   (busca, filtro por status, **bloco "CONSULTAR AGENDAMENTOS"** com filtro por datas, confirmar/cancelar,
   detalhes, configuração de agenda), serviços (CRUD + **excluir** com confirmação), profissionais
@@ -103,6 +109,7 @@ e-mail: cliente@maraca.com
 senha:  cliente123
 
 # Área Administrativa (redireciona por papel)
+e-mail: super@maraca.com         senha: maraca123     → Superusuário
 e-mail: admin@maraca.com        senha: maraca123     → Administrador
 e-mail: recepcao@maraca.com     senha: 123456        → Recepcionista
 e-mail: profissional@maraca.com senha: 123456        → Profissional

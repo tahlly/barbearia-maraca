@@ -1,76 +1,123 @@
-import type { NextFunction, Request, Response } from 'express';
-import { autenticarComGoogle, autenticarLocal, mapearTipoParaRole } from '../services/auth-service';
+import type { Request, Response } from 'express';
+import { z } from 'zod';
+import { autenticarComGoogle, registrar, login, atualizarPerfil } from '../services/auth-service';
+import { JWT_EXPIRES_IN } from '../config/jwt';
+import { parseExpiresInToMs } from '../utils/jwt-utils';
 import { ValidationError } from '../errors/ValidationError';
-import type { LoginResponseDTO, RespostaLoginSpaDTO } from '../dtos/auth-dto';
 
-function paraRespostaSpa(resultado: LoginResponseDTO): RespostaLoginSpaDTO {
-  return {
-    token: resultado.token,
-    userName: resultado.user.nome ?? resultado.user.email,
-    userEmail: resultado.user.email,
-    expiresAt: resultado.expiresAt,
-    role: mapearTipoParaRole(resultado.user.tipo, resultado.user.cargo),
-    avatarUrl: resultado.user.avatarUrl ?? null,
-  };
+function expiresAt(): number {
+  return Date.now() + parseExpiresInToMs(JWT_EXPIRES_IN);
 }
 
-export async function loginLocal(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const body = req.body as { email?: unknown; senha?: unknown; password?: unknown };
+export async function loginComGoogle(req: Request, res: Response): Promise<void> {
+  const { idToken } = req.body;
 
-  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
-  const senha =
-    typeof body.senha === 'string' && body.senha.length > 0
-      ? body.senha
-      : typeof body.password === 'string' && body.password.length > 0
-        ? body.password
-        : '';
-
-  if (!email || !senha) {
-    next(new ValidationError('Email e senha são obrigatórios'));
+  if (!idToken || typeof idToken !== 'string') {
+    res.status(400).json({
+      erro: true,
+      mensagem: 'Token do Google não fornecido',
+    });
     return;
   }
 
   try {
-    const resultado = await autenticarLocal(email, senha);
-    res.json(paraRespostaSpa(resultado));
-  } catch (error) {
-    next(error);
+    const resultado = await autenticarComGoogle(idToken);
+    res.json({
+      token: resultado.token,
+      userName: resultado.user.nome,
+      userEmail: resultado.user.email,
+      expiresAt: expiresAt(),
+      role: resultado.role,
+      avatarUrl: resultado.user.avatarUrl,
+    });
+  } catch (error: unknown) {
+    const status = (error as { status?: number }).status ?? 401;
+    const message =
+      error instanceof Error ? error.message : 'Falha ao autenticar com Google';
+    res.status(status).json({ erro: true, mensagem: message });
   }
 }
 
-export async function loginComGoogle(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const body = req.body as { idToken?: unknown };
+export async function registrarUsuario(req: Request, res: Response): Promise<void> {
+  const { email, senha, nome, telefone } = req.body;
 
-  if (typeof body.idToken !== 'string' || body.idToken.length === 0) {
-    next(new ValidationError('Token do Google não fornecido'));
+  if (!email || !senha || !nome) {
+    res.status(400).json({ erro: true, mensagem: 'Email, senha e nome obrigatorios' });
+    return;
+  }
+
+  if (typeof email !== 'string' || typeof senha !== 'string' || typeof nome !== 'string') {
+    res.status(400).json({ erro: true, mensagem: 'Dados invalidos' });
+    return;
+  }
+
+  if (senha.length < 6) {
+    res.status(400).json({ erro: true, mensagem: 'Senha deve ter no minimo 6 caracteres' });
     return;
   }
 
   try {
-    const resultado = await autenticarComGoogle(body.idToken);
-    res.json(paraRespostaSpa(resultado));
-  } catch (error) {
-    next(error);
+    const resultado = await registrar({ email, senha, nome, telefone });
+    res.status(201).json({
+      token: resultado.token,
+      user: {
+        id: resultado.user.id,
+        email: resultado.user.email,
+        nome: resultado.user.nome,
+        tipo: resultado.user.tipo,
+      },
+    });
+  } catch (error: unknown) {
+    const status = (error as { status?: number }).status ?? 500;
+    const message =
+      error instanceof Error ? error.message : 'Erro ao criar conta';
+    res.status(status).json({ erro: true, mensagem: message });
   }
 }
 
-/**
- * Rota privada PoC: retorna o usuário autenticado com o papel derivado no
- * backend. Protegida por `autenticar` e `autorizarPapel` (todos os papéis).
- */
-export async function obterUsuarioAutenticado(req: Request, res: Response): Promise<void> {
-  if (!req.usuario || !req.papel) {
-    res.status(401).json({ erro: true, mensagem: 'Não autenticado' });
+export async function loginLocal(req: Request, res: Response): Promise<void> {
+  const { email, password } = req.body;
+
+  if (!email || typeof email !== 'string' || !password || typeof password !== 'string') {
+    res.status(400).json({ erro: true, mensagem: 'Email e senha obrigatorios' });
     return;
   }
 
-  res.json({
-    user: {
-      id: req.usuario.id,
-      email: req.usuario.email,
-      nome: req.usuario.nome,
-      papel: req.papel,
-      avatarUrl: req.usuario.avatarUrl ?? null,
-    },
-  });
+  try {
+    const resultado = await login({ email, senha: password });
+    res.status(200).json({
+      token: resultado.token,
+      userName: resultado.user.nome,
+      userEmail: resultado.user.email,
+      expiresAt: expiresAt(),
+      role: resultado.role,
+      user: resultado.user,
+    });
+  } catch (error: unknown) {
+    const status = (error as { status?: number }).status ?? 401;
+    const message =
+      error instanceof Error ? error.message : 'Credenciais inválidas';
+    res.status(status).json({ erro: true, mensagem: message });
+  }
+}
+
+export async function logout(_req: Request, res: Response): Promise<void> {
+  res.status(200).json({ mensagem: 'Logout realizado' });
+}
+
+const atualizarPerfilSchema = z.object({
+  nome: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  senha: z.string().min(6).optional(),
+}).refine((data) => data.nome !== undefined || data.email !== undefined || data.senha !== undefined, {
+  message: 'Pelo menos um campo deve ser fornecido',
+});
+
+export async function atualizarPerfilHandler(req: Request, res: Response): Promise<void> {
+  const parsed = atualizarPerfilSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.issues[0].message);
+  }
+  const resultado = await atualizarPerfil(req.user!.id, parsed.data);
+  res.json({ success: true, user: resultado });
 }

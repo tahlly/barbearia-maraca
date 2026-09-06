@@ -1,32 +1,29 @@
-import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { OAuth2Client } from 'google-auth-library';
+import { signToken } from '../config/jwt';
+import db from '../database/connection';
 import { ValidationError } from '../errors/ValidationError';
 import { ForbiddenError } from '../errors/ForbiddenError';
 import { UnauthorizedError } from '../errors/UnauthorizedError';
+import { NotFoundError } from '../errors/NotFoundError';
 import {
   findUsuarioByEmail,
+  findUsuarioById,
   findUsuarioByGoogleId,
   criarUsuarioGoogle,
+  criarUsuarioComSenha,
   vincularGoogleAUsuario,
   criarCliente,
-  criarSessao,
+  criarClienteCompleto,
   obterClienteNome,
   obterFuncionarioNome,
   type UsuarioRow,
 } from '../repositories/auth-repository';
-import type { LoginResponseDTO, Papel, UsuarioDTO } from '../dtos/auth-dto';
+import type { LoginResponseDTO, UsuarioDTO } from '../dtos/auth-dto';
 
-export const SESSAO_TTL_MS = 30 * 60 * 1000;
+const DEFAULT_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 
-let client: OAuth2Client | undefined;
-
-function getGoogleClient(): OAuth2Client {
-  if (!client) {
-    client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID || '');
-  }
-  return client;
-}
+const client = new OAuth2Client(DEFAULT_CLIENT_ID);
 
 export interface GoogleProfile {
   sub: string;
@@ -35,44 +32,23 @@ export interface GoogleProfile {
   avatarUrl: string | null;
 }
 
-/**
- * Mapeia tipo/cargo persistidos para o papel consumido pela SPA e pelo
- * middleware de autorização. Papel é derivado no backend, nunca aceito do cliente.
- */
-export function mapearTipoParaRole(tipo: string, cargo?: string | null): Papel {
+const SALT_ROUNDS = 10;
+
+export function mapearTipoParaRole(tipo: string, cargo?: string | null): string {
   if (tipo === 'cliente') return 'cliente';
   if (cargo === 'administrador') return 'admin';
   if (cargo === 'recepcionista') return 'recepcionista';
   return 'profissional';
 }
 
-export function hashTokenSessao(token: string): string {
-  return crypto.createHash('sha256').update(token).digest('hex');
-}
-
-function gerarToken(): string {
-  return 'tok_' + crypto.randomBytes(24).toString('hex');
-}
-
-function buildUsuarioDTO(usuario: UsuarioRow, nome: string | null, cargo?: string | null): UsuarioDTO {
-  return {
-    id: usuario.id,
-    email: usuario.email,
-    tipo: usuario.tipo,
-    nome,
-    cargo: cargo || null,
-    avatarUrl: usuario.avatar_url,
-  };
-}
-
 export function validarTokenGoogle(idToken: string): Promise<GoogleProfile> {
   if (!idToken) {
     throw new ValidationError('Token do Google ausente');
   }
-  return getGoogleClient()
+  return client
     .verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID || '',
+      audience: DEFAULT_CLIENT_ID,
     })
     .then((ticket) => {
       const payload = ticket.getPayload();
@@ -94,59 +70,42 @@ export function validarTokenGoogle(idToken: string): Promise<GoogleProfile> {
     });
 }
 
-async function carregarNomeECargo(
+function buildUsuarioDTO(
+  usuario: UsuarioRow,
+  nome: string | null,
+  cargo?: string | null,
+): UsuarioDTO {
+  return {
+    id: usuario.id,
+    email: usuario.email,
+    tipo: usuario.tipo,
+    nome,
+    cargo: cargo || null,
+    avatarUrl: usuario.avatar_url,
+  };
+}
+
+function gerarTokenJWT(usuario: UsuarioRow, role: string): string {
+  return signToken({
+    sub: usuario.id,
+    id: usuario.id,
+    tipo: usuario.tipo,
+    role,
+  });
+}
+
+async function resolveNomeECargo(
   usuario: UsuarioRow,
 ): Promise<{ nome: string | null; cargo: string | null }> {
   if (usuario.tipo === 'cliente') {
-    return { nome: await obterClienteNome(usuario.id), cargo: null };
+    const nome = await obterClienteNome(usuario.id);
+    return { nome, cargo: null };
   }
   const funcionario = await obterFuncionarioNome(usuario.id);
   return {
     nome: funcionario?.nome ?? null,
-    cargo: funcionario?.cargo ?? null,
+    cargo: usuario.tipo === 'funcionario' ? (funcionario?.cargo ?? null) : null,
   };
-}
-
-/**
- * Gera token opaco, registra a sessão (token_hash SHA-256 hex) com TTL de 30
- * minutos e monta a resposta interna de login. Nunca retorna o hash nem a senha.
- */
-export async function criarSessaoParaUsuario(usuario: UsuarioRow): Promise<LoginResponseDTO> {
-  const perfil = await carregarNomeECargo(usuario);
-  const token = gerarToken();
-  const expiraEm = new Date(Date.now() + SESSAO_TTL_MS);
-
-  await criarSessao({
-    usuarioId: usuario.id,
-    tokenHash: hashTokenSessao(token),
-    expiraEm,
-  });
-
-  return {
-    token,
-    expiresAt: expiraEm.getTime(),
-    user: buildUsuarioDTO(usuario, perfil.nome, perfil.cargo),
-  };
-}
-
-export async function autenticarLocal(email: string, senha: string): Promise<LoginResponseDTO> {
-  const usuario = await findUsuarioByEmail(email.trim().toLowerCase());
-
-  if (!usuario) {
-    throw new UnauthorizedError('Credenciais inválidas');
-  }
-
-  // Usuário criado via Google sem senha não pode autenticar com credenciais locais.
-  if (!usuario.senha_hash) {
-    throw new UnauthorizedError('Credenciais inválidas');
-  }
-
-  const senhaValida = await bcrypt.compare(senha, usuario.senha_hash);
-  if (!senhaValida) {
-    throw new UnauthorizedError('Credenciais inválidas');
-  }
-
-  return criarSessaoParaUsuario(usuario);
 }
 
 export async function autenticarComGoogle(idToken: string): Promise<LoginResponseDTO> {
@@ -155,11 +114,10 @@ export async function autenticarComGoogle(idToken: string): Promise<LoginRespons
   let usuario = await findUsuarioByGoogleId(perfil.sub);
 
   if (!usuario) {
-    const usuarioPorEmail = await findUsuarioByEmail(perfil.email);
+    usuario = await findUsuarioByEmail(perfil.email);
 
-    if (usuarioPorEmail) {
-      await vincularGoogleAUsuario(usuarioPorEmail.id, perfil.sub, perfil.avatarUrl);
-      usuario = await findUsuarioByGoogleId(perfil.sub);
+    if (usuario) {
+      await vincularGoogleAUsuario(usuario.id, perfil.sub, perfil.avatarUrl);
     } else {
       usuario = await criarUsuarioGoogle({
         email: perfil.email,
@@ -171,9 +129,120 @@ export async function autenticarComGoogle(idToken: string): Promise<LoginRespons
     }
   }
 
-  if (!usuario) {
-    throw new ForbiddenError('Falha ao validar token do Google');
+  const { nome, cargo } = await resolveNomeECargo(usuario);
+  const role = mapearTipoParaRole(usuario.tipo, cargo);
+
+  return {
+    token: gerarTokenJWT(usuario, role),
+    user: buildUsuarioDTO(usuario, nome, cargo),
+    role,
+  };
+}
+
+export async function atualizarPerfil(
+  usuarioId: string,
+  dados: { nome?: string; email?: string; senha?: string }
+): Promise<{ nome: string | null; email: string }> {
+  // Se email fornecido, verificar duplicidade
+  if (dados.email) {
+    const existente = await findUsuarioByEmail(dados.email);
+    if (existente && existente.id !== usuarioId) {
+      throw new ValidationError('Email já está em uso');
+    }
   }
 
-  return criarSessaoParaUsuario(usuario);
+  // Hash senha se fornecida
+  let senhaHash: string | undefined;
+  if (dados.senha) {
+    senhaHash = await bcrypt.hash(dados.senha, SALT_ROUNDS);
+  }
+
+  // Buscar tipo do usuário
+  const usuario = await findUsuarioById(usuarioId);
+  if (!usuario) throw new NotFoundError('Usuário não encontrado');
+
+  // Transaction: atualizar usuario + cliente/funcionario
+  await db.transaction(async (trx) => {
+    // Atualizar usuario
+    const updateUsuario: Record<string, unknown> = {};
+    if (dados.email) updateUsuario.email = dados.email;
+    if (senhaHash) updateUsuario.senha_hash = senhaHash;
+    if (Object.keys(updateUsuario).length > 0) {
+      updateUsuario.updated_at = new Date();
+      await trx('usuario').where('id', usuarioId).update(updateUsuario);
+    }
+
+    // Atualizar nome na tabela correta
+    if (dados.nome) {
+      if (usuario.tipo === 'cliente') {
+        await trx('cliente').where('usuario_id', usuarioId).update({ nome: dados.nome });
+      } else {
+        await trx('funcionario').where('usuario_id', usuarioId).update({ nome: dados.nome });
+      }
+    }
+  });
+
+  // Retornar dados atualizados
+  return {
+    nome: dados.nome ?? null,
+    email: dados.email ?? (await findUsuarioById(usuarioId))!.email,
+  };
+}
+
+export async function registrar(data: {
+  email: string;
+  senha: string;
+  nome: string;
+  telefone?: string;
+}): Promise<LoginResponseDTO> {
+  const existing = await findUsuarioByEmail(data.email);
+  if (existing) {
+    throw new ValidationError('Email ja cadastrado');
+  }
+
+  const senhaHash = await bcrypt.hash(data.senha, SALT_ROUNDS);
+
+  const usuario = await criarUsuarioComSenha({
+    email: data.email,
+    senhaHash,
+    tipo: 'cliente',
+  });
+
+  await criarClienteCompleto({
+    usuarioId: usuario.id,
+    nome: data.nome,
+    telefone: data.telefone,
+  });
+
+  const role = mapearTipoParaRole(usuario.tipo, null);
+
+  return {
+    token: gerarTokenJWT(usuario, role),
+    user: buildUsuarioDTO(usuario, data.nome, null),
+    role,
+  };
+}
+
+export async function login(data: {
+  email: string;
+  senha: string;
+}): Promise<LoginResponseDTO> {
+  const usuario = await findUsuarioByEmail(data.email);
+  if (!usuario || !usuario.senha_hash) {
+    throw new UnauthorizedError('Credenciais inválidas');
+  }
+
+  const senhaValida = await bcrypt.compare(data.senha, usuario.senha_hash);
+  if (!senhaValida) {
+    throw new UnauthorizedError('Credenciais inválidas');
+  }
+
+  const { nome, cargo } = await resolveNomeECargo(usuario);
+  const role = mapearTipoParaRole(usuario.tipo, cargo);
+
+  return {
+    token: gerarTokenJWT(usuario, role),
+    user: buildUsuarioDTO(usuario, nome, cargo),
+    role,
+  };
 }

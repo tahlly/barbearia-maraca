@@ -1,23 +1,117 @@
-version: '3.8'
+x-backend-environment: &backend-environment
+  NODE_ENV: development
+  PORT: 3000
+  DB_HOST: db
+  DB_PORT: 5432
+  DB_USER: ${COMPOSE_DB_USER:-postgres}
+  DB_PASS: ${COMPOSE_DB_PASSWORD:-postgres}
+  DB_NAME: ${COMPOSE_DB_NAME:-barbearia_maraca}
+  DB_NAME_TEST: ${COMPOSE_DB_TEST_NAME:-barbearia_maraca_test}
+  JWT_SECRET: ${JWT_SECRET:-dev-secret-nao-usar-em-producao}
+  JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-30m}
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+
+x-backend-service: &backend-service
+  build:
+    context: ./backend
+    dockerfile: Dockerfile.dev
+  environment: *backend-environment
 
 services:
   db:
     image: postgres:16-alpine
-    container_name: barbearia_db
     restart: unless-stopped
     ports:
-      - '5432:5432'
+      - '${COMPOSE_DB_PORT:-5432}:5432'
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: barbearia_maraca
+      POSTGRES_USER: ${COMPOSE_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${COMPOSE_DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${COMPOSE_DB_NAME:-barbearia_maraca}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
-      interval: 10s
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 5s
+
+  migrate:
+    <<: *backend-service
+    restart: 'no'
+    command: npm run migrate:latest
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    <<: *backend-service
+    init: true
+    command: npx tsx watch src/server.ts
+    ports:
+      - '${BACKEND_PORT:-3000}:3000'
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    init: true
+    command: npm run dev -- --host 0.0.0.0
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:3000
+      CHOKIDAR_USEPOLLING: 'true'
+      VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+      VITE_USE_MOCK_API: ${VITE_USE_MOCK_API:-false}
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    ports:
+      - '${FRONTEND_PORT:-5173}:5173'
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:5173').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  seed:
+    <<: *backend-service
+    profiles: ['tools']
+    restart: 'no'
+    command: sh -c "npm run migrate:latest && npm run seed"
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
-  pgdata:
+  postgres_data:
+  backend_node_modules:
+  frontend_node_modules:

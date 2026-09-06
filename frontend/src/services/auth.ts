@@ -1,7 +1,8 @@
 import { CONFIG } from "../config.js";
 import { navigateTo } from "../router.js";
 import type { Session, UserRole } from "../types.js";
-import { ApiError, delay, httpJson, isMockMode } from "./api.js";
+import { ApiError, apiFetch, delay, httpJson, isMockMode } from "./api.js";
+import { validateAdminLogin } from "./admins.js";
 import { validateClienteLogin } from "./clientes.js";
 import { findUsuarioByEmail, updateUsuarioInterno, validateUsuarioInterno } from "./usuarios.js";
 
@@ -17,6 +18,7 @@ export interface AuthRedirect {
 }
 
 export const ROLE_REDIRECTS: Record<UserRole, string> = {
+  superusuario: "/superusuario",
   admin: "/admin",
   recepcionista: "/recepcionista",
   profissional: "/profissional",
@@ -84,11 +86,10 @@ export async function updateSessionUser(data: {
   senhaAtual?: string;
   novaSenha?: string;
 }): Promise<{ ok: boolean; message?: string }> {
-  if (isMockMode()) {
-    await delay(500);
-    const session = getSession();
-    if (!session) return { ok: false, message: "Sessão ausente." };
+  const session = getSession();
+  if (!session) return { ok: false, message: "Sessão ausente." };
 
+  if (isMockMode()) {
     if (session.role === "admin") {
       const demo = loadDemoAdmin();
       if (session.userEmail !== demo.email) {
@@ -99,7 +100,7 @@ export async function updateSessionUser(data: {
       }
       if (data.email !== undefined) {
         const target = data.email.trim().toLowerCase();
-        if (target !== demo.email && findUsuarioByEmail(target)) {
+        if (target !== demo.email && (await findUsuarioByEmail(target))) {
           return { ok: false, message: "E-mail já cadastrado." };
         }
         demo.email = target;
@@ -116,23 +117,23 @@ export async function updateSessionUser(data: {
       return { ok: true };
     }
 
-    const usuario = findUsuarioByEmail(session.userEmail);
+    const usuario = await findUsuarioByEmail(session.userEmail);
     if (!usuario) return { ok: false, message: "Usuário não encontrado." };
     if (data.senhaAtual !== undefined && data.senhaAtual !== usuario.senha) {
       return { ok: false, message: "Senha atual incorreta." };
     }
     if (data.email !== undefined) {
       const target = data.email.trim().toLowerCase();
-      if (target !== usuario.email && findUsuarioByEmail(target)) {
+      if (target !== usuario.email && (await findUsuarioByEmail(target))) {
         return { ok: false, message: "E-mail já cadastrado." };
       }
     }
-    updateUsuarioInterno(usuario.id, {
+    await updateUsuarioInterno(usuario.id, {
       nome: data.nome,
       email: data.email,
       senha: data.novaSenha,
     });
-    const updated = findUsuarioByEmail(data.email ?? usuario.email);
+    const updated = await findUsuarioByEmail(data.email ?? usuario.email);
     persistSession({
       ...session,
       userName: updated?.nome ?? data.nome ?? session.userName,
@@ -170,12 +171,24 @@ export async function loginInterno(email: string, password: string): Promise<Log
     await delay(700);
     const norm = normalize(email);
 
-    const demo = loadDemoAdmin();
-    if (norm === demo.email && password === demo.senha) {
+    const superAdmin = CONFIG.demoSuperAdmin;
+    if (norm === superAdmin.email && password === superAdmin.password) {
       persistSession({
         token: createToken(),
-        userName: demo.nome,
+        userName: superAdmin.name,
         userEmail: norm,
+        expiresAt: Date.now() + CONFIG.sessionTtlMs,
+        role: "superusuario",
+      });
+      return { ok: true, role: "superusuario" };
+    }
+
+    const admin = validateAdminLogin(email, password);
+    if (admin) {
+      persistSession({
+        token: createToken(),
+        userName: admin.nome,
+        userEmail: admin.email,
         expiresAt: Date.now() + CONFIG.sessionTtlMs,
         role: "admin",
       });
@@ -224,12 +237,12 @@ export async function loginInterno(email: string, password: string): Promise<Log
 export async function loginCliente(email: string, password: string): Promise<LoginResult> {
   if (isMockMode()) {
     await delay(700);
-    const cliente = validateClienteLogin(email, password);
-    if (cliente) {
+    const result = await validateClienteLogin(email, password);
+    if (result) {
       persistSession({
-        token: createToken(),
-        userName: cliente.nome,
-        userEmail: cliente.email,
+        token: result.token,
+        userName: result.cliente.nome,
+        userEmail: result.cliente.email,
         expiresAt: Date.now() + CONFIG.sessionTtlMs,
         role: "cliente",
       });
@@ -298,6 +311,11 @@ export function requireRole(allowed: UserRole[]): Session {
 }
 
 export function logout(): void {
+  /* Fire-and-forget: notifica o backend sobre o logout sem bloquear o fluxo */
+  apiFetch("/auth/logout", { method: "POST" }).catch(() => {
+    /* ignorar — o logout local continua mesmo se o backend falhar */
+  });
+
   sessionStorage.removeItem(CONFIG.sessionKey);
   navigateTo("/login");
 }

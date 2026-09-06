@@ -1,25 +1,24 @@
 import { CONFIG } from "../config.js";
-import type { Appointment, BookingDraft } from "../types.js";
-import { loadProfessionals, loadServices } from "../services/catalog.js";
-import { occupiedTimes } from "../services/booking.js";
+import type { Appointment, BookingDraft, Professional } from "../types.js";
+import { fetchBarbeiros, loadProfessionals, loadServices } from "../services/catalog.js";
+import { createAppointment, reschedule } from "../services/booking.js";
 import { isDateOpen, slotsForDate } from "../services/schedule.js";
-import { $, $$, clearElement, clearFormErrors, escapeHtml, initials, setFieldError } from "../ui/dom.js";
+import { $, $$, clearElement, clearFormErrors, escapeHtml, initials } from "../ui/dom.js";
 import { icon, serviceIcon } from "../ui/icons.js";
 import { formatCurrency, formatDateLong, toIsoDate } from "../ui/format.js";
-import { attachPhoneMask } from "../ui/mask.js";
 import { closeModal, openModal } from "../ui/modal.js";
-import { createAppointment, rescheduleAppointment } from "../services/booking.js";
 import { showToast } from "../ui/toast.js";
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 3;
 
 interface WizardState {
   step: number;
-  serviceIds: Set<string>;
+  serviceId: string | null;
   professionalId: string | null;
   dateIso: string | null;
   time: string | null;
-  rescheduleCode: string | null;
+  rescheduleId: string | null;
+  rescheduleAppointment: Appointment | null;
 }
 
 export interface BookingWizardHandle {
@@ -33,11 +32,19 @@ export interface BookingWizardOptions {
 
 export function initBookingWizard(options: BookingWizardOptions = {}): BookingWizardHandle {
   let catalogServices = loadServices();
-  let catalogProfessionals = loadProfessionals();
+  let catalogProfessionals: Professional[] = [];
 
-  const refreshCatalog = (): void => {
+  // Atualiza o catálogo local do wizard buscando SOMENTE barbeiros.
+  // O cache global (`loadProfessionals`) permanece completo para o painel
+  // admin/recepção e para minhaConta; o wizard passa a depender desta lista.
+  const refreshCatalog = async (): Promise<void> => {
     catalogServices = loadServices();
-    catalogProfessionals = loadProfessionals();
+    try {
+      catalogProfessionals = await fetchBarbeiros();
+    } catch {
+      // Fallback: usa o cache global já populado (pelo prime), se houver.
+      catalogProfessionals = loadProfessionals().filter((p) => p.cargo === "barbeiro");
+    }
   };
   const overlay = $("#booking-modal")!;
   const form = $<HTMLFormElement>("#booking-form")!;
@@ -52,21 +59,20 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   const slotsHint = $("#slots-hint")!;
   const totalEl = $("#booking-total")!;
   const footer = $(".wizard__footer", form)!;
+  const bodyScroll = $(".wizard__body", form)!;
   const prevBtn = $<HTMLButtonElement>("#booking-prev")!;
   const nextBtn = $<HTMLButtonElement>("#booking-next")!;
-  const nameInput = $<HTMLInputElement>("#client-name")!;
-  const phoneInput = $<HTMLInputElement>("#client-phone")!;
-  const emailInput = $<HTMLInputElement>("#client-email")!;
   const successTitle = $("#booking-success-title")!;
   const summaryEl = $("#booking-summary")!;
 
   const state: WizardState = {
     step: 1,
-    serviceIds: new Set(),
+    serviceId: null,
     professionalId: null,
     dateIso: null,
     time: null,
-    rescheduleCode: null,
+    rescheduleId: null,
+    rescheduleAppointment: null,
   };
 
   const today = new Date();
@@ -75,17 +81,16 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   horizon.setDate(horizon.getDate() + CONFIG.bookingHorizonDays);
   const maxIso = toIsoDate(horizon);
 
-  attachPhoneMask(phoneInput);
-
-  function isDateEnabled(iso: string): boolean {
-    return isDateOpen(iso);
+  async function isDateEnabled(iso: string): Promise<boolean> {
+    if (!state.professionalId) return false;
+    return isDateOpen(iso, state.professionalId);
   }
 
-  function defaultDateIso(): string {
+  async function defaultDateIso(): Promise<string> {
     const candidate = new Date(today);
     for (let attempt = 0; attempt < 7; attempt++) {
       const iso = toIsoDate(candidate);
-      if (isDateEnabled(iso)) return iso;
+      if (await isDateEnabled(iso)) return iso;
       candidate.setDate(candidate.getDate() + 1);
     }
     return minIso;
@@ -94,7 +99,6 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   function initDateField(): void {
     dateInput.min = minIso;
     dateInput.max = maxIso;
-    if (!dateInput.value) dateInput.value = defaultDateIso();
 
     dateControl.addEventListener("click", () => {
       try {
@@ -109,24 +113,27 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       if (!value) {
         state.dateIso = null;
         state.time = null;
-        renderSlots();
+        void renderSlots();
         validateStep(2, false);
         return;
       }
       if (value < minIso || value > maxIso) {
         showToast("Escolha uma data dentro do horizonte de 45 dias.", "error");
-        dateInput.value = state.dateIso ?? defaultDateIso();
+        dateInput.value = state.dateIso ?? "";
         return;
       }
-      if (!isDateEnabled(value)) {
-        showToast("A barbearia está fechada nesta data. Escolha outra.", "error");
-        dateInput.value = state.dateIso ?? defaultDateIso();
-        return;
-      }
-      state.dateIso = value;
-      state.time = null;
-      renderSlots();
-      validateStep(2, false);
+      void (async () => {
+        const enabled = await isDateEnabled(value);
+        if (!enabled) {
+          showToast("A barbearia está fechada nesta data. Escolha outra.", "error");
+          dateInput.value = state.dateIso ?? "";
+          return;
+        }
+        state.dateIso = value;
+        state.time = null;
+        await renderSlots();
+        validateStep(2, false);
+      })();
     });
   }
 
@@ -141,7 +148,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       const label = document.createElement("label");
       label.className = "option-card service-option";
       label.innerHTML = `
-        <input type="checkbox" name="service" value="${service.id}">
+        <input type="radio" name="service" value="${service.id}">
         <span class="service-option__icon">${serviceIcon(service.icon)}</span>
         <span class="service-option__info">
           <strong>${escapeHtml(service.name)}</strong>
@@ -150,15 +157,11 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
         <span class="service-option__price">${formatCurrency(service.price)}</span>
         <span class="option-check">${icon("check", 14)}</span>`;
       const input = label.querySelector<HTMLInputElement>("input")!;
-      input.checked = state.serviceIds.has(service.id);
+      input.checked = state.serviceId === service.id;
       input.addEventListener("change", () => {
-        if (input.checked) {
-          state.serviceIds.add(service.id);
-        } else {
-          state.serviceIds.delete(service.id);
-        }
+        if (input.checked) state.serviceId = service.id;
         updateTotal();
-        renderProfessionals();
+        void renderProfessionals();
         validateStep(1, false);
       });
       servicesBox.appendChild(label);
@@ -166,28 +169,19 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     updateTotal();
   }
 
-  function selectedCategories(): Set<string> {
-    const categories = new Set<string>();
-    for (const id of state.serviceIds) {
-      const category = catalogServices.find((s) => s.id === id)?.category;
-      if (category) categories.add(category);
-    }
-    return categories;
-  }
-
-  function renderProfessionals(): void {
+  async function renderProfessionals(): Promise<void> {
     clearElement(prosBox);
-    const categories = selectedCategories();
-    const available = catalogProfessionals.filter(
-      (p) => p.active && (categories.size === 0 || categories.has(p.category)),
-    );
+    // Somente barbeiros podem ser agendados. Itens sem o campo `cargo`
+    // (payload antigo) NÃO são exibidos, para não permitir agendar com
+    // recepcionista/administrador que não possuem horario_trabalho.
+    const available = catalogProfessionals.filter((p) => p.active && p.cargo === "barbeiro");
 
     if (state.professionalId && !available.some((p) => p.id === state.professionalId)) {
       state.professionalId = null;
     }
 
     if (available.length === 0) {
-      prosBox.innerHTML = `<p class="options-empty options-empty--alert options-empty--error">${icon("alert-circle", 18)}<span>Nenhum profissional atende a categoria selecionada.</span></p>`;
+      prosBox.innerHTML = `<p class="options-empty options-empty--alert options-empty--error">${icon("alert-circle", 18)}<span>Nenhum profissional disponível no momento.</span></p>`;
       return;
     }
 
@@ -205,8 +199,17 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       const input = label.querySelector<HTMLInputElement>("input")!;
       input.checked = state.professionalId === pro.id;
       input.addEventListener("change", () => {
-        if (input.checked) state.professionalId = pro.id;
-        renderSlots();
+        if (input.checked) {
+          state.professionalId = pro.id;
+          // Ao trocar de profissional, reavalia a data e os horários.
+          void (async () => {
+            const hasSlots = await isDateEnabled(state.dateIso ?? "");
+            if (state.dateIso && hasSlots) {
+              state.time = null;
+              await renderSlots();
+            }
+          })();
+        }
         validateStep(2, false);
       });
       prosBox.appendChild(label);
@@ -220,8 +223,10 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     slotsBox.hidden = true;
   }
 
-  function renderSlots(): void {
+  async function renderSlots(): Promise<void> {
     clearElement(slotsBox);
+    slotsHint.hidden = true;
+    slotsBox.hidden = false;
     if (!state.dateIso || !state.professionalId) {
       const message = !state.dateIso
         ? "Escolha uma data para ver os horários disponíveis."
@@ -230,15 +235,14 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       return;
     }
 
-    const slots = slotsForDate(state.dateIso);
+    // slotsForDate() já retorna apenas slots realmente livres (filtra
+    // ocupados via endpoint /horarios/funcionario-disponibilidade).
+    const slots = await slotsForDate(state.dateIso, state.professionalId);
     if (slots.length === 0) {
       showSlotsHint("A barbearia está fechada nesta data. Escolha outra.", "error");
       return;
     }
 
-    slotsHint.hidden = true;
-    slotsBox.hidden = false;
-    const occupied = occupiedTimes(state.dateIso, state.professionalId ?? "");
     const now = new Date();
     const isToday = state.dateIso === toIsoDate(now);
     for (const hour of slots) {
@@ -254,10 +258,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
           slotDate.setHours(h ?? 0, m ?? 0, 0, 0);
           return slotDate.getTime() <= now.getTime();
         })();
-      btn.disabled = occupied.has(hour) || expired;
-      if (btn.disabled && occupied.has(hour)) {
-        btn.title = "Horário ocupado";
-      }
+      btn.disabled = expired;
       if (state.time === hour && !btn.disabled) {
         btn.classList.add("is-selected");
       }
@@ -273,8 +274,8 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
 
   function updateTotal(): void {
     let total = 0;
-    for (const id of state.serviceIds) {
-      total += catalogServices.find((s) => s.id === id)?.price ?? 0;
+    if (state.serviceId) {
+      total += catalogServices.find((s) => s.id === state.serviceId)?.price ?? 0;
     }
     totalEl.textContent = formatCurrency(total);
   }
@@ -292,18 +293,19 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     prevBtn.hidden = step === 1 || step === TOTAL_STEPS;
     nextBtn.hidden = step === TOTAL_STEPS;
     footer.classList.toggle("wizard__footer--summary", step === TOTAL_STEPS);
-    nextBtn.textContent = step === 3 ? "Confirmar agendamento" : "Continuar";
+    nextBtn.textContent = step === 2 ? "Confirmar agendamento" : "Continuar";
     if (step === 2) {
-      renderSlots();
+      void renderSlots();
     }
     const activePanel = panels.find((p) => Number(p.dataset.step) === step);
     if (activePanel) activePanel.scrollTop = 0;
+    bodyScroll.scrollTop = 0;
   }
 
   function validateStep(step: number, report: boolean): boolean {
     if (step === 1) {
-      const valid = state.serviceIds.size > 0;
-      if (!valid && report) showToast("Selecione pelo menos um serviço.", "error");
+      const valid = Boolean(state.serviceId);
+      if (!valid && report) showToast("Selecione um serviço.", "error");
       return valid;
     }
     if (step === 2) {
@@ -318,53 +320,28 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       }
       return valid;
     }
-    if (step === 3) {
-      let valid = true;
-      const name = nameInput.value.trim();
-      const digits = phoneInput.value.replace(/\D/g, "");
-      const email = emailInput.value.trim();
-
-      if (name.length < 3 || !name.includes(" ")) {
-        if (report) setFieldError(nameInput, "Informe seu nome completo.");
-        valid = false;
-      } else if (report) {
-        setFieldError(nameInput, null);
-      }
-
-      if (digits.length < 10) {
-        if (report) setFieldError(phoneInput, "Informe um telefone válido com DDD.");
-        valid = false;
-      } else if (report) {
-        setFieldError(phoneInput, null);
-      }
-
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
-        if (report) setFieldError(emailInput, "Informe um e-mail válido.");
-        valid = false;
-      } else if (report) {
-        setFieldError(emailInput, null);
-      }
-      return valid;
-    }
+    // Passo 3 é apenas a tela de sucesso; o cliente autenticado vem do token
+    // no backend. Não há mais formulário de dados do cliente no wizard.
+    if (step === 3) return true;
     return true;
   }
 
   function buildSummaryRows(appointment: Appointment): void {
-    const serviceNames = appointment.serviceIds
-      .map((id) => catalogServices.find((s) => s.id === id)?.name ?? "")
-      .filter(Boolean)
-      .join(", ");
-    const professional = catalogProfessionals.find((p) => p.id === appointment.professionalId);
-    let total = 0;
-    for (const id of appointment.serviceIds) {
-      total += catalogServices.find((s) => s.id === id)?.price ?? 0;
-    }
+    const serviceName =
+      catalogServices.find((s) => s.id === appointment.servicoId)?.name ??
+      appointment.servicoNome ??
+      "";
+    const professional =
+      catalogProfessionals.find((p) => p.id === appointment.funcionarioId)?.name ??
+      appointment.funcionarioNome ??
+      "-";
+    const total = catalogServices.find((s) => s.id === appointment.servicoId)?.price ?? 0;
     const rows: Array<[string, string]> = [
-      ["Serviço(s)", serviceNames],
-      ["Profissional", professional?.name ?? "-"],
-      ["Data", formatDateLong(appointment.dateIso)],
-      ["Horário", appointment.time],
-      ["Cliente", appointment.clientName],
+      ["Serviço(s)", serviceName],
+      ["Profissional", professional],
+      ["Data", formatDateLong(appointment.data)],
+      ["Horário", appointment.hora],
+      ["Cliente", appointment.clienteNome ?? "-"],
       ["Total", formatCurrency(total)],
     ];
     summaryEl.innerHTML = rows
@@ -376,38 +353,33 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   }
 
   async function submit(): Promise<void> {
-    if (!validateStep(3, true)) return;
-    if (!state.professionalId || !state.dateIso || !state.time) return;
+    if (!state.professionalId || !state.serviceId || !state.dateIso || !state.time) return;
 
     const draft: BookingDraft = {
-      serviceIds: [...state.serviceIds],
-      professionalId: state.professionalId,
-      dateIso: state.dateIso,
-      time: state.time,
-      clientName: nameInput.value,
-      phone: phoneInput.value,
-      email: emailInput.value,
+      funcionario_id: state.professionalId,
+      servico_id: state.serviceId,
+      data: state.dateIso,
+      hora: state.time,
     };
 
     nextBtn.disabled = true;
     try {
-      const appointment = state.rescheduleCode
-        ? await rescheduleAppointment(state.rescheduleCode, {
-            professionalId: draft.professionalId,
-            dateIso: draft.dateIso,
-            time: draft.time,
-          })
-        : await createAppointment(draft);
+      let appointment: Appointment;
+      if (state.rescheduleId) {
+        // Decisão aprovada: reagendar = cancelar + criar.
+        await reschedule(state.rescheduleId);
+        appointment = await createAppointment(draft);
+      } else {
+        appointment = await createAppointment(draft);
+      }
 
-      if (!appointment) throw new Error("not-found");
-
-      successTitle.textContent = state.rescheduleCode
+      successTitle.textContent = state.rescheduleId
         ? "Horário atualizado!"
         : "Agendamento realizado!";
       buildSummaryRows(appointment);
       goToStep(TOTAL_STEPS);
       showToast(
-        state.rescheduleCode
+        state.rescheduleId
           ? "Horário do agendamento atualizado."
           : "Agendamento criado! Aguarde a confirmação da barbearia.",
       );
@@ -419,18 +391,19 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     }
   }
 
-  function resetWizard(): void {
-    state.serviceIds.clear();
+  async function resetWizard(): Promise<void> {
+    state.serviceId = null;
     state.professionalId = null;
-    state.dateIso = defaultDateIso();
+    state.dateIso = await defaultDateIso();
     state.time = null;
-    state.rescheduleCode = null;
+    state.rescheduleId = null;
+    state.rescheduleAppointment = null;
     form.reset();
     clearFormErrors(form);
     dateInput.value = state.dateIso;
     renderServices();
-    renderProfessionals();
-    renderSlots();
+    await renderProfessionals();
+    await renderSlots();
     goToStep(1);
   }
 
@@ -439,8 +412,10 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   });
 
   nextBtn.addEventListener("click", () => {
-    if (state.step === 3) {
-      void submit();
+    if (state.step === 2) {
+      if (validateStep(2, true)) {
+        void submit();
+      }
       return;
     }
     if (validateStep(state.step, true)) {
@@ -449,19 +424,19 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   });
 
   $<HTMLButtonElement>("#booking-restart")!.addEventListener("click", () => {
-    resetWizard();
+    void resetWizard();
     closeModal(overlay);
   });
 
   overlay.addEventListener("modal:close", () => {
-    if (state.step === TOTAL_STEPS) resetWizard();
+    if (state.step === TOTAL_STEPS) void resetWizard();
   });
 
   async function openNew(preselectServiceId?: string): Promise<void> {
-    refreshCatalog();
-    resetWizard();
+    await refreshCatalog();
+    await resetWizard();
     if (preselectServiceId) {
-      state.serviceIds.add(preselectServiceId);
+      state.serviceId = preselectServiceId;
       const input = servicesBox.querySelector<HTMLInputElement>(
         `input[value="${preselectServiceId}"]`,
       );
@@ -471,26 +446,30 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     openModal(overlay);
   }
 
-  function openForReschedule(appointment: Appointment): void {
-    refreshCatalog();
-    resetWizard();
-    state.rescheduleCode = appointment.code;
-    state.serviceIds = new Set(appointment.serviceIds);
-    state.professionalId = appointment.professionalId;
-    nameInput.value = appointment.clientName;
-    phoneInput.value = appointment.phone;
-    emailInput.value = appointment.email;
+  async function openForReschedule(appointment: Appointment): Promise<void> {
+    await refreshCatalog();
+    await resetWizard();
+    state.rescheduleId = appointment.id;
+    if (appointment.servicoId) {
+      state.serviceId = appointment.servicoId;
+      const input = servicesBox.querySelector<HTMLInputElement>(
+        `input[value="${appointment.servicoId}"]`,
+      );
+      if (input) input.checked = true;
+      updateTotal();
+    }
+    state.professionalId = appointment.funcionarioId;
     renderServices();
     renderProfessionals();
-    const rescheduleIso =
-      appointment.dateIso >= minIso &&
-      appointment.dateIso <= maxIso &&
-      isDateEnabled(appointment.dateIso)
-        ? appointment.dateIso
-        : defaultDateIso();
-    state.dateIso = rescheduleIso;
-    dateInput.value = rescheduleIso;
-    state.time = appointment.dateIso === rescheduleIso ? appointment.time : null;
+
+    let rescheduleIso = appointment.data;
+    if (rescheduleIso >= minIso && rescheduleIso <= maxIso && (await isDateEnabled(rescheduleIso))) {
+      state.dateIso = rescheduleIso;
+    } else {
+      state.dateIso = await defaultDateIso();
+    }
+    dateInput.value = state.dateIso;
+    state.time = appointment.data === state.dateIso ? appointment.hora : null;
     renderSlots();
     goToStep(2);
     openModal(overlay);
@@ -498,7 +477,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
 
   initDateField();
   renderServices();
-  renderProfessionals();
+  void renderProfessionals();
   goToStep(1);
 
   return { openNew, openForReschedule };

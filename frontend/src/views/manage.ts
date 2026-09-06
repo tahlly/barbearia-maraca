@@ -1,29 +1,34 @@
 import { renderPanel } from "../ui/layout.js";
-import { requireRole, updateSessionUser, getSession } from "../services/auth.js";
+import { requireRole, updateSessionUser } from "../services/auth.js";
 import { $$, $, escapeHtml, initials } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { formatCurrency, formatDateMedium } from "../ui/format.js";
 import {
   loadServices,
-  saveServices,
   loadProfessionals,
-  saveProfessionals,
   loadCategories,
   saveCategories,
+  createServico,
+  updateServico,
+  setServicoStatus,
 } from "../services/catalog.js";
 import {
-  loadAllAppointments,
-  setAppointmentStatus,
+  listAppointments,
+  cancelAppointment,
+  confirmAppointment,
+  concludeAppointment,
 } from "../services/booking.js";
 import {
   createUsuarioInterno,
   deleteUsuarioInterno,
   findUsuarioByEmail,
   findByProfessionalId,
+  updateUsuarioInterno,
 } from "../services/usuarios.js";
-import { DEFAULT_DAYS, loadSchedule, saveSchedule } from "../services/schedule.js";
+import { DEFAULT_DAYS, loadSchedule, saveSchedule, type ScheduleConfig } from "../services/schedule.js";
 import { confirmDialog, openModal, closeModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
+import { renderSettingsForm } from "../features/settingsForm.js";
 import type { Service, ServiceIcon, Appointment, Professional } from "../types.js";
 import { CONFIG } from "../config.js";
 
@@ -37,6 +42,7 @@ interface DashboardFilter {
   mes: number;
   inicio: string;
   fim: string;
+  professionalId: string;
 }
 
 const STATUS_LABEL: Record<Appointment["status"], string> = {
@@ -91,10 +97,8 @@ function professionalName(id: string): string {
   return prosCache.find((p) => p.id === id)?.name ?? "-";
 }
 
-function serviceTotal(serviceIds: string[]): number {
-  let total = 0;
-  for (const id of serviceIds) total += servicesCache.find((s) => s.id === id)?.price ?? 0;
-  return total;
+function serviceTotal(serviceId: string): number {
+  return servicesCache.find((s) => s.id === serviceId)?.price ?? 0;
 }
 
 export function renderManage(container: HTMLElement): () => void {
@@ -134,20 +138,21 @@ export function renderManage(container: HTMLElement): () => void {
     mes: new Date().getMonth() + 1,
     inicio: "",
     fim: "",
+    professionalId: "todos",
   };
 
   function handleTab(tab: ManageTab): void {
-    if (tab === "dashboard") renderDashboard();
+    if (tab === "dashboard") void renderDashboard();
     else if (tab === "servicos") renderServicos();
-    else if (tab === "profissionais") renderProfissionais();
+    else if (tab === "profissionais") void renderProfissionais();
     else if (tab === "configuracoes") renderConfiguracoes();
-    else renderAgendamentos();
+    else void renderAgendamentos();
   }
 
   // ---------------------------------------------------------------- Dashboard
-  function renderDashboard(): void {
+  async function renderDashboard(): Promise<void> {
     refreshCaches();
-    const appointments = loadAllAppointments();
+    const appointments = await listAppointments();
 
     const years = availableYears(appointments);
     const selectedYear = years.includes(state.ano) ? state.ano : years[years.length - 1] ?? new Date().getFullYear();
@@ -193,6 +198,18 @@ export function renderManage(container: HTMLElement): () => void {
             <label class="field__label" for="dashboard-fim">Até</label>
             <input type="date" class="input" id="dashboard-fim" value="${state.fim}">
           </div>
+          <div class="field">
+            <label class="field__label" for="dashboard-profissional">Profissional</label>
+            <select class="input" id="dashboard-profissional" aria-label="Filtrar por profissional">
+              <option value="todos" ${state.professionalId === "todos" ? "selected" : ""}>Todos os profissionais</option>
+              ${prosCache
+                .map(
+                  (p) =>
+                    `<option value="${escapeHtml(p.id)}" ${p.id === state.professionalId ? "selected" : ""}>${escapeHtml(p.name)}</option>`,
+                )
+                .join("")}
+            </select>
+          </div>
         </div>
       </div>
       <div id="dashboard-metrics">${dashboardMetricsHTML(appointments)}</div>
@@ -203,13 +220,17 @@ export function renderManage(container: HTMLElement): () => void {
     const mesSelect = $<HTMLSelectElement>("#dashboard-mes", content);
     const inicioInput = $<HTMLInputElement>("#dashboard-inicio", content);
     const fimInput = $<HTMLInputElement>("#dashboard-fim", content);
+    const profissionalSelect = $<HTMLSelectElement>("#dashboard-profissional", content);
     const anoWrap = $("#dashboard-ano-wrap", content);
     const mesWrap = $("#dashboard-mes-wrap", content);
     const periodoWrap = $("#dashboard-periodo-wrap", content);
     const fimWrap = $("#dashboard-fim-wrap", content);
 
     const refresh = (): void => {
-      $("#dashboard-metrics", content)!.innerHTML = dashboardMetricsHTML(loadAllAppointments());
+      void (async () => {
+        const appts = await listAppointments();
+        $("#dashboard-metrics", content)!.innerHTML = dashboardMetricsHTML(appts);
+      })();
     };
 
     const modeHandler = (): void => {
@@ -247,31 +268,39 @@ export function renderManage(container: HTMLElement): () => void {
       state.fim = fimInput.value;
       refresh();
     };
+    const profissionalHandler = (): void => {
+      if (!profissionalSelect) return;
+      state.professionalId = profissionalSelect.value;
+      refresh();
+    };
 
     modeSelect?.addEventListener("change", modeHandler);
     anoSelect?.addEventListener("change", anoHandler);
     mesSelect?.addEventListener("change", mesHandler);
     inicioInput?.addEventListener("change", inicioHandler);
     fimInput?.addEventListener("change", fimHandler);
+    profissionalSelect?.addEventListener("change", profissionalHandler);
 
     cleanups.push(() => modeSelect?.removeEventListener("change", modeHandler));
     cleanups.push(() => anoSelect?.removeEventListener("change", anoHandler));
     cleanups.push(() => mesSelect?.removeEventListener("change", mesHandler));
     cleanups.push(() => inicioInput?.removeEventListener("change", inicioHandler));
     cleanups.push(() => fimInput?.removeEventListener("change", fimHandler));
+    cleanups.push(() => profissionalSelect?.removeEventListener("change", profissionalHandler));
   }
 
   function matchesFilter(a: Appointment): boolean {
-    const m = monthOf(a.dateIso);
-    const y = yearOf(a.dateIso);
+    if (state.professionalId !== "todos" && a.funcionarioId !== state.professionalId) return false;
+    const m = monthOf(a.data);
+    const y = yearOf(a.data);
     switch (state.mode) {
       case "ano":
         return y === state.ano;
       case "mes":
         return y === state.ano && m === state.mes;
       case "periodo": {
-        if (state.inicio && a.dateIso < state.inicio) return false;
-        if (state.fim && a.dateIso > state.fim) return false;
+        if (state.inicio && a.data < state.inicio) return false;
+        if (state.fim && a.data > state.fim) return false;
         return true;
       }
       default:
@@ -281,11 +310,6 @@ export function renderManage(container: HTMLElement): () => void {
 
   function dashboardMetricsHTML(appointments: Appointment[]): string {
     const filtered = appointments.filter(matchesFilter);
-    let revenue = 0;
-    for (const a of filtered) {
-      if (a.status === "cancelado") continue;
-      revenue += serviceTotal(a.serviceIds);
-    }
     const counts: Record<Appointment["status"], number> = {
       confirmado: 0,
       pendente: 0,
@@ -294,12 +318,38 @@ export function renderManage(container: HTMLElement): () => void {
     };
     for (const a of filtered) counts[a.status] += 1;
 
-    const sold: Record<string, number> = {};
+    // Bloco financeiro restrito ao Administrador (PRD: recepcionista não tem acesso financeiro).
+    const financial = isAdmin
+      ? (() => {
+          let revenue = 0;
+          const sold: Record<string, number> = {};
+          for (const a of filtered) {
+            if (a.status === "cancelado") continue;
+            revenue += serviceTotal(a.servicoId);
+            sold[a.servicoId] = (sold[a.servicoId] ?? 0) + 1;
+          }
+          const top = Object.entries(sold).sort((x, y) => y[1] - x[1]).slice(0, 3);
+          return { revenue, top };
+        })()
+      : null;
+    const concluidos = filtered.filter((a) => a.status === "concluido").length;
+
+    let destaque: Professional | null = null;
+    let destaqueConcluidos = 0;
+    const countsByPro: Record<string, number> = {};
     for (const a of filtered) {
-      if (a.status === "cancelado") continue;
-      for (const id of a.serviceIds) sold[id] = (sold[id] ?? 0) + 1;
+      if (a.status !== "concluido") continue;
+      countsByPro[a.funcionarioId] = (countsByPro[a.funcionarioId] ?? 0) + 1;
     }
-    const top = Object.entries(sold).sort((x, y) => y[1] - x[1]).slice(0, 3);
+    const idsByCount = Object.entries(countsByPro).sort((x, y) => {
+      if (y[1] !== x[1]) return y[1] - x[1];
+      return topProResult(x[0], y[0], filtered);
+    });
+    if (idsByCount.length > 0) {
+      const [id, count] = idsByCount[0]!;
+      destaque = prosCache.find((p) => p.id === id) ?? null;
+      destaqueConcluidos = count;
+    }
 
     return `
       <div class="kpi-grid">
@@ -307,20 +357,25 @@ export function renderManage(container: HTMLElement): () => void {
         <div class="kpi-card"><span class="kpi-card__label">${icon("check-circle", 16)} Confirmados</span><span class="kpi-card__value kpi-card__value--success">${counts.confirmado}</span></div>
         <div class="kpi-card"><span class="kpi-card__label">${icon("clock", 16)} Pendentes</span><span class="kpi-card__value kpi-card__value--gold">${counts.pendente}</span></div>
         <div class="kpi-card"><span class="kpi-card__label">${icon("x", 16)} Cancelados</span><span class="kpi-card__value kpi-card__value--danger">${counts.cancelado}</span></div>
-        <div class="kpi-card"><span class="kpi-card__label">${icon("dollar", 16)} Faturamento</span><span class="kpi-card__value kpi-card__value--gold">${formatCurrency(revenue)}</span></div>
+        ${financial ? `<div class="kpi-card"><span class="kpi-card__label">${icon("dollar", 16)} Faturamento</span><span class="kpi-card__value kpi-card__value--gold">${formatCurrency(financial.revenue)}</span></div>` : ""}
+        <div class="kpi-card kpi-card--destaque">
+          <span class="kpi-card__label">${icon("star", 16)} Profissional destaque do mês</span>
+          ${destaque ? destaqueCardHTML(destaque, destaqueConcluidos) : `<p class="panel__empty kpi-card__empty">${concluidos === 0 ? "Sem atendimentos concluídos nesse recorte." : "Nenhum profissional encontrado."}</p>`}
+        </div>
       </div>
+      ${financial ? `
       <div class="panel__section">
         <h3 class="panel__section-title">Serviços mais vendidos</h3>
         <div class="card">
-          ${top.length === 0 ? `<p class="panel__empty">Ainda não há dados suficientes.</p>` : ""}
-          ${top
+          ${financial.top.length === 0 ? `<p class="panel__empty">Ainda não há dados suficientes.</p>` : ""}
+          ${financial.top
             .map(
               ([id, count]) =>
                 `<div class="top-service"><span>${escapeHtml(serviceName(id))}</span><strong>${count}×</strong></div>`,
             )
             .join("")}
         </div>
-      </div>
+      </div>` : ""}
     `;
   }
 
@@ -334,10 +389,39 @@ export function renderManage(container: HTMLElement): () => void {
     return Number.isNaN(y) ? -1 : y;
   }
 
+  /** Critério de desempate para o destaque do mês: atendimento concluído mais recente. */
+  function topProResult(a: string, b: string, list: Appointment[]): number {
+    const latest = (id: string) => {
+      const matches = list
+        .filter((x) => x.funcionarioId === id && x.status === "concluido")
+        .map((x) => `${x.data}T${x.hora}|${x.criadoEm ?? ""}`)
+        .sort();
+      return matches[matches.length - 1] ?? "";
+    };
+    const va = latest(a);
+    const vb = latest(b);
+    return vb.localeCompare(va);
+  }
+
+  function destaqueCardHTML(pro: Professional, concluidos: number): string {
+    const avatar = pro.photoUrl
+      ? `<span class="avatar avatar--lg avatar--photo" style="background-image:url('${pro.photoUrl}')"></span>`
+      : `<span class="avatar avatar--lg">${initials(pro.name)}</span>`;
+    return `
+      <div class="destaque-pro">
+        ${avatar}
+        <div class="destaque-pro__meta">
+          <strong class="destaque-pro__name">${escapeHtml(pro.name)}</strong>
+          <span class="destaque-pro__count">${concluidos} atendimento${concluidos === 1 ? "" : "s"} concluído${concluidos === 1 ? "" : "s"}</span>
+        </div>
+      </div>
+    `;
+  }
+
   function availableYears(appointments: Appointment[]): number[] {
     const set = new Set<number>();
     for (const a of appointments) {
-      const y = yearOf(a.dateIso);
+      const y = yearOf(a.data);
       if (y >= 0) set.add(y);
     }
     set.add(new Date().getFullYear());
@@ -345,11 +429,11 @@ export function renderManage(container: HTMLElement): () => void {
   }
 
   // ----------------------------------------------------------- Agendamentos
-  function renderAgendamentos(): void {
+  async function renderAgendamentos(): Promise<void> {
     refreshCaches();
-    const appointments = loadAllAppointments().sort((a, b) => {
-      const ka = `${a.dateIso}T${a.time}`;
-      const kb = `${b.dateIso}T${b.time}`;
+    const appointments = (await listAppointments()).sort((a, b) => {
+      const ka = `${a.data}T${a.hora}`;
+      const kb = `${b.data}T${b.hora}`;
       return kb.toString().localeCompare(ka.toString());
     });
 
@@ -419,9 +503,9 @@ export function renderManage(container: HTMLElement): () => void {
       const fimv = fim?.value ?? "";
       const filtered = appointments.filter((a) => {
         if (status !== "todos" && a.status !== status) return false;
-        if (q && !a.clientName.toLowerCase().includes(q) && !a.email.toLowerCase().includes(q)) return false;
-        if (ini && a.dateIso < ini) return false;
-        if (fimv && a.dateIso > fimv) return false;
+        if (q && !(a.clienteNome ?? "").toLowerCase().includes(q)) return false;
+        if (ini && a.data < ini) return false;
+        if (fimv && a.data > fimv) return false;
         return true;
       });
       $("#manage-agenda-table", content)!.innerHTML = buildAgendamentosTable(filtered);
@@ -453,7 +537,9 @@ export function renderManage(container: HTMLElement): () => void {
 
     const openAgendaBtn = $<HTMLButtonElement>("[data-open-agenda]", content);
     if (openAgendaBtn) {
-      const h = (): void => openScheduleModal();
+      const h = (): void => {
+        void openScheduleModal();
+      };
       openAgendaBtn.addEventListener("click", h);
       cleanups.push(() => openAgendaBtn.removeEventListener("click", h));
     }
@@ -462,58 +548,82 @@ export function renderManage(container: HTMLElement): () => void {
   }
 
   function bindAgendaRows(): void {
-    $$("[data-set-status]", content).forEach((btn) => {
-      const code = btn.getAttribute("data-code")!;
-      const target = btn.getAttribute("data-set-status")!;
+    $$("[data-confirm-app]", content).forEach((btn) => {
+      const id = btn.getAttribute("data-id")!;
       const h = (): void => {
-        void handleSetStatus(code, target as Appointment["status"]);
+        void handleSetStatus(id, "confirmado");
+      };
+      btn.addEventListener("click", h);
+      cleanups.push(() => btn.removeEventListener("click", h));
+    });
+
+    $$("[data-conclude-app]", content).forEach((btn) => {
+      const id = btn.getAttribute("data-id")!;
+      const h = (): void => {
+        void handleSetStatus(id, "concluido");
       };
       btn.addEventListener("click", h);
       cleanups.push(() => btn.removeEventListener("click", h));
     });
 
     $$("[data-cancel-app]", content).forEach((btn) => {
-      const code = btn.getAttribute("data-cancel-app")!;
+      const id = btn.getAttribute("data-id")!;
       const h = (): void => {
-        void handleSetStatus(code, "cancelado");
+        void handleSetStatus(id, "cancelado");
       };
       btn.addEventListener("click", h);
       cleanups.push(() => btn.removeEventListener("click", h));
     });
 
     $$("[data-row-detail]", content).forEach((row) => {
-      const code = row.getAttribute("data-row-detail")!;
+      const id = row.getAttribute("data-row-detail")!;
       const h = (event: Event): void => {
         if (event.target instanceof Element && event.target.closest("button, a, select, input")) return;
-        const app = loadAllAppointments().find((a) => a.code === code) ?? null;
-        if (app) openDetailModal(app);
+        void (async () => {
+          const appts = await listAppointments();
+          const app = appts.find((a) => a.id === id) ?? null;
+          if (app) openDetailModal(app);
+        })();
       };
       row.addEventListener("click", h);
       cleanups.push(() => row.removeEventListener("click", h));
     });
   }
 
-  async function handleSetStatus(code: string, status: Appointment["status"]): Promise<void> {
+  async function handleSetStatus(id: string, status: Appointment["status"]): Promise<void> {
+    const appts = await listAppointments();
+    const app = appts.find((a) => a.id === id);
+
     if (status === "cancelado") {
-      const app = loadAllAppointments().find((a) => a.code === code);
       const confirmed = await confirmDialog({
         title: "Cancelar agendamento",
-        message: `Confirmar o cancelamento do agendamento de ${app?.clientName ?? "cliente"}?`,
+        message: `Confirmar o cancelamento do agendamento de ${app?.clienteNome ?? "cliente"}?`,
         confirmLabel: "Cancelar agendamento",
         danger: true,
       });
       if (!confirmed) return;
-    } else {
+      await cancelAppointment(id);
+      showToast("Agendamento cancelado.");
+    } else if (status === "confirmado") {
       const confirmed = await confirmDialog({
         title: "Confirmar presença",
         message: "Marcar este agendamento como confirmado?",
         confirmLabel: "Confirmar",
       });
       if (!confirmed) return;
+      await confirmAppointment(id);
+      showToast("Presença confirmada.");
+    } else if (status === "concluido") {
+      const confirmed = await confirmDialog({
+        title: "Concluir atendimento",
+        message: "Marcar este agendamento como concluído?",
+        confirmLabel: "Concluir",
+      });
+      if (!confirmed) return;
+      await concludeAppointment(id);
+      showToast("Atendimento concluído.");
     }
-    await setAppointmentStatus(code, status);
-    showToast(status === "cancelado" ? "Agendamento cancelado." : "Presença confirmada.");
-    renderAgendamentos();
+    await renderAgendamentos();
   }
 
   function buildAgendamentosTable(appointments: Appointment[]): string {
@@ -525,7 +635,6 @@ export function renderManage(container: HTMLElement): () => void {
         <thead>
           <tr>
             <th>Cliente</th>
-            <th>Telefone</th>
             <th>Profissional</th>
             <th>Serviço</th>
             <th>Data/Hora</th>
@@ -536,27 +645,30 @@ export function renderManage(container: HTMLElement): () => void {
         <tbody>
           ${appointments
             .map((a) => {
-              const names = a.serviceIds.map((id) => serviceName(id)).filter((n) => n !== "-").join(", ") || "-";
+              const name = a.servicoNome ?? "-";
+              const cliente = a.clienteNome ?? "-";
+              const funcionario = a.funcionarioNome ?? professionalName(a.funcionarioId) ?? "-";
               let actions = "";
               if (a.status === "pendente") {
                 actions = `<span class="actions-cell">
-                  <button type="button" class="btn btn--sm btn--success" data-set-status="confirmado" data-code="${escapeHtml(a.code)}">CONFIRMAR</button>
-                  <button type="button" class="btn btn--sm btn--danger-outline" data-cancel-app="${escapeHtml(a.code)}">Cancelar</button>
+                  <button type="button" class="btn btn--sm btn--success" data-confirm-app data-id="${escapeHtml(a.id)}">CONFIRMAR</button>
+                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-conclude-app data-id="${escapeHtml(a.id)}">CONCLUIR</button>
+                  <button type="button" class="btn btn--sm btn--danger-outline" data-cancel-app data-id="${escapeHtml(a.id)}">Cancelar</button>
                 </span>`;
               } else if (a.status === "confirmado") {
                 actions = `<span class="actions-cell">
-                  <button type="button" class="btn btn--sm btn--danger-outline" data-cancel-app="${escapeHtml(a.code)}">Cancelar</button>
+                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-conclude-app data-id="${escapeHtml(a.id)}">CONCLUIR</button>
+                  <button type="button" class="btn btn--sm btn--danger-outline" data-cancel-app data-id="${escapeHtml(a.id)}">Cancelar</button>
                 </span>`;
               } else {
                 actions = `<span class="actions-cell"><span class="muted-note">Sem ações</span></span>`;
               }
               return `
-                <tr class="is-clickable" data-row-detail="${escapeHtml(a.code)}" tabindex="0">
-                  <td><strong>${escapeHtml(a.clientName)}</strong></td>
-                  <td>${escapeHtml(a.phone)}</td>
-                  <td>${escapeHtml(professionalName(a.professionalId))}</td>
-                  <td>${escapeHtml(names)}</td>
-                  <td>${formatDateMedium(a.dateIso)} · ${a.time}</td>
+                <tr class="is-clickable" data-row-detail="${escapeHtml(a.id)}" tabindex="0">
+                  <td><strong>${escapeHtml(cliente)}</strong></td>
+                  <td>${escapeHtml(funcionario)}</td>
+                  <td>${escapeHtml(name)}</td>
+                  <td>${formatDateMedium(a.data)} · ${a.hora}</td>
                   <td>${statusBadge(a.status)}</td>
                   <td><span class="cell-actions">${actions}</span></td>
                 </tr>`;
@@ -568,8 +680,15 @@ export function renderManage(container: HTMLElement): () => void {
   }
 
   // ------------------------------------------------------- Agenda config modal
-  function openScheduleModal(): void {
-    const config = loadSchedule();
+  async function openScheduleModal(): Promise<void> {
+    // Em modo API, horários são por funcionário; resolve o perfil do usuário logado.
+    const usuario = await findUsuarioByEmail(session.userEmail);
+    const professionalId = usuario?.professionalId ?? null;
+    if (!professionalId) {
+      showToast("Não foi possível identificar seu perfil de funcionário.", "error");
+      return;
+    }
+    const config = await loadSchedule(professionalId);
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.setAttribute("aria-hidden", "true");
@@ -659,12 +778,13 @@ export function renderManage(container: HTMLElement): () => void {
       const input = overlay.querySelector<HTMLInputElement>("[data-blocked-date]")!;
       if (!input.value) return;
       const dateIso = input.value;
-      let blocked = loadSchedule().blockedDates;
+      let blocked = config.blockedDates;
       if (!blocked.includes(dateIso)) {
         blocked = [...blocked, dateIso];
-        const newConfig = { ...loadSchedule(), blockedDates: blocked };
-        saveSchedule(newConfig);
-        showToast("Data bloqueada.");
+        const newConfig: ScheduleConfig = { ...config, blockedDates: blocked };
+        void saveSchedule(newConfig, professionalId).then(() => {
+          showToast("Data bloqueada.");
+        });
         (overlay.querySelector("[data-blocked-list]") as HTMLUListElement).insertAdjacentHTML(
           "beforeend",
           `<li><span>${escapeHtml(formatDateMedium(dateIso))}</span><button type="button" class="btn btn--sm btn--ghost" data-remove-blocked="${escapeHtml(dateIso)}" aria-label="Remover">${icon("x", 14)}</button></li>`,
@@ -681,11 +801,11 @@ export function renderManage(container: HTMLElement): () => void {
         showToast("Preencha data, início e fim.", "error");
         return;
       }
-      const current = loadSchedule();
-      let exceptions = current.exceptions.filter((e) => e.dateIso !== dateIso);
+      let exceptions = config.exceptions.filter((e) => e.dateIso !== dateIso);
       exceptions = [...exceptions, { dateIso, start, end }];
-      saveSchedule({ ...current, exceptions });
-      showToast("Abertura excepcional adicionada.");
+      void saveSchedule({ ...config, exceptions }, professionalId).then(() => {
+        showToast("Abertura excepcional adicionada.");
+      });
       (overlay.querySelector("[data-exception-list]") as HTMLUListElement).insertAdjacentHTML(
         "beforeend",
         `<li><span>${escapeHtml(formatDateMedium(dateIso))} · ${start}–${end}</span><button type="button" class="btn btn--sm btn--ghost" data-remove-exception="${escapeHtml(dateIso)}" aria-label="Remover">${icon("x", 14)}</button></li>`,
@@ -699,20 +819,28 @@ export function renderManage(container: HTMLElement): () => void {
       const btn = (event.target as HTMLElement).closest("[data-remove-blocked]") as HTMLElement | null;
       if (!btn) return;
       const dateIso = btn.getAttribute("data-remove-blocked")!;
-      const current = loadSchedule();
-      saveSchedule({ ...current, blockedDates: current.blockedDates.filter((d) => d !== dateIso) });
-      btn.closest("li")?.remove();
-      showToast("Data desbloqueada.");
+      const newConfig: ScheduleConfig = {
+        ...config,
+        blockedDates: config.blockedDates.filter((d) => d !== dateIso),
+      };
+      void saveSchedule(newConfig, professionalId).then(() => {
+        btn.closest("li")?.remove();
+        showToast("Data desbloqueada.");
+      });
     });
 
     overlay.querySelector("[data-exception-list]")!.addEventListener("click", (event) => {
       const btn = (event.target as HTMLElement).closest("[data-remove-exception]") as HTMLElement | null;
       if (!btn) return;
       const dateIso = btn.getAttribute("data-remove-exception")!;
-      const current = loadSchedule();
-      saveSchedule({ ...current, exceptions: current.exceptions.filter((e) => e.dateIso !== dateIso) });
-      btn.closest("li")?.remove();
-      showToast("Exceção removida.");
+      const newConfig: ScheduleConfig = {
+        ...config,
+        exceptions: config.exceptions.filter((e) => e.dateIso !== dateIso),
+      };
+      void saveSchedule(newConfig, professionalId).then(() => {
+        btn.closest("li")?.remove();
+        showToast("Exceção removida.");
+      });
     });
 
     overlay.querySelector<HTMLFormElement>("#schedule-form")!.addEventListener("submit", (event) => {
@@ -726,10 +854,10 @@ export function renderManage(container: HTMLElement): () => void {
           end: (overlay.querySelector<HTMLInputElement>(`[data-day-end="${day}"]`)!).value,
         };
       }
-      const current = loadSchedule();
-      saveSchedule({ ...current, weekly });
-      showToast("Agenda configurada.");
-      finish();
+      void saveSchedule({ ...config, weekly }, professionalId).then(() => {
+        showToast("Agenda configurada.");
+        finish();
+      });
     });
 
     overlay.querySelectorAll("[data-close]").forEach((el) => el.addEventListener("click", finish));
@@ -742,7 +870,7 @@ export function renderManage(container: HTMLElement): () => void {
 
   // --------------------------------------------------------- Detail modal
   function openDetailModal(app: Appointment): void {
-    const names = app.serviceIds.map((id) => serviceName(id)).join(", ") || "-";
+    const name = app.servicoNome ?? "-";
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.setAttribute("aria-hidden", "true");
@@ -755,14 +883,13 @@ export function renderManage(container: HTMLElement): () => void {
         <div class="modal__body">
           <div class="detail-status">${statusBadge(app.status)}</div>
           <dl class="detail-list">
-            <div><dt>Cliente</dt><dd>${escapeHtml(app.clientName)}</dd></div>
-            <div><dt>Telefone</dt><dd>${escapeHtml(app.phone)}</dd></div>
-            <div><dt>E-mail</dt><dd>${escapeHtml(app.email)}</dd></div>
-            <div><dt>Serviço(s)</dt><dd>${escapeHtml(names)}</dd></div>
-            <div><dt>Profissional</dt><dd>${escapeHtml(professionalName(app.professionalId))}</dd></div>
-            <div><dt>Data</dt><dd>${formatDateMedium(app.dateIso)}</dd></div>
-            <div><dt>Horário</dt><dd>${app.time}</dd></div>
-            <div><dt>Total</dt><dd><strong class="detail-total">${formatCurrency(serviceTotal(app.serviceIds))}</strong></dd></div>
+            <div><dt>Cliente</dt><dd>${escapeHtml(app.clienteNome ?? "-")}</dd></div>
+            <div><dt>Serviço</dt><dd>${escapeHtml(name)}</dd></div>
+            <div><dt>Profissional</dt><dd>${escapeHtml(app.funcionarioNome ?? professionalName(app.funcionarioId) ?? "-")}</dd></div>
+            <div><dt>Data</dt><dd>${formatDateMedium(app.data)}</dd></div>
+            <div><dt>Horário</dt><dd>${app.hora}</dd></div>
+            <div><dt>Total</dt><dd><strong class="detail-total">${formatCurrency(serviceTotal(app.servicoId))}</strong></dd></div>
+            ${app.observacao ? `<div><dt>Observação</dt><dd>${escapeHtml(app.observacao)}</dd></div>` : ""}
           </dl>
           ${app.status === "cancelado" ? `<div class="alert alert--danger">Este agendamento foi cancelado.</div>` : ""}
           <div class="modal__footer">
@@ -786,15 +913,22 @@ export function renderManage(container: HTMLElement): () => void {
   // --------------------------------------------------------------- Serviços
   function renderServicos(): void {
     refreshCaches();
+    const actionsHeader = isAdmin ? `<th>Ações</th>` : "";
+    const actionsCell = (id: string): string =>
+      isAdmin
+        ? `<td><span class="cell-actions"><button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-service="${escapeHtml(id)}">Editar</button><button type="button" class="btn btn--sm btn--danger-outline" data-delete-service="${escapeHtml(id)}">Excluir</button></span></td>`
+        : "";
+
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
           <h3 class="panel__section-title">Serviços</h3>
           <p class="manage-head__sub">Gerencie os serviços oferecidos pelo salão</p>
         </div>
+        ${isAdmin ? `
         <div class="toolbar">
           <button type="button" class="btn btn--primary" data-new-service>${icon("plus", 16)} Novo serviço</button>
-        </div>
+        </div>` : ""}
       </div>
       <div class="table-wrap">
         <table class="table">
@@ -804,7 +938,7 @@ export function renderManage(container: HTMLElement): () => void {
               <th>Categoria</th>
               <th>Duração</th>
               <th>Preço</th>
-              <th>Ações</th>
+              ${actionsHeader}
             </tr>
           </thead>
           <tbody>
@@ -816,7 +950,7 @@ export function renderManage(container: HTMLElement): () => void {
                     <td>${escapeHtml(s.category || "-")}</td>
                     <td>${s.durationMin} min</td>
                     <td>${formatCurrency(s.price)}</td>
-                    <td><span class="cell-actions"><button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-service="${escapeHtml(s.id)}">Editar</button><button type="button" class="btn btn--sm btn--danger-outline" data-delete-service="${escapeHtml(s.id)}">Excluir</button></span></td>
+                    ${actionsCell(s.id)}
                   </tr>`,
               )
               .join("")}
@@ -856,6 +990,7 @@ export function renderManage(container: HTMLElement): () => void {
   }
 
   async function handleDeleteService(service: Service): Promise<void> {
+    if (!isAdmin) return; // Recepcionista não altera serviços (PRD).
     const confirmed = await confirmDialog({
       title: "Excluir serviço",
       message: `Excluir o serviço "${service.name}"? Esta ação não pode ser desfeita.`,
@@ -863,12 +998,17 @@ export function renderManage(container: HTMLElement): () => void {
       danger: true,
     });
     if (!confirmed) return;
-    servicesCache = servicesCache.filter((s) => s.id !== service.id);
-    saveServices(servicesCache);
+    try {
+      await setServicoStatus(service.id, false);
+      showToast("Serviço removido.");
+    } catch {
+      showToast("Erro ao remover serviço.", "error");
+    }
     renderServicos();
   }
 
   function openServiceModal(service: Service | null): void {
+    if (!isAdmin) return; // Recepcionista não altera serviços (PRD).
     const isEdit = Boolean(service);
     const categories = loadCategories();
     const overlay = document.createElement("div");
@@ -928,7 +1068,7 @@ export function renderManage(container: HTMLElement): () => void {
       window.setTimeout(() => overlay.remove(), 300);
     };
 
-    const submitHandler = (event: Event): void => {
+    const submitHandler = async (event: Event): Promise<void> => {
       event.preventDefault();
       const name = ($("#svc-name", overlay) as HTMLInputElement).value.trim();
       const duration = Number(($("#svc-duration", overlay) as HTMLInputElement).value);
@@ -947,29 +1087,22 @@ export function renderManage(container: HTMLElement): () => void {
       if (category && !loadCategories().includes(category)) {
         saveCategories([...loadCategories(), category]);
       }
-      if (isEdit && service) {
-        servicesCache = servicesCache.map((s) =>
-          s.id === service.id ? { ...s, name, category, durationMin: duration, price, icon: iconSel, description } : s,
-        );
-      } else {
-        servicesCache = [
-          ...servicesCache,
-          {
-            id: `svc-${Date.now().toString(36)}`,
-            name,
-            description,
-            category,
-            durationMin: duration,
-            price,
-            icon: iconSel,
-            active: true,
-          },
-        ];
+      try {
+        if (isEdit && service) {
+          await updateServico(service.id, { name, description, durationMin: duration, price });
+          showToast("Serviço atualizado.");
+        } else {
+          await createServico({ name, description, durationMin: duration, price });
+          showToast("Serviço criado!");
+        }
+        // PENDÊNCIA: icon e category são campos frontend-only; o backend não os persiste.
+        void iconSel;
+        void category;
+        finish();
+        renderServicos();
+      } catch {
+        showToast("Erro ao salvar serviço. Verifique os dados.", "error");
       }
-      saveServices(servicesCache);
-      showToast(isEdit ? "Serviço atualizado." : "Serviço criado!");
-      finish();
-      renderServicos();
     };
 
     form.addEventListener("submit", submitHandler);
@@ -982,16 +1115,16 @@ export function renderManage(container: HTMLElement): () => void {
   }
 
   // ----------------------------------------------------------- Profissionais
-  function monthAppointments(professionalId: string): number {
+  async function renderProfissionais(): Promise<void> {
+    refreshCaches();
+    const appts = await listAppointments();
     const now = new Date();
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    return loadAllAppointments().filter(
-      (a) => a.professionalId === professionalId && a.status !== "cancelado" && a.dateIso.startsWith(monthStart),
-    ).length;
-  }
-
-  function renderProfissionais(): void {
-    refreshCaches();
+    const counts = new Map<string, number>();
+    for (const a of appts) {
+      if (a.status === "cancelado" || !a.data.startsWith(monthStart)) continue;
+      counts.set(a.funcionarioId, (counts.get(a.funcionarioId) ?? 0) + 1);
+    }
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -1008,13 +1141,15 @@ export function renderManage(container: HTMLElement): () => void {
             (p) => `
               <div class="pro-card">
                 <div class="pro-card__head">
-                  <span class="avatar">${initials(p.name)}</span>
+                  ${p.photoUrl
+                    ? `<span class="avatar avatar--photo" style="background-image:url('${p.photoUrl}')"></span>`
+                    : `<span class="avatar">${initials(p.name)}</span>`}
                   <div class="pro-card__meta">
                     <strong>${escapeHtml(p.name)}</strong>
                     <span class="pro-card__role">${escapeHtml(p.role)}</span>
                   </div>
                 </div>
-                <div class="pro-card__metric">${icon("calendar", 16)} <span>Agendamentos este mês: <strong>${monthAppointments(p.id)}</strong></span></div>
+                <div class="pro-card__metric">${icon("calendar", 16)} <span>Agendamentos este mês: <strong>${counts.get(p.id) ?? 0}</strong></span></div>
                 <div class="pro-card__actions">
                   <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-pro="${escapeHtml(p.id)}">Editar</button>
                   <button type="button" class="btn btn--sm btn--danger-outline" data-del-pro="${escapeHtml(p.id)}">Excluir</button>
@@ -1028,7 +1163,9 @@ export function renderManage(container: HTMLElement): () => void {
 
     const newBtn = $<HTMLButtonElement>("[data-new-pro]", content);
     if (newBtn) {
-      const h = (): void => openProModal(null);
+      const h = (): void => {
+        void openProModal(null);
+      };
       newBtn.addEventListener("click", h);
       cleanups.push(() => newBtn.removeEventListener("click", h));
     }
@@ -1037,7 +1174,7 @@ export function renderManage(container: HTMLElement): () => void {
       const id = btn.getAttribute("data-edit-pro")!;
       const h = (): void => {
         const pro = prosCache.find((p) => p.id === id) ?? null;
-        openProModal(pro);
+        void openProModal(pro);
       };
       btn.addEventListener("click", h);
       cleanups.push(() => btn.removeEventListener("click", h));
@@ -1062,18 +1199,20 @@ export function renderManage(container: HTMLElement): () => void {
       danger: true,
     });
     if (!confirmed) return;
-    const usuario = findByProfessionalId(id);
-    if (usuario) deleteUsuarioInterno(usuario.id);
-    prosCache = prosCache.filter((p) => p.id !== id);
-    saveProfessionals(prosCache);
-    showToast("Profissional excluído.");
-    renderProfissionais();
+    try {
+      const usuario = await findByProfessionalId(id);
+      if (usuario) await deleteUsuarioInterno(usuario.id);
+      showToast("Profissional excluído.");
+    } catch {
+      showToast("Erro ao excluir profissional.", "error");
+    }
+    await renderProfissionais();
   }
 
-  function openProModal(pro: Professional | null): void {
+  async function openProModal(pro: Professional | null): Promise<void> {
     const isEdit = Boolean(pro);
     const categories = loadCategories();
-    const usuario = pro ? findByProfessionalId(pro.id) : null;
+    const usuario = pro ? await findByProfessionalId(pro.id) : null;
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.setAttribute("aria-hidden", "true");
@@ -1126,7 +1265,6 @@ export function renderManage(container: HTMLElement): () => void {
       const name = ($("#pro-name", overlay) as HTMLInputElement).value.trim();
       const email = ($("#pro-email", overlay) as HTMLInputElement).value.trim().toLowerCase();
       const role = ($("#pro-role", overlay) as HTMLInputElement).value.trim();
-      const category = ($("#pro-category", overlay) as HTMLSelectElement).value;
 
       if (name.length < 3) {
         showToast("Informe o nome.", "error");
@@ -1140,45 +1278,49 @@ export function renderManage(container: HTMLElement): () => void {
         showToast("Informe um e-mail válido.", "error");
         return;
       }
-      if (!isEdit && findUsuarioByEmail(email)) {
+      const existing = await findUsuarioByEmail(email);
+      if (!isEdit && existing) {
         showToast("Já existe um usuário com este e-mail.", "error");
         return;
       }
 
       if (isEdit && pro) {
-        prosCache = prosCache.map((p) => (p.id === pro.id ? { ...p, name, role, category } : p));
-        saveProfessionals(prosCache);
-      } else {
-        const proId = `pro-${Date.now().toString(36)}`;
-        prosCache = [
-          ...prosCache,
-          {
-            id: proId,
-            name,
-            role,
-            category,
-            active: true,
-            email,
-            userRole: "profissional",
-          },
-        ];
-        saveProfessionals(prosCache);
-        createUsuarioInterno({
+        try {
+          const existing = await findByProfessionalId(pro.id);
+          if (existing) {
+            // PUT /funcionarios aceita nome, cargo, especialidade, email e senha.
+            // role é o `cargo` do backend (barbeiro/recepcionista/administrador).
+            const cargo: "barbeiro" | "recepcionista" | "administrador" =
+              role.toLowerCase().includes("recepcion") ? "recepcionista" : "barbeiro";
+            await updateUsuarioInterno(existing.id, {
+              nome: name,
+              cargo,
+              especialidade: role,
+            });
+          }
+          showToast("Profissional atualizado.");
+        } catch {
+          showToast("Erro ao atualizar profissional.", "error");
+        }
+        finish();
+        await renderProfissionais();
+        return;
+      }
+
+      // Novo profissional: cria funcionário via API e atualiza o cache local.
+      try {
+        await createUsuarioInterno({
           nome: name,
           email,
           senha: CONFIG.defaultPassword,
           role: "profissional",
-          professionalId: proId,
         });
         showToast(`Profissional cadastrado! Senha padrão: ${CONFIG.defaultPassword}. Altere em Configurações.`, "success");
         finish();
-        renderProfissionais();
-        return;
+        await renderProfissionais();
+      } catch {
+        showToast("Não foi possível cadastrar o profissional. Verifique se o e-mail já está em uso.", "error");
       }
-
-      showToast("Profissional atualizado.");
-      finish();
-      renderProfissionais();
     };
 
     form.addEventListener("submit", submitHandler);
@@ -1192,7 +1334,6 @@ export function renderManage(container: HTMLElement): () => void {
 
   // ---------------------------------------------------------- Configurações
   function renderConfiguracoes(): void {
-    const current = getSession();
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -1200,167 +1341,20 @@ export function renderManage(container: HTMLElement): () => void {
           <p class="manage-head__sub">Segurança e dados do usuário</p>
         </div>
       </div>
-      <div class="config-card">
-        <div class="config-photo">
-          <span class="avatar avatar--lg">${initials(current?.userName ?? "?")}</span>
-          <input type="file" id="profile-photo" accept="image/*" hidden>
-          <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" id="profile-photo-btn">${icon("upload", 14)} Carregar foto</button>
-        </div>
-
-        <form id="profile-form" novalidate>
-          <div class="field">
-            <label class="field__label" for="profile-name">Nome</label>
-            <input type="text" id="profile-name" value="${escapeHtml(current?.userName ?? "")}" maxlength="80">
-          </div>
-
-          <h4 class="manage-form-title">Alterar senha</h4>
-          <div class="form-grid">
-            <div class="field">
-              <label class="field__label" for="pw-current">Senha atual</label>
-              <input type="password" id="pw-current" autocomplete="current-password">
-            </div>
-            <div class="field">
-              <label class="field__label" for="pw-new">Nova senha</label>
-              <input type="password" id="pw-new" autocomplete="new-password">
-            </div>
-            <div class="field">
-              <label class="field__label" for="pw-confirm">Confirmar nova senha</label>
-              <input type="password" id="pw-confirm" autocomplete="new-password">
-            </div>
-          </div>
-
-          <h4 class="manage-form-title">Alterar e-mail de acesso</h4>
-          <div class="form-grid">
-            <div class="field">
-              <label class="field__label" for="email-current">Senha atual</label>
-              <input type="password" id="email-pw" autocomplete="current-password">
-            </div>
-            <div class="field">
-              <label class="field__label" for="email-new">Novo e-mail</label>
-              <input type="email" id="email-new" value="${escapeHtml(current?.userEmail ?? "")}" autocapitalize="none" spellcheck="false">
-            </div>
-            <div class="field">
-              <label class="field__label" for="email-confirm">Confirmar novo e-mail</label>
-              <input type="email" id="email-confirm" autocapitalize="none" spellcheck="false">
-            </div>
-          </div>
-
-          <div class="config-actions">
-            <button type="button" class="btn btn--danger" data-profile-cancel>Cancelar</button>
-            <button type="submit" class="btn btn--success">Salvar alterações</button>
-          </div>
-        </form>
-      </div>
     `;
+    const formContainer = document.createElement("div");
+    content.appendChild(formContainer);
 
-    const photoBtn = $<HTMLButtonElement>("#profile-photo-btn", content);
-    const photoInput = $<HTMLInputElement>("#profile-photo", content);
-    const avatar = $<HTMLElement>(".config-photo .avatar", content);
-    if (photoBtn && photoInput && avatar) {
-      const click = (): void => photoInput.click();
-      photoBtn.addEventListener("click", click);
-      cleanups.push(() => photoBtn.removeEventListener("click", click));
-
-      photoInput.addEventListener("change", () => {
-        const file = photoInput.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = reader.result as string;
-          sessionStorage.setItem("maraca.profilePhoto", dataUrl);
-          avatar.style.backgroundImage = `url("${dataUrl}")`;
-          avatar.textContent = "";
-          showToast("Foto atualizada.");
-        };
-        reader.readAsDataURL(file);
-      });
-
-      const savedPhoto = sessionStorage.getItem("maraca.profilePhoto");
-      if (savedPhoto) {
-        avatar.style.backgroundImage = `url("${savedPhoto}")`;
-        avatar.textContent = "";
-      }
-    }
-
-    const form = $<HTMLFormElement>("#profile-form", content);
-    if (form) {
-      const cancelBtn = $<HTMLButtonElement>("[data-profile-cancel]", content);
-      if (cancelBtn) {
-        const cancel = (): void => {
-          const session = getSession();
-          const nameInput = $("#profile-name", content) as HTMLInputElement;
-          nameInput.value = session?.userName ?? "";
-          ($("#email-new", content) as HTMLInputElement).value = session?.userEmail ?? "";
-          (form.querySelectorAll('input[type="password"]') as NodeListOf<HTMLInputElement>).forEach((i) => {
-            i.value = "";
-          });
-          ($("#email-confirm", content) as HTMLInputElement).value = "";
-          showToast("Alterações descartadas.");
-        };
-        cancelBtn.addEventListener("click", cancel);
-        cleanups.push(() => cancelBtn.removeEventListener("click", cancel));
-      }
-
-      const submit = (event: Event): void => {
-        event.preventDefault();
-        const nome = ($("#profile-name", content) as HTMLInputElement).value.trim();
-        const pwCurrent = ($("#pw-current", content) as HTMLInputElement).value;
-        const pwNew = ($("#pw-new", content) as HTMLInputElement).value;
-        const pwConfirm = ($("#pw-confirm", content) as HTMLInputElement).value;
-        const emailPw = ($("#email-pw", content) as HTMLInputElement).value;
-        const emailNew = ($("#email-new", content) as HTMLInputElement).value.trim().toLowerCase();
-        const emailConfirm = ($("#email-confirm", content) as HTMLInputElement).value.trim().toLowerCase();
-
-        const wantsPassword = pwCurrent !== "" || pwNew !== "" || pwConfirm !== "";
-        const emailChanged = emailNew !== (current?.userEmail ?? "");
-        const wantsEmail = emailChanged || emailConfirm !== "";
-
-        if (nome.length === 0) {
-          showToast("Informe um nome válido.", "error");
-          return;
+    cleanups.push(
+      renderSettingsForm(formContainer, async (data) => {
+        const result = await updateSessionUser(data);
+        if (!result.ok) {
+          showToast(result.message ?? "Não foi possível salvar.", "error");
+          return false;
         }
-        if (wantsPassword && pwNew !== pwConfirm) {
-          showToast("As novas senhas não coincidem.", "error");
-          return;
-        }
-        if (wantsPassword && (pwCurrent === "" || pwNew.length === 0)) {
-          showToast("Preencha senha atual e nova senha.", "error");
-          return;
-        }
-        if (wantsEmail) {
-          if (emailPw === "") {
-            showToast("Informe a senha atual para alterar o e-mail.", "error");
-            return;
-          }
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailNew) || emailNew !== emailConfirm) {
-            showToast("Verifique o novo e-mail e a confirmação.", "error");
-            return;
-          }
-        }
-
-        const data: { nome?: string; email?: string; senhaAtual?: string; novaSenha?: string } = { nome };
-        if (wantsPassword) {
-          data.senhaAtual = pwCurrent;
-          data.novaSenha = pwNew;
-        }
-        if (wantsEmail) {
-          data.senhaAtual = emailPw;
-          data.email = emailNew;
-        }
-
-        void (async () => {
-          const result = await updateSessionUser(data);
-          if (!result.ok) {
-            showToast(result.message ?? "Não foi possível salvar.", "error");
-            return;
-          }
-          showToast("Alterações salvas.");
-          renderConfiguracoes();
-        })();
-      };
-      form.addEventListener("submit", submit);
-      cleanups.push(() => form.removeEventListener("submit", submit));
-    }
+        return true;
+      }),
+    );
   }
 
   // ----------------------------------------------------------- Tab routing

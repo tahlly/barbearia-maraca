@@ -1,13 +1,6 @@
-// VITE_USE_MOCK_API: ausente = mock (padrão); "false" = API real; qualquer outro valor = mock.
-function resolveUseMockApi(): boolean {
-  const raw = import.meta.env.VITE_USE_MOCK_API;
-  if (raw === undefined) return true;
-  return raw !== "false";
-}
-
 export const CONFIG = {
-  useMockApi: resolveUseMockApi(),
-  apiBaseUrl: "http://localhost:3000/api",
+  useMockApi: false,
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL ?? "/api",
   googleClientId: import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "",
   sessionKey: "maraca.session",
   appointmentsKey: "maraca.v2.appointments",
@@ -17,14 +10,20 @@ export const CONFIG = {
   scheduleKey: "maraca.v2.schedule",
   clientesKey: "maraca.v2.clientes",
   usuariosKey: "maraca.v2.usuarios",
+  adminsKey: "maraca.v2.admins",
   sessionTtlMs: 30 * 60 * 1000,
   maxLoginAttempts: 5,
   lockoutMs: 30 * 1000,
   bookingHorizonDays: 45,
-  defaultPassword: "123456",
+  defaultPassword: import.meta.env.VITE_DEFAULT_PASSWORD ?? "",
   demoAdmin: {
-    email: "admin@maraca.com",
+    email: import.meta.env.VITE_DEMO_ADMIN_EMAIL ?? "",
+    password: import.meta.env.VITE_DEMO_ADMIN_PASSWORD ?? "",
+    name: import.meta.env.VITE_DEMO_ADMIN_NAME ?? "",
+  },
+  demoSuperAdmin: {
+    email: "super@maraca.com",
     password: "maraca123",
-    name: "Rai Colares",
+    name: "Superusuário",
   },
 } as const;

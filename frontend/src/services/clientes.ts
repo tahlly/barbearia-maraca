@@ -1,77 +1,138 @@
-import type { Cliente } from "../types.js";
 import { CONFIG } from "../config.js";
+import type { Cliente } from "../types.js";
+import { apiFetch } from "./api.js";
 
-function readList(): Cliente[] {
-  const raw = localStorage.getItem(CONFIG.clientesKey);
-  if (!raw) return [];
+/**
+ * Busca cliente por e-mail.
+ *
+ * Chama `GET /clientes/buscar?email=...` (endpoint autenticado: recepcionista/
+ * admin encontram qualquer cliente; um cliente autenticado só encontra o
+ * próprio registro). Retorna `null` em 401/404/erro para o caller tratar
+ * como "não cadastrado".
+ */
+export async function findClienteByEmail(email: string): Promise<Cliente | null> {
   try {
-    const parsed = JSON.parse(raw) as Cliente[];
-    return Array.isArray(parsed) ? parsed : [];
+    const res = await apiFetch(`/clientes/buscar?email=${encodeURIComponent(email)}`);
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as {
+      id: string;
+      nome: string;
+      email: string;
+      telefone: string | null;
+    };
+    return {
+      id: data.id,
+      nome: data.nome,
+      email: data.email,
+      telefone: data.telefone ?? "",
+      senha: "",
+      createdAt: new Date().toISOString(),
+    };
   } catch {
-    return [];
+    return null;
   }
 }
 
-function writeList(list: Cliente[]): void {
-  localStorage.setItem(CONFIG.clientesKey, JSON.stringify(list));
-}
-
-function createId(): string {
-  return `CLI-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-}
-
-export function findClienteByEmail(email: string): Cliente | null {
-  const normalized = email.trim().toLowerCase();
-  return readList().find((c) => c.email.toLowerCase() === normalized) ?? null;
-}
-
-export function findClienteById(id: string): Cliente | null {
-  return readList().find((c) => c.id === id) ?? null;
-}
-
-export function registerCliente(data: {
+/**
+ * Registra um novo cliente e realiza auto-login.
+ *
+ * O backend retorna `{ token, user: { id, email, nome, tipo } }`.
+ * Após o registro bem-sucedido, a sessão é gravada no sessionStorage
+ * para que o cliente seja autenticado imediatamente (auto-login).
+ */
+export async function registerCliente(data: {
   nome: string;
   email: string;
   telefone: string;
   senha: string;
-}): Cliente {
-  const cliente: Cliente = {
-    id: createId(),
-    nome: data.nome.trim(),
-    email: data.email.trim().toLowerCase(),
+}): Promise<Cliente> {
+  const res = await apiFetch("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({
+      email: data.email,
+      senha: data.senha,
+      nome: data.nome,
+      telefone: data.telefone,
+    }),
+  });
+
+  const body = (await res.json()) as {
+    token?: string;
+    user?: { id: string; email: string; nome: string; tipo: string };
+    message?: string;
+    error?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(body.message || body.error || "Erro ao cadastrar");
+  }
+
+  const result = body as {
+    token: string;
+    user: { id: string; email: string; nome: string; tipo: string };
+  };
+
+  /* Auto-login: grava a sessão com o token retornado pelo backend */
+  const session = {
+    token: result.token,
+    userName: result.user.nome,
+    userEmail: result.user.email,
+    expiresAt: Date.now() + CONFIG.sessionTtlMs,
+    role: "cliente" as const,
+  };
+  sessionStorage.setItem(CONFIG.sessionKey, JSON.stringify(session));
+
+  return {
+    id: result.user.id,
+    nome: result.user.nome,
+    email: result.user.email,
     telefone: data.telefone,
-    senha: data.senha,
+    senha: "",
     createdAt: new Date().toISOString(),
   };
-  writeList([...readList(), cliente]);
-  return cliente;
 }
 
-export function updateCliente(
-  id: string,
-  data: { nome?: string; telefone?: string; email?: string; senha?: string },
-): Cliente | null {
-  const list = readList();
-  const index = list.findIndex((c) => c.id === id);
-  if (index < 0) return null;
-  const updated: Cliente = {
-    ...list[index]!,
-    ...(data.nome !== undefined ? { nome: data.nome.trim() } : {}),
-    ...(data.telefone !== undefined ? { telefone: data.telefone } : {}),
-    ...(data.email !== undefined ? { email: data.email.trim().toLowerCase() } : {}),
-    ...(data.senha !== undefined ? { senha: data.senha } : {}),
-  };
-  list[index] = updated;
-  writeList(list);
-  return updated;
+/**
+ * Retorno de `validateClienteLogin`: dados do cliente + token JWT.
+ */
+export interface ClienteLoginResult {
+  cliente: Cliente;
+  token: string;
 }
 
-export function updateClienteSenha(id: string, senha: string): boolean {
-  return updateCliente(id, { senha }) !== null;
-}
+/**
+ * Valida credenciais de login do cliente.
+ *
+ * O backend espera o campo `password` (não `senha`).
+ * Retorna o `Cliente` e o `token` JWT para que o caller possa
+ * gravar a sessão corretamente.
+ */
+export async function validateClienteLogin(email: string, senha: string): Promise<ClienteLoginResult | null> {
+  try {
+    const res = await apiFetch("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password: senha }),
+    });
 
-export function validateClienteLogin(email: string, senha: string): Cliente | null {
-  const cliente = findClienteByEmail(email);
-  if (!cliente) return null;
-  return cliente.senha === senha ? cliente : null;
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as {
+      token: string;
+      user: { id: string; nome?: string; name?: string; email: string };
+    };
+    return {
+      cliente: {
+        id: data.user.id,
+        nome: data.user.nome || data.user.name || "",
+        email: data.user.email,
+        telefone: "",
+        senha: "",
+        createdAt: new Date().toISOString(),
+      },
+      token: data.token,
+    };
+  } catch {
+    return null;
+  }
 }
