@@ -54,11 +54,7 @@ export function initTheme(): () => void {
   const light = saved === "light";
   applyTheme(light);
 
-  const cleanups: Array<() => void> = [];
-  const toggle = document.getElementById("theme-toggle");
-  if (toggle) cleanups.push(bindToggle(toggle));
-
-  return () => cleanups.forEach((fn) => fn());
+  return bindThemeToggles(document);
 }
 
 export function bindThemeToggles(root: ParentNode = document): () => void {
