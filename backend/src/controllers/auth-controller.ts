@@ -1,6 +1,13 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { autenticarComGoogle, registrar, login, atualizarPerfil } from '../services/auth-service';
+import {
+  autenticarComGoogle,
+  registrar,
+  login,
+  atualizarPerfil,
+  solicitarRecuperacaoSenha,
+  redefinirSenha,
+} from '../services/auth-service';
 import { JWT_EXPIRES_IN } from '../config/jwt';
 import { parseExpiresInToMs } from '../utils/jwt-utils';
 import { ValidationError } from '../errors/ValidationError';
@@ -120,4 +127,40 @@ export async function atualizarPerfilHandler(req: Request, res: Response): Promi
   }
   const resultado = await atualizarPerfil(req.user!.id, parsed.data);
   res.json({ success: true, user: resultado });
+}
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  novaSenha: z.string().min(6),
+});
+
+export async function forgotPasswordHandler(req: Request, res: Response): Promise<void> {
+  const parsed = forgotPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.issues[0].message);
+  }
+  await solicitarRecuperacaoSenha(parsed.data.email);
+  // Resposta sempre genérica — não revela se o e-mail existe.
+  res.status(200).json({
+    mensagem: 'Se o e-mail estiver cadastrado, você receberá instruções em instantes.',
+  });
+}
+
+export async function resetPasswordHandler(req: Request, res: Response): Promise<void> {
+  const parsed = resetPasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError(parsed.error.issues[0].message);
+  }
+  try {
+    await redefinirSenha(parsed.data.token, parsed.data.novaSenha);
+    res.status(200).json({ mensagem: 'Senha redefinida com sucesso' });
+  } catch (error: unknown) {
+    const status = (error as { status?: number }).status ?? 400;
+    const message = error instanceof Error ? error.message : 'Não foi possível redefinir a senha';
+    res.status(status).json({ erro: true, mensagem: message });
+  }
 }

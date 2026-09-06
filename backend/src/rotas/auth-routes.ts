@@ -5,6 +5,8 @@ import {
   loginLocal,
   logout,
   atualizarPerfilHandler,
+  forgotPasswordHandler,
+  resetPasswordHandler,
 } from '../controllers/auth-controller';
 import { authenticate } from '../middlewares/authenticate';
 
@@ -87,6 +89,25 @@ const authRoutes = Router();
  *       type: object
  *       properties:
  *         mensagem: { type: string, example: Logout realizado }
+ *     ForgotPasswordRequest:
+ *       type: object
+ *       required: [email]
+ *       properties:
+ *         email: { type: string, example: cliente@email.com }
+ *     ForgotPasswordResponse:
+ *       type: object
+ *       properties:
+ *         mensagem: { type: string }
+ *     ResetPasswordRequest:
+ *       type: object
+ *       required: [token, novaSenha]
+ *       properties:
+ *         token: { type: string }
+ *         novaSenha: { type: string, format: password, minLength: 6 }
+ *     ResetPasswordResponse:
+ *       type: object
+ *       properties:
+ *         mensagem: { type: string }
  *
  * /api/auth/google:
  *   post:
@@ -179,6 +200,42 @@ const authRoutes = Router();
  *         $ref: '#/components/responses/Erro400'
  *       '401':
  *         $ref: '#/components/responses/Erro401'
+ *
+ * /api/auth/forgot-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Solicita recuperação de senha (envia e-mail se o endereço existir)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/ForgotPasswordRequest' }
+ *     responses:
+ *       '200':
+ *         description: Instruções enviadas (resposta genérica, independe de o e-mail existir)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ForgotPasswordResponse' }
+ *       '400':
+ *         $ref: '#/components/responses/Erro400'
+ *
+ * /api/auth/reset-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Redefine a senha usando o token recebido por e-mail
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+ *     responses:
+ *       '200':
+ *         description: Senha redefinida
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ResetPasswordResponse' }
+ *       '400':
+ *         $ref: '#/components/responses/Erro400'
  */
 
 authRoutes.post('/google', loginComGoogle);
@@ -186,5 +243,7 @@ authRoutes.post('/register', registrarUsuario);
 authRoutes.post('/login', loginLocal);
 authRoutes.post('/logout', logout);
 authRoutes.patch('/me', authenticate, atualizarPerfilHandler);
+authRoutes.post('/forgot-password', forgotPasswordHandler);
+authRoutes.post('/reset-password', resetPasswordHandler);
 
 export default authRoutes;

@@ -1,8 +1,7 @@
 import { CONFIG } from "../config.js";
 import { $, clearFormErrors, setFieldError } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
-import { delay } from "../services/api.js";
-import { getSession, loginInterno, redirectForRole } from "../services/auth.js";
+import { getSession, loginInterno, redirectForRole, solicitarRecuperacaoSenha, redefinirSenha } from "../services/auth.js";
 import { showToast } from "../ui/toast.js";
 
 type ViewName = "login" | "recover" | "recover-sent" | "reset" | "reset-done";
@@ -20,6 +19,14 @@ function showView(name: ViewName): void {
     const el = document.getElementById(id);
     if (el) el.hidden = key !== name;
   }
+}
+
+function getResetTokenFromUrl(): string | null {
+  const hash = window.location.hash;
+  const queryIndex = hash.indexOf("?");
+  if (queryIndex === -1) return null;
+  const params = new URLSearchParams(hash.slice(queryIndex + 1));
+  return params.get("token");
 }
 
 function setupPasswordToggle(buttonId: string, inputId: string): () => void {
@@ -190,7 +197,8 @@ export function renderLogin(container: HTMLElement): () => void {
     </main>
   `;
 
-  showView("login");
+  const resetToken = getResetTokenFromUrl();
+  showView(resetToken ? "reset" : "login");
 
   const cleanups: Array<() => void> = [];
 
@@ -292,10 +300,14 @@ export function renderLogin(container: HTMLElement): () => void {
     const btn = recoverForm.querySelector<HTMLButtonElement>("button[type=submit]")!;
     btn.disabled = true;
     btn.classList.add("is-loading");
-    await delay(900);
+    const result = await solicitarRecuperacaoSenha(recoverEmail.value);
     btn.disabled = false;
     btn.classList.remove("is-loading");
-    showView("recover-sent");
+    if (result.ok) {
+      showView("recover-sent");
+    } else {
+      showToast(result.message ?? "Não foi possível enviar as instruções.", "error");
+    }
   };
   recoverForm.addEventListener("submit", handleRecoverSubmit);
 
@@ -317,13 +329,22 @@ export function renderLogin(container: HTMLElement): () => void {
     }
     if (!valid) return;
 
+    if (!resetToken) {
+      showToast("Link de redefinição inválido ou expirado.", "error");
+      return;
+    }
+
     const btn = resetForm.querySelector<HTMLButtonElement>("button[type=submit]")!;
     btn.disabled = true;
     btn.classList.add("is-loading");
-    await delay(800);
+    const result = await redefinirSenha(resetToken, resetPassword.value);
     btn.disabled = false;
     btn.classList.remove("is-loading");
-    showView("reset-done");
+    if (result.ok) {
+      showView("reset-done");
+    } else {
+      showToast(result.message ?? "Não foi possível redefinir a senha.", "error");
+    }
   };
   resetForm.addEventListener("submit", handleResetSubmit);
 

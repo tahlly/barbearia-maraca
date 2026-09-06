@@ -1,10 +1,10 @@
 import { $, clearFormErrors, setFieldError } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { registerCliente } from "../services/clientes.js";
-import { getSession, loginCliente, redirectForRole } from "../services/auth.js";
+import { getSession, loginCliente, redirectForRole, solicitarRecuperacaoSenha } from "../services/auth.js";
 import { loginWithGoogle, promptGoogleIdToken, decodeGoogleProfile } from "../services/googleAuth.js";
 import { showToast } from "../ui/toast.js";
-import { delay, isMockMode } from "../services/api.js";
+import { isMockMode } from "../services/api.js";
 import { attachPhoneMask } from "../ui/mask.js";
 
 type ViewName = "login" | "cadastro" | "recover" | "recover-sent";
@@ -365,10 +365,14 @@ export function renderLoginCliente(container: HTMLElement): () => void {
     const btn = recoverForm.querySelector<HTMLButtonElement>("button[type=submit]")!;
     btn.disabled = true;
     btn.classList.add("is-loading");
-    await delay(900);
+    const result = await solicitarRecuperacaoSenha(recoverEmail.value);
     btn.disabled = false;
     btn.classList.remove("is-loading");
-    showView("recover-sent");
+    if (result.ok) {
+      showView("recover-sent");
+    } else {
+      showToast(result.message ?? "Não foi possível enviar as instruções.", "error");
+    }
   };
   recoverForm.addEventListener("submit", handleRecoverSubmit);
   cleanups.push(() => recoverForm.removeEventListener("submit", handleRecoverSubmit));
