@@ -105,7 +105,7 @@ export async function atualizarUsuario(
   if (dados.email !== undefined) update.email = dados.email;
   if (dados.senhaHash !== undefined) update.senha_hash = dados.senhaHash;
   if (Object.keys(update).length === 0) return;
-  update.atualizado_em = new Date();
+  update.updated_at = new Date();
   await db('usuario').where('id', id).update(update);
 }
 

@@ -168,7 +168,7 @@ export async function atualizarPerfil(
     if (dados.email) updateUsuario.email = dados.email;
     if (senhaHash) updateUsuario.senha_hash = senhaHash;
     if (Object.keys(updateUsuario).length > 0) {
-      updateUsuario.atualizado_em = new Date();
+      updateUsuario.updated_at = new Date();
       await trx('usuario').where('id', usuarioId).update(updateUsuario);
     }
 
