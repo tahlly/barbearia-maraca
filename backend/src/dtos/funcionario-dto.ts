@@ -29,6 +29,7 @@ export interface UsuarioBasicoRow {
 export interface FuncionarioPublicoDTO {
   id: string;
   nome: string;
+  cargo: string;
   especialidade: string | null;
   foto: string | null;
   descricao: string | null;

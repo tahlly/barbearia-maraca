@@ -1,9 +1,9 @@
 import { CONFIG } from "../config.js";
-import type { Appointment, BookingDraft } from "../types.js";
-import { loadProfessionals, loadServices } from "../services/catalog.js";
+import type { Appointment, BookingDraft, Professional } from "../types.js";
+import { fetchBarbeiros, loadProfessionals, loadServices } from "../services/catalog.js";
 import { createAppointment, reschedule } from "../services/booking.js";
 import { isDateOpen, slotsForDate } from "../services/schedule.js";
-import { $, $$, clearElement, clearFormErrors, escapeHtml, initials, setFieldError } from "../ui/dom.js";
+import { $, $$, clearElement, clearFormErrors, escapeHtml, initials } from "../ui/dom.js";
 import { icon, serviceIcon } from "../ui/icons.js";
 import { formatCurrency, formatDateLong, toIsoDate } from "../ui/format.js";
 import { closeModal, openModal } from "../ui/modal.js";
@@ -32,11 +32,19 @@ export interface BookingWizardOptions {
 
 export function initBookingWizard(options: BookingWizardOptions = {}): BookingWizardHandle {
   let catalogServices = loadServices();
-  let catalogProfessionals = loadProfessionals();
+  let catalogProfessionals: Professional[] = [];
 
-  const refreshCatalog = (): void => {
+  // Atualiza o catálogo local do wizard buscando SOMENTE barbeiros.
+  // O cache global (`loadProfessionals`) permanece completo para o painel
+  // admin/recepção e para minhaConta; o wizard passa a depender desta lista.
+  const refreshCatalog = async (): Promise<void> => {
     catalogServices = loadServices();
-    catalogProfessionals = loadProfessionals();
+    try {
+      catalogProfessionals = await fetchBarbeiros();
+    } catch {
+      // Fallback: usa o cache global já populado (pelo prime), se houver.
+      catalogProfessionals = loadProfessionals().filter((p) => p.cargo === "barbeiro");
+    }
   };
   const overlay = $("#booking-modal")!;
   const form = $<HTMLFormElement>("#booking-form")!;
@@ -54,9 +62,6 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   const bodyScroll = $(".wizard__body", form)!;
   const prevBtn = $<HTMLButtonElement>("#booking-prev")!;
   const nextBtn = $<HTMLButtonElement>("#booking-next")!;
-  const nameInput = $<HTMLInputElement>("#client-name")!;
-  const phoneInput = $<HTMLInputElement>("#client-phone")!;
-  const emailInput = $<HTMLInputElement>("#client-email")!;
   const successTitle = $("#booking-success-title")!;
   const summaryEl = $("#booking-summary")!;
 
@@ -166,7 +171,10 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
 
   async function renderProfessionals(): Promise<void> {
     clearElement(prosBox);
-    const available = catalogProfessionals.filter((p) => p.active);
+    // Somente barbeiros podem ser agendados. Itens sem o campo `cargo`
+    // (payload antigo) NÃO são exibidos, para não permitir agendar com
+    // recepcionista/administrador que não possuem horario_trabalho.
+    const available = catalogProfessionals.filter((p) => p.active && p.cargo === "barbeiro");
 
     if (state.professionalId && !available.some((p) => p.id === state.professionalId)) {
       state.professionalId = null;
@@ -312,34 +320,9 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       }
       return valid;
     }
-    if (step === 3) {
-      let valid = true;
-      const name = nameInput.value.trim();
-      const digits = phoneInput.value.replace(/\D/g, "");
-      const email = emailInput.value.trim();
-
-      if (name.length < 3 || !name.includes(" ")) {
-        if (report) setFieldError(nameInput, "Informe seu nome completo.");
-        valid = false;
-      } else if (report) {
-        setFieldError(nameInput, null);
-      }
-
-      if (digits.length < 10) {
-        if (report) setFieldError(phoneInput, "Informe um telefone válido com DDD.");
-        valid = false;
-      } else if (report) {
-        setFieldError(phoneInput, null);
-      }
-
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
-        if (report) setFieldError(emailInput, "Informe um e-mail válido.");
-        valid = false;
-      } else if (report) {
-        setFieldError(emailInput, null);
-      }
-      return valid;
-    }
+    // Passo 3 é apenas a tela de sucesso; o cliente autenticado vem do token
+    // no backend. Não há mais formulário de dados do cliente no wizard.
+    if (step === 3) return true;
     return true;
   }
 
@@ -370,7 +353,6 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   }
 
   async function submit(): Promise<void> {
-    if (!validateStep(3, true)) return;
     if (!state.professionalId || !state.serviceId || !state.dateIso || !state.time) return;
 
     const draft: BookingDraft = {
@@ -451,7 +433,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   });
 
   async function openNew(preselectServiceId?: string): Promise<void> {
-    refreshCatalog();
+    await refreshCatalog();
     await resetWizard();
     if (preselectServiceId) {
       state.serviceId = preselectServiceId;
@@ -465,7 +447,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   }
 
   async function openForReschedule(appointment: Appointment): Promise<void> {
-    refreshCatalog();
+    await refreshCatalog();
     await resetWizard();
     state.rescheduleId = appointment.id;
     if (appointment.servicoId) {
@@ -477,7 +459,6 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       updateTotal();
     }
     state.professionalId = appointment.funcionarioId;
-    nameInput.value = appointment.clienteNome ?? "";
     renderServices();
     renderProfessionals();
 

@@ -8,10 +8,11 @@ import type {
 
 // ── Mapeadores ────────────────────────────────────────────────
 
-function toPublicoDTO(row: Pick<FuncionarioRow, 'id' | 'nome' | 'especialidade' | 'foto' | 'descricao'>): FuncionarioPublicoDTO {
+function toPublicoDTO(row: Pick<FuncionarioRow, 'id' | 'nome' | 'cargo' | 'especialidade' | 'foto' | 'descricao'>): FuncionarioPublicoDTO {
   return {
     id: row.id,
     nome: row.nome,
+    cargo: row.cargo,
     especialidade: row.especialidade,
     foto: row.foto,
     descricao: row.descricao,
@@ -42,8 +43,8 @@ export async function listarPublicos(cargo?: string): Promise<FuncionarioPublico
   if (cargo) {
     query = query.where('cargo', cargo);
   }
-  const rows = await query.select('id', 'nome', 'especialidade', 'foto', 'descricao');
-  return (rows as Array<Pick<FuncionarioRow, 'id' | 'nome' | 'especialidade' | 'foto' | 'descricao'>>).map(toPublicoDTO);
+  const rows = await query.select('id', 'nome', 'cargo', 'especialidade', 'foto', 'descricao');
+  return (rows as Array<Pick<FuncionarioRow, 'id' | 'nome' | 'cargo' | 'especialidade' | 'foto' | 'descricao'>>).map(toPublicoDTO);
 }
 
 export async function listarTodos(): Promise<FuncionarioCompletoDTO[]> {
