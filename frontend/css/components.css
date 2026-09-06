@@ -429,6 +429,12 @@
   flex-shrink: 0;
 }
 
+.avatar--photo {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
 .option-card {
   position: relative;
   display: flex;

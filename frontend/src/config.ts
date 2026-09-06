@@ -10,6 +10,7 @@ export const CONFIG = {
   scheduleKey: "maraca.v2.schedule",
   clientesKey: "maraca.v2.clientes",
   usuariosKey: "maraca.v2.usuarios",
+  adminsKey: "maraca.v2.admins",
   sessionTtlMs: 30 * 60 * 1000,
   maxLoginAttempts: 5,
   lockoutMs: 30 * 1000,
@@ -19,5 +20,10 @@ export const CONFIG = {
     email: "admin@maraca.com",
     password: "maraca123",
     name: "Rai Colares",
+  },
+  demoSuperAdmin: {
+    email: "super@maraca.com",
+    password: "maraca123",
+    name: "Superusuário",
   },
 } as const;

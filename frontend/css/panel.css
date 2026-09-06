@@ -333,8 +333,17 @@ body.panel-mode > .footer {
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--space-4);
+}
+
+.kpi-card:nth-child(5),
+.kpi-card:nth-child(6) {
+  grid-column: span 2;
+}
+
+.kpi-grid + .panel__section {
+  margin-top: var(--space-5);
 }
 
 .kpi-card {
@@ -395,6 +404,10 @@ body.panel-mode > .footer {
 }
 
 @media (max-width: 768px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
   .panel__collapse {
     display: none;
   }
@@ -437,5 +450,16 @@ body.panel-mode > .footer {
 
   .panel__content {
     padding: var(--space-4);
+  }
+}
+
+@media (max-width: 480px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-card:nth-child(5),
+  .kpi-card:nth-child(6) {
+    grid-column: auto;
   }
 }

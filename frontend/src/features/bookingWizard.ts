@@ -3,15 +3,16 @@ import type { Appointment, BookingDraft } from "../types.js";
 import { loadProfessionals, loadServices } from "../services/catalog.js";
 import { occupiedTimes } from "../services/booking.js";
 import { isDateOpen, slotsForDate } from "../services/schedule.js";
-import { $, $$, clearElement, clearFormErrors, escapeHtml, initials, setFieldError } from "../ui/dom.js";
+import { getSession } from "../services/auth.js";
+import { findClienteByEmail } from "../services/clientes.js";
+import { $, $$, clearElement, clearFormErrors, escapeHtml, initials } from "../ui/dom.js";
 import { icon, serviceIcon } from "../ui/icons.js";
 import { formatCurrency, formatDateLong, toIsoDate } from "../ui/format.js";
-import { attachPhoneMask } from "../ui/mask.js";
 import { closeModal, openModal } from "../ui/modal.js";
 import { createAppointment, rescheduleAppointment } from "../services/booking.js";
 import { showToast } from "../ui/toast.js";
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 3;
 
 interface WizardState {
   step: number;
@@ -52,11 +53,9 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   const slotsHint = $("#slots-hint")!;
   const totalEl = $("#booking-total")!;
   const footer = $(".wizard__footer", form)!;
+  const bodyScroll = $(".wizard__body", form)!;
   const prevBtn = $<HTMLButtonElement>("#booking-prev")!;
   const nextBtn = $<HTMLButtonElement>("#booking-next")!;
-  const nameInput = $<HTMLInputElement>("#client-name")!;
-  const phoneInput = $<HTMLInputElement>("#client-phone")!;
-  const emailInput = $<HTMLInputElement>("#client-email")!;
   const successTitle = $("#booking-success-title")!;
   const summaryEl = $("#booking-summary")!;
 
@@ -74,8 +73,6 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   const horizon = new Date(today);
   horizon.setDate(horizon.getDate() + CONFIG.bookingHorizonDays);
   const maxIso = toIsoDate(horizon);
-
-  attachPhoneMask(phoneInput);
 
   function isDateEnabled(iso: string): boolean {
     return isDateOpen(iso);
@@ -292,12 +289,13 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     prevBtn.hidden = step === 1 || step === TOTAL_STEPS;
     nextBtn.hidden = step === TOTAL_STEPS;
     footer.classList.toggle("wizard__footer--summary", step === TOTAL_STEPS);
-    nextBtn.textContent = step === 3 ? "Confirmar agendamento" : "Continuar";
+    nextBtn.textContent = step === 2 ? "Confirmar agendamento" : "Continuar";
     if (step === 2) {
       renderSlots();
     }
     const activePanel = panels.find((p) => Number(p.dataset.step) === step);
     if (activePanel) activePanel.scrollTop = 0;
+    bodyScroll.scrollTop = 0;
   }
 
   function validateStep(step: number, report: boolean): boolean {
@@ -315,34 +313,6 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
             : "Escolha uma data e um horário disponíveis.",
           "error",
         );
-      }
-      return valid;
-    }
-    if (step === 3) {
-      let valid = true;
-      const name = nameInput.value.trim();
-      const digits = phoneInput.value.replace(/\D/g, "");
-      const email = emailInput.value.trim();
-
-      if (name.length < 3 || !name.includes(" ")) {
-        if (report) setFieldError(nameInput, "Informe seu nome completo.");
-        valid = false;
-      } else if (report) {
-        setFieldError(nameInput, null);
-      }
-
-      if (digits.length < 10) {
-        if (report) setFieldError(phoneInput, "Informe um telefone válido com DDD.");
-        valid = false;
-      } else if (report) {
-        setFieldError(phoneInput, null);
-      }
-
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
-        if (report) setFieldError(emailInput, "Informe um e-mail válido.");
-        valid = false;
-      } else if (report) {
-        setFieldError(emailInput, null);
       }
       return valid;
     }
@@ -365,6 +335,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       ["Data", formatDateLong(appointment.dateIso)],
       ["Horário", appointment.time],
       ["Cliente", appointment.clientName],
+      ["Telefone", appointment.phone || "—"],
       ["Total", formatCurrency(total)],
     ];
     summaryEl.innerHTML = rows
@@ -376,7 +347,16 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   }
 
   async function submit(): Promise<void> {
-    if (!validateStep(3, true)) return;
+    const session = getSession();
+    const cliente = session ? findClienteByEmail(session.userEmail) : null;
+    const clientName = cliente?.nome ?? session?.userName ?? "";
+    const email = session?.userEmail ?? "";
+    const phone = cliente?.telefone ?? "";
+
+    if (!session?.userEmail || !clientName) {
+      showToast("Você precisa estar logado para agendar.", "error");
+      return;
+    }
     if (!state.professionalId || !state.dateIso || !state.time) return;
 
     const draft: BookingDraft = {
@@ -384,9 +364,9 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       professionalId: state.professionalId,
       dateIso: state.dateIso,
       time: state.time,
-      clientName: nameInput.value,
-      phone: phoneInput.value,
-      email: emailInput.value,
+      clientName,
+      phone,
+      email,
     };
 
     nextBtn.disabled = true;
@@ -439,8 +419,10 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   });
 
   nextBtn.addEventListener("click", () => {
-    if (state.step === 3) {
-      void submit();
+    if (state.step === 2) {
+      if (validateStep(2, true)) {
+        void submit();
+      }
       return;
     }
     if (validateStep(state.step, true)) {
@@ -477,9 +459,6 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     state.rescheduleCode = appointment.code;
     state.serviceIds = new Set(appointment.serviceIds);
     state.professionalId = appointment.professionalId;
-    nameInput.value = appointment.clientName;
-    phoneInput.value = appointment.phone;
-    emailInput.value = appointment.email;
     renderServices();
     renderProfessionals();
     const rescheduleIso =
