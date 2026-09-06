@@ -1,4 +1,4 @@
-import type { Professional, Service } from "../types.js";
+import type { CargoFuncionario, Professional, Service } from "../types.js";
 import { httpJson } from "./api.js";
 
 /* ------------------------------------------------------------------ */
@@ -26,6 +26,7 @@ interface ServicoAdminDTO {
 interface FuncionarioPublicoDTO {
   id: string;
   nome: string;
+  cargo: CargoFuncionario;
   especialidade: string | null;
   foto: string | null;
   descricao: string | null;
@@ -72,10 +73,18 @@ function mapProfissional(dto: FuncionarioPublicoDTO): Professional {
   return {
     id: dto.id,
     name: dto.nome,
-    role: dto.especialidade ?? "Barbeiro",
+    // `role` é rótulo visual (especialidade ou fallback contextual por cargo).
+    role:
+      dto.especialidade ??
+      (dto.cargo === "recepcionista"
+        ? "Recepcionista"
+        : dto.cargo === "administrador"
+          ? "Administrador"
+          : "Barbeiro"),
     category: "",
     active: true,
     photo: dto.foto ?? undefined,
+    cargo: dto.cargo,
   };
 }
 
@@ -93,6 +102,24 @@ export async function fetchProfessionals(): Promise<Professional[]> {
   const dtos = await httpJson<FuncionarioPublicoDTO[]>("/funcionarios");
   _professionalsCache = dtos.map(mapProfissional);
   return _professionalsCache;
+}
+
+/**
+ * Busca profissionais filtrando por cargo (`?cargo=...`).
+ * O cache global permanece com a lista completa (manter compatibilidade com
+ * manage.ts e minhaConta.ts); o resultado por cargo NÃO substitui esse cache
+ * global. Usada pelo wizard de agendamento para oferecer somente barbeiros.
+ */
+export async function fetchProfessionalsByCargo(cargo: CargoFuncionario): Promise<Professional[]> {
+  const dtos = await httpJson<FuncionarioPublicoDTO[]>(
+    `/funcionarios?cargo=${encodeURIComponent(cargo)}`,
+  );
+  return dtos.map(mapProfissional);
+}
+
+/** Atalho legível para o wizard: somente barbeiros. */
+export function fetchBarbeiros(): Promise<Professional[]> {
+  return fetchProfessionalsByCargo("barbeiro");
 }
 
 /* ------------------------------------------------------------------ */

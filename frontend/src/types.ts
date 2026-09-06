@@ -13,6 +13,8 @@ export interface Service {
   active: boolean;
 }
 
+export type CargoFuncionario = "barbeiro" | "recepcionista" | "administrador";
+
 export interface Professional {
   id: string;
   name: string;
@@ -23,6 +25,7 @@ export interface Professional {
   photo?: string;
   userRole?: "profissional" | "recepcionista";
   photoUrl?: string;
+  cargo?: CargoFuncionario;
 }
 
 export type AppointmentStatus = "confirmado" | "pendente" | "concluido" | "cancelado";

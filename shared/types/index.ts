@@ -120,6 +120,7 @@ export type CargoFuncionario = 'barbeiro' | 'recepcionista' | 'administrador';
 export interface FuncionarioPublicoDTO {
   id: string;
   nome: string;
+  cargo: CargoFuncionario;
   especialidade: string | null;
   foto: string | null;
   descricao: string | null;
