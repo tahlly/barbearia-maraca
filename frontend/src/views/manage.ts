@@ -83,6 +83,10 @@ function statusBadge(status: Appointment["status"]): string {
   return `<span class="badge badge--${variant}">${STATUS_LABEL[status]}</span>`;
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
+}
+
 let servicesCache: Service[] = [];
 let prosCache: Professional[] = [];
 
@@ -161,7 +165,21 @@ export function renderManage(container: HTMLElement): () => void {
   // ---------------------------------------------------------------- Dashboard
   async function renderDashboard(): Promise<void> {
     refreshCaches();
-    const appointments = await listAppointments();
+    let appointments: Appointment[];
+    try {
+      appointments = await listAppointments();
+    } catch (error) {
+      content.innerHTML = `
+        <div class="panel__section manage-head">
+          <div class="manage-head__titles">
+            <h3 class="panel__section-title">Dashboard</h3>
+            <p class="manage-head__sub">Indicadores e financeiro do salão</p>
+          </div>
+        </div>
+        <p class="panel__empty" role="alert">${escapeHtml(errorMessage(error, "Não foi possível carregar o dashboard."))}</p>
+      `;
+      return;
+    }
 
     const years = availableYears(appointments);
     const selectedYear = years.includes(state.ano) ? state.ano : years[years.length - 1] ?? new Date().getFullYear();
@@ -237,8 +255,15 @@ export function renderManage(container: HTMLElement): () => void {
 
     const refresh = (): void => {
       void (async () => {
-        const appts = await listAppointments();
-        $("#dashboard-metrics", content)!.innerHTML = dashboardMetricsHTML(appts);
+        try {
+          const appts = await listAppointments();
+          $("#dashboard-metrics", content)!.innerHTML = dashboardMetricsHTML(appts);
+        } catch (error) {
+          const metrics = $("#dashboard-metrics", content);
+          if (metrics) {
+            metrics.innerHTML = `<p class="panel__empty" role="alert">${escapeHtml(errorMessage(error, "Não foi possível atualizar o dashboard."))}</p>`;
+          }
+        }
       })();
     };
 
@@ -440,11 +465,20 @@ export function renderManage(container: HTMLElement): () => void {
   // ----------------------------------------------------------- Agendamentos
   async function renderAgendamentos(): Promise<void> {
     refreshCaches();
-    const appointments = (await listAppointments()).sort((a, b) => {
-      const ka = `${a.data}T${a.hora}`;
-      const kb = `${b.data}T${b.hora}`;
-      return kb.toString().localeCompare(ka.toString());
-    });
+    let appointments: Appointment[];
+    try {
+      appointments = (await listAppointments()).sort((a, b) => {
+        const ka = `${a.data}T${a.hora}`;
+        const kb = `${b.data}T${b.hora}`;
+        return kb.toString().localeCompare(ka.toString());
+      });
+    } catch (error) {
+      content.innerHTML = `
+        <p class="panel__empty" role="alert">${escapeHtml(errorMessage(error, "Não foi possível carregar os agendamentos."))}</p>
+      `;
+      showToast(errorMessage(error, "Não foi possível carregar os agendamentos."), "error");
+      return;
+    }
 
     const currentYear = new Date().getFullYear();
     const defaultStart = `${currentYear}-01-01`;
@@ -608,9 +642,13 @@ export function renderManage(container: HTMLElement): () => void {
       const h = (event: Event): void => {
         if (event.target instanceof Element && event.target.closest("button, a, select, input")) return;
         void (async () => {
-          const appts = await listAppointments();
-          const app = appts.find((a) => a.id === id) ?? null;
-          if (app) openDetailModal(app);
+          try {
+            const appts = await listAppointments();
+            const app = appts.find((a) => a.id === id) ?? null;
+            if (app) openDetailModal(app);
+          } catch {
+            showToast("Não foi possível carregar os detalhes.", "error");
+          }
         })();
       };
       row.addEventListener("click", h);
@@ -619,7 +657,7 @@ export function renderManage(container: HTMLElement): () => void {
   }
 
   async function handleSetStatus(id: string, status: Appointment["status"]): Promise<void> {
-    if (status === "cancelado") {
+if (status === "cancelado") {
       const confirmed = await confirmDialog({
         title: "Cancelar agendamento",
         message: "Tem certeza que deseja cancelar este agendamento?",
@@ -630,7 +668,7 @@ export function renderManage(container: HTMLElement): () => void {
       try {
         await cancelAppointment(id);
       } catch (error) {
-        showToast(error instanceof Error ? error.message : "Não foi possível cancelar. Tente novamente.", "error");
+        showToast(errorMessage(error, "Não foi possível cancelar o agendamento."), "error");
         return;
       }
       showToast("Agendamento cancelado.");
@@ -644,7 +682,7 @@ export function renderManage(container: HTMLElement): () => void {
       try {
         await confirmAppointment(id);
       } catch (error) {
-        showToast(error instanceof Error ? error.message : "Não foi possível confirmar. Tente novamente.", "error");
+        showToast(errorMessage(error, "Não foi possível confirmar a presença."), "error");
         return;
       }
       showToast("Presença confirmada.");
@@ -658,7 +696,7 @@ export function renderManage(container: HTMLElement): () => void {
       try {
         await concludeAppointment(id);
       } catch (error) {
-        showToast(error instanceof Error ? error.message : "Não foi possível concluir. Tente novamente.", "error");
+        showToast(errorMessage(error, "Não foi possível concluir o atendimento."), "error");
         return;
       }
       showToast("Atendimento concluído.");
@@ -843,9 +881,11 @@ export function renderManage(container: HTMLElement): () => void {
       if (!blocked.includes(dateIso)) {
         blocked = [...blocked, dateIso];
         const newConfig: ScheduleConfig = { ...config, blockedDates: blocked };
-        void saveSchedule(newConfig, professionalId).then(() => {
-          showToast("Data bloqueada.");
-        });
+        void saveSchedule(newConfig, professionalId)
+          .then(() => {
+            showToast("Data bloqueada.");
+          })
+          .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível bloquear a data."), "error"));
         (overlay.querySelector("[data-blocked-list]") as HTMLUListElement).insertAdjacentHTML(
           "beforeend",
           `<li><span>${escapeHtml(formatDateMedium(dateIso))}</span><button type="button" class="btn btn--sm btn--ghost" data-remove-blocked="${escapeHtml(dateIso)}" aria-label="Remover">${icon("x", 14)}</button></li>`,
@@ -864,9 +904,11 @@ export function renderManage(container: HTMLElement): () => void {
       }
       let exceptions = config.exceptions.filter((e) => e.dateIso !== dateIso);
       exceptions = [...exceptions, { dateIso, start, end }];
-      void saveSchedule({ ...config, exceptions }, professionalId).then(() => {
-        showToast("Abertura excepcional adicionada.");
-      });
+      void saveSchedule({ ...config, exceptions }, professionalId)
+        .then(() => {
+          showToast("Abertura excepcional adicionada.");
+        })
+        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível adicionar a abertura excepcional."), "error"));
       (overlay.querySelector("[data-exception-list]") as HTMLUListElement).insertAdjacentHTML(
         "beforeend",
         `<li><span>${escapeHtml(formatDateMedium(dateIso))} · ${start}–${end}</span><button type="button" class="btn btn--sm btn--ghost" data-remove-exception="${escapeHtml(dateIso)}" aria-label="Remover">${icon("x", 14)}</button></li>`,
@@ -884,10 +926,12 @@ export function renderManage(container: HTMLElement): () => void {
         ...config,
         blockedDates: config.blockedDates.filter((d) => d !== dateIso),
       };
-      void saveSchedule(newConfig, professionalId).then(() => {
-        btn.closest("li")?.remove();
-        showToast("Data desbloqueada.");
-      });
+      void saveSchedule(newConfig, professionalId)
+        .then(() => {
+          btn.closest("li")?.remove();
+          showToast("Data desbloqueada.");
+        })
+        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível desbloquear a data."), "error"));
     });
 
     overlay.querySelector("[data-exception-list]")!.addEventListener("click", (event) => {
@@ -898,10 +942,12 @@ export function renderManage(container: HTMLElement): () => void {
         ...config,
         exceptions: config.exceptions.filter((e) => e.dateIso !== dateIso),
       };
-      void saveSchedule(newConfig, professionalId).then(() => {
-        btn.closest("li")?.remove();
-        showToast("Exceção removida.");
-      });
+      void saveSchedule(newConfig, professionalId)
+        .then(() => {
+          btn.closest("li")?.remove();
+          showToast("Exceção removida.");
+        })
+        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível remover a exceção."), "error"));
     });
 
     overlay.querySelector<HTMLFormElement>("#schedule-form")!.addEventListener("submit", (event) => {
@@ -915,10 +961,12 @@ export function renderManage(container: HTMLElement): () => void {
           end: (overlay.querySelector<HTMLInputElement>(`[data-day-end="${day}"]`)!).value,
         };
       }
-      void saveSchedule({ ...config, weekly }, professionalId).then(() => {
-        showToast("Agenda configurada.");
-        finish();
-      });
+      void saveSchedule({ ...config, weekly }, professionalId)
+        .then(() => {
+          showToast("Agenda configurada.");
+          finish();
+        })
+        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível salvar a agenda."), "error"));
     });
 
     overlay.querySelectorAll("[data-close]").forEach((el) => el.addEventListener("click", finish));
@@ -1060,8 +1108,8 @@ export function renderManage(container: HTMLElement): () => void {
     try {
       await setServicoStatus(service.id, false);
       showToast("Serviço removido.");
-    } catch {
-      showToast("Erro ao remover serviço.", "error");
+    } catch (error) {
+      showToast(errorMessage(error, "Erro ao remover serviço."), "error");
     }
     renderServicos();
   }
@@ -1133,6 +1181,11 @@ export function renderManage(container: HTMLElement): () => void {
         showToast("Informe um preço válido.", "error");
         return;
       }
+      const submitBtn = form.querySelector<HTMLButtonElement>("button[type=submit]");
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.classList.add("is-loading");
+      }
       try {
         if (isEdit && service) {
           await updateServico(service.id, { name, description, durationMin: duration, price });
@@ -1143,8 +1196,13 @@ export function renderManage(container: HTMLElement): () => void {
         }
         finish();
         renderServicos();
-      } catch {
-        showToast("Erro ao salvar serviço. Verifique os dados.", "error");
+      } catch (error) {
+        showToast(errorMessage(error, "Erro ao salvar serviço. Verifique os dados."), "error");
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.classList.remove("is-loading");
+        }
       }
     };
 
@@ -1160,7 +1218,15 @@ export function renderManage(container: HTMLElement): () => void {
   // ----------------------------------------------------------- Profissionais
   async function renderProfissionais(): Promise<void> {
     refreshCaches();
-    const appts = await listAppointments();
+    let appts: Appointment[] = [];
+    try {
+      appts = await listAppointments();
+    } catch (error) {
+      content.innerHTML = `
+        <p class="panel__empty" role="alert">${escapeHtml(errorMessage(error, "Não foi possível carregar os profissionais."))}</p>
+      `;
+      return;
+    }
     const now = new Date();
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const counts = new Map<string, number>();
@@ -1246,8 +1312,8 @@ export function renderManage(container: HTMLElement): () => void {
       const usuario = await findByProfessionalId(id);
       if (usuario) await deleteUsuarioInterno(usuario.id);
       showToast("Profissional excluído.");
-    } catch {
-      showToast("Erro ao excluir profissional.", "error");
+    } catch (error) {
+      showToast(errorMessage(error, "Erro ao excluir profissional."), "error");
     }
     await renderProfissionais();
   }
@@ -1327,6 +1393,14 @@ export function renderManage(container: HTMLElement): () => void {
         return;
       }
 
+      const submitBtn = form.querySelector<HTMLButtonElement>("button[type=submit]");
+      const setBusy = (busy: boolean): void => {
+        if (!submitBtn) return;
+        submitBtn.disabled = busy;
+        submitBtn.classList.toggle("is-loading", busy);
+      };
+      setBusy(true);
+
       if (isEdit && pro) {
         try {
           const existing = await findByProfessionalId(pro.id);
@@ -1342,8 +1416,10 @@ export function renderManage(container: HTMLElement): () => void {
             });
           }
           showToast("Profissional atualizado.");
-        } catch {
-          showToast("Erro ao atualizar profissional.", "error");
+        } catch (error) {
+          showToast(errorMessage(error, "Erro ao atualizar profissional."), "error");
+        } finally {
+          setBusy(false);
         }
         finish();
         await renderProfissionais();
@@ -1361,8 +1437,10 @@ export function renderManage(container: HTMLElement): () => void {
         showToast(`Profissional cadastrado! Senha padrão: ${CONFIG.defaultPassword}. Altere em Configurações.`, "success");
         finish();
         await renderProfissionais();
-      } catch {
-        showToast("Não foi possível cadastrar o profissional. Verifique se o e-mail já está em uso.", "error");
+      } catch (error) {
+        showToast(errorMessage(error, "Não foi possível cadastrar o profissional. Verifique se o e-mail já está em uso."), "error");
+      } finally {
+        setBusy(false);
       }
     };
 

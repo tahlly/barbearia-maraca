@@ -1,7 +1,7 @@
 ---
 description: Verifica de forma independente se a entrega atende requisitos, segurança, tipagem, contratos e experiência, sem implementar a correção no lugar do agente proprietário.
 mode: all
-steps: 12
+# steps: 12
 color: "#EA580C"
 permissions:
   - action: subagent

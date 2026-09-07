@@ -134,15 +134,21 @@ export async function registerCliente(data: {
     }),
   });
 
-  const body = (await res.json()) as {
+  let body: {
     token?: string;
     user?: { id: string; email: string; nome: string; tipo: string };
     message?: string;
+    mensagem?: string;
     error?: string;
-  };
+  } = {};
+  try {
+    body = (await res.json()) as typeof body;
+  } catch {
+    body = {};
+  }
 
   if (!res.ok) {
-    throw new Error(body.message || body.error || "Erro ao cadastrar");
+    throw new Error(body.mensagem || body.message || body.error || "Erro ao cadastrar");
   }
 
   const result = body as {

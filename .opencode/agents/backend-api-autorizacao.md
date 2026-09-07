@@ -1,7 +1,7 @@
 ---
 description: Implementa a API REST em Node.js e TypeScript, aplicando regras de negócio, validação, autenticação e autorização no servidor para os papéis Cliente, Barbeiro, Recepcionista e Administrador.
 mode: all
-steps: 10
+# steps: 10
 color: "#059669"
 permissions:
   - action: subagent
@@ -182,6 +182,7 @@ Consulte a especificação funcional completa para detalhes. Esta tabela não au
 - Não presuma requisitos ausentes.
 - Não confie em papel, ID, propriedade do recurso, preço, status ou qualquer dado crítico enviado pelo cliente.
 - Autorização deve ser aplicada antes de retornar, alterar ou excluir recurso.
+- Endpoints de listagem/leitura exigem a mesma verificação de papel e propriedade de recurso que os de escrita — não presuma que autenticação (`authenticate`) sozinha é suficiente; a ausência de checagem de papel num `GET` é falha de autorização tão grave quanto num `POST`/`PUT`/`DELETE`.
 - Não use informação escondida no frontend como barreira de segurança.
 - Diferencie claramente:
   - **aprovado**
