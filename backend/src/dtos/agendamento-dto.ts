@@ -24,4 +24,7 @@ export interface CreateAgendamentoRequest {
   data: string;
   hora: string;
   observacao?: string | null;
+  // Obrigatório quando o solicitante é recepcionista/admin (cria em nome de
+  // um cliente informado); o papel cliente resolve o próprio registro via token.
+  cliente_id?: string;
 }

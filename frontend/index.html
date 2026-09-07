@@ -81,19 +81,62 @@
       </div>
 
       <ol class="steps" id="booking-steps">
-        <li class="steps__item is-active"><span class="steps__dot">1</span><span class="steps__label">Serviços</span></li>
-        <li class="steps__item"><span class="steps__dot">2</span><span class="steps__label">Profissional &amp; Horário</span></li>
-        <li class="steps__item"><span class="steps__dot">3</span><span class="steps__label">Confirmação</span></li>
+        <li class="steps__item" data-step-name="cliente" hidden><span class="steps__dot">1</span><span class="steps__label">Cliente</span></li>
+        <li class="steps__item is-active" data-step-name="servicos"><span class="steps__dot">2</span><span class="steps__label">Serviços</span></li>
+        <li class="steps__item" data-step-name="horario"><span class="steps__dot">3</span><span class="steps__label">Profissional &amp; Horário</span></li>
+        <li class="steps__item" data-step-name="confirmacao"><span class="steps__dot">4</span><span class="steps__label">Confirmação</span></li>
       </ol>
       <div class="steps__track" aria-hidden="true"><span id="booking-progress"></span></div>
 
       <form id="booking-form" novalidate>
         <div class="modal__body wizard__body">
-          <section class="wizard__step is-active" data-step="1" aria-label="Passo 1 — Serviços">
+          <section class="wizard__step" data-step-name="cliente" aria-label="Passo 1 — Cliente" hidden>
+            <h3 class="wizard__heading">Cliente do agendamento</h3>
+            <p class="wizard__hint">Identifique o cliente que será atendido. Se ele ainda não estiver cadastrado, crie o cadastro ao lado.</p>
+            <div class="field">
+              <label class="field__label" for="booking-client-search">Buscar cliente</label>
+              <div class="client-search-row">
+                <input type="search" id="booking-client-search" placeholder="Nome ou e-mail..." autocomplete="off">
+                <button type="button" class="btn btn--sm btn--primary" data-client-search>Buscar</button>
+              </div>
+            </div>
+            <div id="booking-client-results" aria-live="polite"></div>
+            <div class="client-create">
+              <div class="client-create__head">
+                <button type="button" class="btn btn--ghost btn--sm" data-client-create-toggle>+ Cadastrar novo cliente</button>
+              </div>
+              <div class="client-create__form" data-client-create-form role="form" aria-label="Cadastro rápido de cliente" hidden>
+                <div class="client-create__grid">
+                  <div class="field">
+                    <label class="field__label" for="client-create-nome">Nome *</label>
+                    <input type="text" id="client-create-nome" maxlength="80" placeholder="Nome completo" autocomplete="off" required>
+                  </div>
+                  <div class="field">
+                    <label class="field__label" for="client-create-email">E-mail *</label>
+                    <input type="email" id="client-create-email" maxlength="100" placeholder="cliente@email.com" autocapitalize="none" spellcheck="false" autocomplete="off" required>
+                  </div>
+                  <div class="field">
+                    <label class="field__label" for="client-create-telefone">Telefone</label>
+                    <input type="tel" id="client-create-telefone" maxlength="20" placeholder="(91) 99999-0000" autocomplete="off">
+                  </div>
+                  <div class="field">
+                    <label class="field__label" for="client-create-senha">Senha de acesso *</label>
+                    <input type="password" id="client-create-senha" minlength="6" maxlength="100" placeholder="Mínimo de 6 caracteres" autocomplete="off" required>
+                    <span class="field__hint">O cliente usará este e-mail e senha para acessar a área do cliente.</span>
+                  </div>
+                </div>
+                <div class="client-create__actions">
+                  <button type="button" class="btn btn--ghost btn--sm" data-client-create-cancel>Cancelar</button>
+                  <button type="button" class="btn btn--sm btn--primary" data-client-create-submit>Cadastrar e selecionar</button>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="wizard__step is-active" data-step="1" data-step-name="servicos" aria-label="Passo 2 — Serviços">
             <h3 class="wizard__heading">Selecione os serviços desejados</h3>
             <div class="service-options" id="booking-services"></div>
           </section>
-          <section class="wizard__step" data-step="2" aria-label="Passo 2 — Profissional e horário">
+          <section class="wizard__step" data-step="2" data-step-name="horario" aria-label="Passo 3 — Profissional e horário">
             <h3 class="wizard__heading">Escolha o profissional</h3>
             <div class="pro-options" id="booking-professionals"></div>
             <h3 class="wizard__heading">Data e horário</h3>
@@ -107,7 +150,7 @@
             <p class="slots-hint" id="slots-hint"><i class="bx bx-error-circle" aria-hidden="true"></i><span>Escolha um profissional para ver os horários disponíveis.</span></p>
             <div class="slots" id="booking-slots" hidden></div>
           </section>
-          <section class="wizard__step" data-step="3" aria-label="Passo 3 — Confirmação">
+          <section class="wizard__step" data-step="3" data-step-name="confirmacao" aria-label="Passo 4 — Confirmação">
             <div class="success-card">
               <span class="success-card__icon" aria-hidden="true"><i class="bx bx-check-circle"></i></span>
               <h3 class="success-card__title" id="booking-success-title">Agendamento confirmado!</h3>

@@ -151,10 +151,8 @@ export function renderLanding(container: HTMLElement): () => void {
               <a href="https://wa.me/5591999999999" target="_blank" rel="noopener noreferrer" class="social-btn" aria-label="WhatsApp da Barbearia Maracá"><i class='bx bxl-whatsapp'></i></a>
             </div>
           </div>
-          <div class="map-placeholder" role="img" aria-label="Mapa interativo da localização da Barbearia Maracá">
-            <span class="map-placeholder__pin"><i class='bx bx-map'></i></span>
-            <strong>Mapa Interativo</strong>
-            <small>Integração com Google Maps será conectada pelo time de back-end.</small>
+          <div class="map-image">
+            <img src="assets/images/maps.jpg" alt="Mapa de localização da Barbearia Maracá" loading="lazy">
           </div>
         </div>
       </div>
