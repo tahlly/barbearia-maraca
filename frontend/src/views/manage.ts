@@ -1355,6 +1355,21 @@ if (status === "cancelado") {
             <input type="email" id="pro-email" value="${escapeHtml(usuario?.email ?? pro?.email ?? "")}" ${isEdit && usuario ? "readonly" : ""} maxlength="100" autocapitalize="none" spellcheck="false" required>
             <span class="field__hint">${isEdit && usuario ? "Login existente. Para alterar o e-mail, use as Configurações." : "Cria o acesso de login deste profissional."}</span>
           </div>
+          ${isEdit
+            ? ""
+            : `
+            <div class="field">
+              <label class="field__label" for="pro-password">Senha de acesso</label>
+              <div class="input-wrap">
+                <input type="password" id="pro-password" value="${escapeHtml(CONFIG.defaultPassword)}" maxlength="64" autocomplete="new-password">
+                <button type="button" class="input-suffix" id="toggle-pro-password" aria-label="Mostrar senha">
+                  <i class='bx bx-show'></i>
+                </button>
+              </div>
+              <span class="field__hint">Senha temporária de acesso. O funcionário será obrigado a trocá-la no primeiro login.</span>
+              <span class="field__error">A senha deve ter pelo menos 4 caracteres.</span>
+            </div>
+          `}
           <div class="modal__footer">
             <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
             <button type="submit" class="btn btn--primary">${isEdit ? "Salvar" : "Cadastrar"}</button>
@@ -1368,6 +1383,21 @@ if (status === "cancelado") {
       closeModal(overlay);
       window.setTimeout(() => overlay.remove(), 300);
     };
+
+    const passwordInput =
+      isEdit ? null : ($("#pro-password", overlay) as HTMLInputElement | null);
+    const toggleBtn =
+      isEdit ? null : ($("#toggle-pro-password", overlay) as HTMLButtonElement | null);
+    if (passwordInput && toggleBtn) {
+      const toggle = (): void => {
+        const reveal = passwordInput.type === "password";
+        passwordInput.type = reveal ? "text" : "password";
+        toggleBtn.innerHTML = icon(reveal ? "eye-off" : "eye", 18);
+        toggleBtn.setAttribute("aria-label", reveal ? "Ocultar senha" : "Mostrar senha");
+        passwordInput.focus({ preventScroll: true });
+      };
+      toggleBtn.addEventListener("click", toggle);
+    }
 
     const submitHandler = async (event: Event): Promise<void> => {
       event.preventDefault();
@@ -1391,6 +1421,14 @@ if (status === "cancelado") {
       if (!isEdit && existing) {
         showToast("Já existe um usuário com este e-mail.", "error");
         return;
+      }
+
+if (!isEdit && passwordInput) {
+        const senha = passwordInput.value;
+        if (senha.length < 4) {
+          showToast("A senha deve ter pelo menos 4 caracteres.", "error");
+          return;
+        }
       }
 
       const submitBtn = form.querySelector<HTMLButtonElement>("button[type=submit]");
@@ -1428,13 +1466,14 @@ if (status === "cancelado") {
 
       // Novo profissional: cria funcionário via API e atualiza o cache local.
       try {
+        const senha = passwordInput?.value || CONFIG.defaultPassword;
         await createUsuarioInterno({
           nome: name,
           email,
-          senha: CONFIG.defaultPassword,
+          senha,
           role: "profissional",
         });
-        showToast(`Profissional cadastrado! Senha padrão: ${CONFIG.defaultPassword}. Altere em Configurações.`, "success");
+        showToast(`Profissional cadastrado! Senha: ${senha}. O primeiro login obrigará a troca.`, "success");
         finish();
         await renderProfissionais();
       } catch (error) {

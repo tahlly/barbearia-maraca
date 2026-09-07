@@ -164,6 +164,10 @@ export function requireSession(): Session {
     navigateTo("/login");
     throw new Error("Sessão expirada");
   }
+  if (session.precisaTrocarSenha) {
+    navigateTo("/login");
+    throw new Error("Primeiro acesso pendente");
+  }
   return session;
 }
 
@@ -172,6 +176,10 @@ export function requireRole(allowed: UserRole[]): Session {
   if (!session) {
     navigateTo("/login");
     throw new Error("Sessão expirada");
+  }
+  if (session.precisaTrocarSenha) {
+    navigateTo("/login");
+    throw new Error("Primeiro acesso pendente");
   }
   if (!allowed.includes(session.role)) {
     redirectForRole(session.role);

@@ -136,6 +136,7 @@ export async function criar(dados: {
         email: dados.email,
         senha_hash: dados.senhaHash,
         tipo: 'funcionario',
+        primeiro_acesso: true,
       })
       .returning('*')) as Array<{ id: string; email: string }>;
 
