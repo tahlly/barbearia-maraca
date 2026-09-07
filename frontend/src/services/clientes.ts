@@ -35,6 +35,83 @@ export async function findClienteByEmail(email: string): Promise<Cliente | null>
 }
 
 /**
+ * Busca clientes por nome/e-mail/telefone (recepcionista/admin).
+ *
+ * Chama `GET /clientes?busca=termo`. Retorna a lista vazia em erro para o
+ * caller tratar como "nenhum resultado".
+ */
+export async function buscarClientes(termo: string): Promise<Cliente[]> {
+  try {
+    const res = await apiFetch(`/clientes?busca=${encodeURIComponent(termo.trim())}`, {
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as Array<{
+      id: string;
+      nome: string;
+      email: string;
+      telefone: string | null;
+    }>;
+    return data.map((c) => ({
+      id: c.id,
+      nome: c.nome,
+      email: c.email,
+      telefone: c.telefone ?? "",
+      senha: "",
+      createdAt: new Date().toISOString(),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Cria um novo cliente sem alterar a sessão ativa (recepcionista/admin).
+ *
+ * Chama `POST /clientes` (autorizado apenas para recepcionista/admin) com
+ * `{ nome, email, telefone?, senha }`. Diferente de `registerCliente`, NÃO
+ * faz auto-login: a sessão do operador permanece intacta.
+ */
+export async function criarCliente(data: {
+  nome: string;
+  email: string;
+  telefone?: string;
+  senha: string;
+}): Promise<Cliente> {
+  const res = await apiFetch("/clientes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      nome: data.nome,
+      email: data.email,
+      telefone: data.telefone?.trim() || undefined,
+      senha: data.senha,
+    }),
+  });
+
+  const body = (await res.json().catch(() => ({}))) as {
+    message?: string;
+    error?: string;
+    mensagem?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(body.message || body.mensagem || body.error || "Erro ao cadastrar cliente");
+  }
+
+  const created = body as unknown as { id: string; nome: string; email: string; telefone: string | null };
+  return {
+    id: created.id,
+    nome: created.nome,
+    email: created.email,
+    telefone: created.telefone ?? "",
+    senha: "",
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/**
  * Registra um novo cliente e realiza auto-login.
  *
  * O backend retorna `{ token, user: { id, email, nome, tipo } }`.
@@ -57,15 +134,21 @@ export async function registerCliente(data: {
     }),
   });
 
-  const body = (await res.json()) as {
+  let body: {
     token?: string;
     user?: { id: string; email: string; nome: string; tipo: string };
     message?: string;
+    mensagem?: string;
     error?: string;
-  };
+  } = {};
+  try {
+    body = (await res.json()) as typeof body;
+  } catch {
+    body = {};
+  }
 
   if (!res.ok) {
-    throw new Error(body.message || body.error || "Erro ao cadastrar");
+    throw new Error(body.mensagem || body.message || body.error || "Erro ao cadastrar");
   }
 
   const result = body as {

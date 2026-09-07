@@ -10,13 +10,9 @@ import { renderLoginCliente } from "./views/loginCliente.js";
 import { renderMinhaConta } from "./views/minhaConta.js";
 import { renderManage } from "./views/manage.js";
 import { renderProfissional } from "./views/profissional.js";
-import { renderSuperusuario } from "./views/superusuario.js";
-import { ensureSeed } from "./data/seed.js";
 import { primeCatalog } from "./services/catalog.js";
 
 function init(): void {
-  ensureSeed();
-
   initTheme();
   initNavbar();
   initModals();
@@ -33,8 +29,6 @@ function init(): void {
   registerRoute("/admin/servicos", renderManage);
   registerRoute("/admin/profissionais", renderManage);
   registerRoute("/admin/configuracoes", renderManage);
-  registerRoute("/superusuario", renderSuperusuario);
-  registerRoute("/superusuario/usuarios", renderSuperusuario);
   registerRoute("/profissional", renderProfissional);
   registerRoute("/profissional/configuracoes", renderProfissional);
   registerRoute("/recepcionista", renderManage);
@@ -56,7 +50,10 @@ function init(): void {
   /* Popula o cache de catálogo (serviços e profissionais) no boot.
      É fire-and-forget: enquanto a resposta não chega, o cache pode estar
      vazio; as views que dependem dele recarregam assincronamente. */
-  void primeCatalog();
+  void primeCatalog().catch(() => {
+    /* Silencioso: falha de rede no boot não deve quebrar a SPA;
+       as views tratam os próprios erros ao carregar dados. */
+  });
 }
 
 if (document.readyState === "loading") {

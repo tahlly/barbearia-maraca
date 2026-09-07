@@ -49,6 +49,28 @@ export function renderProfissional(container: HTMLElement): () => void {
     else renderConfiguracoes();
   }
 
+  // ------------------------------------------------------ Estado de erro da lista
+  let appointmentsError: string | null = null;
+
+  async function fetchAppointments(): Promise<Appointment[]> {
+    try {
+      const list = await listAppointments();
+      appointmentsError = null;
+      return list;
+    } catch (error) {
+      appointmentsError =
+        error instanceof Error ? error.message : "Não foi possível carregar os agendamentos.";
+      return [];
+    }
+  }
+
+  function renderAppointmentsError(): void {
+    const table = $("#pro-agenda-table", content);
+    if (table && appointmentsError) {
+      table.innerHTML = `<p class="panel__empty" role="alert">${escapeHtml(appointmentsError)}</p>`;
+    }
+  }
+
   // ------------------------------------------------------------ Agendamentos
   function renderAgendamentos(): void {
     const currentYear = new Date().getFullYear();
@@ -136,19 +158,22 @@ export function renderProfissional(container: HTMLElement): () => void {
       $("#pro-agenda-table", content)!.innerHTML = buildTable(applyFilters(appointments));
     }
 
-    void (async () => {
-      const appointments = await listAppointments();
-      refresh(appointments);
-    })();
+    async function reloadList(): Promise<void> {
+      const list = await fetchAppointments();
+      if (appointmentsError) renderAppointmentsError();
+      else refresh(list);
+    }
+
+    void reloadList();
 
     const onSearch = (): void => {
-      void (async () => refresh(await listAppointments()))();
+      void reloadList();
     };
     const onFilter = (): void => {
-      void (async () => refresh(await listAppointments()))();
+      void reloadList();
     };
     const onConsult = (): void => {
-      void (async () => refresh(await listAppointments()))();
+      void reloadList();
     };
 
     const onClear = (): void => {
@@ -156,7 +181,7 @@ export function renderProfissional(container: HTMLElement): () => void {
       if (fim) fim.value = defaultEnd;
       if (search) search.value = "";
       if (filter) filter.value = "todos";
-      void (async () => refresh(await listAppointments()))();
+      void reloadList();
     };
 
     search?.addEventListener("input", onSearch);

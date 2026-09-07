@@ -99,6 +99,10 @@ export async function listarHorarios(
   user: ReqUser,
   filtros: ListarHorariosFiltros
 ): Promise<HorarioTrabalho[]> {
+  if (!PAPEIS_AGENDA.includes(user.role)) {
+    throw new ForbiddenError('Acesso negado: papel sem permissão de gestão de horários');
+  }
+
   if (user.role === 'profissional') {
     const proprio = await resolverFuncionarioDoUsuario(user.id);
     const params: ListarHorariosParams = {

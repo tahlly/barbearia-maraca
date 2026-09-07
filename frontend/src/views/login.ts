@@ -1,10 +1,14 @@
 import { CONFIG } from "../config.js";
 import { $, clearFormErrors, setFieldError } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
-import { getSession, loginInterno, redirectForRole, solicitarRecuperacaoSenha, redefinirSenha } from "../services/auth.js";
+import { completeFirstAccess, getSession, loginInterno, redirectForRole, solicitarRecuperacaoSenha, redefinirSenha } from "../services/auth.js";
 import { showToast } from "../ui/toast.js";
+import { closeModal, openModal } from "../ui/modal.js";
+import type { UserRole } from "../types.js";
 
 type ViewName = "login" | "recover" | "recover-sent" | "reset" | "reset-done";
+
+const PASSWORD_RE = /^(?=.*[A-ZÀ-Ü])(?=.*[0-9])(?=.*[^A-Za-z0-9À-ÿ\s]).{8,}$/;
 
 const VIEWS: Record<ViewName, string> = {
   login: "view-login",
@@ -66,9 +70,119 @@ function registerFailure(): void {
   }
 }
 
+/**
+ * Popup bloqueante de primeiro acesso: exige a criação de uma nova senha
+ * (com o padrão forte) antes de liberar o painel. Não pode ser fechado por
+ * Escape/backdrop — a troca é obrigatória (ver ui/modal.ts: dataset.blocking).
+ */
+function promptFirstAccess(role: UserRole): void {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.dataset.blocking = "true";
+  overlay.setAttribute("aria-hidden", "true");
+  overlay.innerHTML = `
+    <div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="fa-title">
+      <div class="modal__header">
+        <h2 class="modal__title" id="fa-title">Criar nova senha</h2>
+      </div>
+      <form class="modal__body" id="fa-form" novalidate>
+        <p class="field__hint">Este é o seu primeiro acesso. Crie uma senha segura antes de continuar.</p>
+        <div class="field">
+          <label class="field__label" for="fa-password">Nova senha</label>
+          <div class="input-wrap">
+            <input type="password" id="fa-password" name="new-password" placeholder="••••••••"
+                   autocomplete="new-password" maxlength="64" required>
+            <button type="button" class="input-suffix" id="toggle-fa-password" aria-label="Mostrar senha">
+              <i class='bx bx-show'></i>
+            </button>
+          </div>
+          <span class="field__hint">Mínimo 8 caracteres, com letra maiúscula, número e símbolo.</span>
+          <span class="field__error">A senha não atende ao padrão exigido.</span>
+        </div>
+        <div class="field">
+          <label class="field__label" for="fa-confirm">Repetir a nova senha</label>
+          <div class="input-wrap">
+            <input type="password" id="fa-confirm" name="confirm-password" placeholder="••••••••"
+                   autocomplete="new-password" maxlength="64" required>
+            <button type="button" class="input-suffix" id="toggle-fa-confirm" aria-label="Mostrar senha">
+              <i class='bx bx-show'></i>
+            </button>
+          </div>
+          <span class="field__error">As senhas não coincidem.</span>
+        </div>
+        <div class="modal__footer">
+          <button type="submit" class="btn btn--primary btn--block" id="fa-submit">Salvar nova senha</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  const form = overlay.querySelector<HTMLFormElement>("#fa-form")!;
+  const passwordInput = $<HTMLInputElement>("#fa-password", overlay)!;
+  const confirmInput = $<HTMLInputElement>("#fa-confirm", overlay)!;
+  const submitBtn = $<HTMLButtonElement>("#fa-submit", overlay)!;
+
+  const cleanups: Array<() => void> = [];
+  cleanups.push(setupPasswordToggle("toggle-fa-password", "fa-password"));
+  cleanups.push(setupPasswordToggle("toggle-fa-confirm", "fa-confirm"));
+
+  const toggleHandler = (): void => {
+    if (confirmInput.value.length === 0) return;
+    if (confirmInput.value === passwordInput.value) {
+      setFieldError(confirmInput, null);
+    } else {
+      setFieldError(confirmInput, "As senhas não coincidem.");
+    }
+  };
+  confirmInput.addEventListener("input", toggleHandler);
+  cleanups.push(() => confirmInput.removeEventListener("input", toggleHandler));
+
+  form.addEventListener("submit", async (event: Event) => {
+    event.preventDefault();
+    clearFormErrors(form);
+
+    let valid = true;
+    if (!PASSWORD_RE.test(passwordInput.value)) {
+      setFieldError(passwordInput, "A senha não atende ao padrão exigido.");
+      valid = false;
+    }
+    if (confirmInput.value !== passwordInput.value || confirmInput.value === "") {
+      setFieldError(confirmInput, "As senhas não coincidem.");
+      valid = false;
+    }
+    if (!valid) return;
+
+    submitBtn.disabled = true;
+    submitBtn.classList.add("is-loading");
+
+    const result = await completeFirstAccess(passwordInput.value);
+    if (!result.ok) {
+      submitBtn.disabled = false;
+      submitBtn.classList.remove("is-loading");
+      showToast(result.message ?? "Não foi possível atualizar a senha.", "error");
+      passwordInput.focus();
+      return;
+    }
+
+    closeModal(overlay);
+    window.setTimeout(() => overlay.remove(), 300);
+    cleanups.forEach((fn) => fn());
+    showToast("Senha criada. Bem-vindo!", "success");
+    redirectForRole(role);
+  });
+
+  document.body.appendChild(overlay);
+  openModal(overlay);
+}
+
 export function renderLogin(container: HTMLElement): () => void {
   const existing = getSession();
   if (existing) {
+    // Primeiro acesso pendente: mantém o popup obrigatório mesmo após reload.
+    if (existing.precisaTrocarSenha) {
+      promptFirstAccess(existing.role);
+      return () => {};
+    }
     redirectForRole(existing.role);
     return () => {};
   }
@@ -268,6 +382,10 @@ export function renderLogin(container: HTMLElement): () => void {
     submitBtn.classList.remove("is-loading");
 
     if (result.ok && result.role) {
+      if (result.precisaTrocarSenha) {
+        promptFirstAccess(result.role);
+        return;
+      }
       showToast("Bem-vindo de volta!", "success");
       redirectForRole(result.role);
       return;

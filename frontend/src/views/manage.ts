@@ -7,7 +7,6 @@ import {
   loadServices,
   loadProfessionals,
   loadCategories,
-  saveCategories,
   createServico,
   updateServico,
   setServicoStatus,
@@ -17,6 +16,7 @@ import {
   cancelAppointment,
   confirmAppointment,
   concludeAppointment,
+  revertCompletion,
 } from "../services/booking.js";
 import {
   createUsuarioInterno,
@@ -29,7 +29,9 @@ import { DEFAULT_DAYS, loadSchedule, saveSchedule, type ScheduleConfig } from ".
 import { confirmDialog, openModal, closeModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
 import { renderSettingsForm } from "../features/settingsForm.js";
-import type { Service, ServiceIcon, Appointment, Professional } from "../types.js";
+import { initBookingWizard } from "../features/bookingWizard.js";
+import { attachUppercaseMask } from "../ui/mask.js";
+import type { Service, Appointment, Professional } from "../types.js";
 import { CONFIG } from "../config.js";
 
 type ManageTab = "dashboard" | "servicos" | "profissionais" | "agendamentos" | "configuracoes";
@@ -79,6 +81,10 @@ function statusBadge(status: Appointment["status"]): string {
           ? "warning"
           : "neutral";
   return `<span class="badge badge--${variant}">${STATUS_LABEL[status]}</span>`;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
 }
 
 let servicesCache: Service[] = [];
@@ -132,6 +138,13 @@ export function renderManage(container: HTMLElement): () => void {
   });
 
   const cleanups: Array<() => void> = [];
+  // Wizard de agendamento em MODO OPERADOR: recepcionista/admin escolhem ou
+  // cadastram o cliente no primeiro passo e criam o agendamento em nome dele.
+  const wizard = initBookingWizard({
+    onBookingCreated: () => {
+      void renderAgendamentos();
+    },
+  });
   const state: DashboardFilter = {
     mode: "todos",
     ano: new Date().getFullYear(),
@@ -152,7 +165,21 @@ export function renderManage(container: HTMLElement): () => void {
   // ---------------------------------------------------------------- Dashboard
   async function renderDashboard(): Promise<void> {
     refreshCaches();
-    const appointments = await listAppointments();
+    let appointments: Appointment[];
+    try {
+      appointments = await listAppointments();
+    } catch (error) {
+      content.innerHTML = `
+        <div class="panel__section manage-head">
+          <div class="manage-head__titles">
+            <h3 class="panel__section-title">Dashboard</h3>
+            <p class="manage-head__sub">Indicadores e financeiro do salão</p>
+          </div>
+        </div>
+        <p class="panel__empty" role="alert">${escapeHtml(errorMessage(error, "Não foi possível carregar o dashboard."))}</p>
+      `;
+      return;
+    }
 
     const years = availableYears(appointments);
     const selectedYear = years.includes(state.ano) ? state.ano : years[years.length - 1] ?? new Date().getFullYear();
@@ -228,8 +255,15 @@ export function renderManage(container: HTMLElement): () => void {
 
     const refresh = (): void => {
       void (async () => {
-        const appts = await listAppointments();
-        $("#dashboard-metrics", content)!.innerHTML = dashboardMetricsHTML(appts);
+        try {
+          const appts = await listAppointments();
+          $("#dashboard-metrics", content)!.innerHTML = dashboardMetricsHTML(appts);
+        } catch (error) {
+          const metrics = $("#dashboard-metrics", content);
+          if (metrics) {
+            metrics.innerHTML = `<p class="panel__empty" role="alert">${escapeHtml(errorMessage(error, "Não foi possível atualizar o dashboard."))}</p>`;
+          }
+        }
       })();
     };
 
@@ -431,11 +465,20 @@ export function renderManage(container: HTMLElement): () => void {
   // ----------------------------------------------------------- Agendamentos
   async function renderAgendamentos(): Promise<void> {
     refreshCaches();
-    const appointments = (await listAppointments()).sort((a, b) => {
-      const ka = `${a.data}T${a.hora}`;
-      const kb = `${b.data}T${b.hora}`;
-      return kb.toString().localeCompare(ka.toString());
-    });
+    let appointments: Appointment[];
+    try {
+      appointments = (await listAppointments()).sort((a, b) => {
+        const ka = `${a.data}T${a.hora}`;
+        const kb = `${b.data}T${b.hora}`;
+        return kb.toString().localeCompare(ka.toString());
+      });
+    } catch (error) {
+      content.innerHTML = `
+        <p class="panel__empty" role="alert">${escapeHtml(errorMessage(error, "Não foi possível carregar os agendamentos."))}</p>
+      `;
+      showToast(errorMessage(error, "Não foi possível carregar os agendamentos."), "error");
+      return;
+    }
 
     const currentYear = new Date().getFullYear();
     const defaultStart = `${currentYear}-01-01`;
@@ -448,6 +491,7 @@ export function renderManage(container: HTMLElement): () => void {
           <p class="manage-head__sub">Controle completo da agenda do salão e status das reservas</p>
         </div>
         <div class="toolbar">
+          <button type="button" class="btn btn--primary" data-new-booking>${icon("plus", 16)} Novo agendamento</button>
           <button type="button" class="btn btn--ghost" data-open-agenda>${icon("sliders", 16)} Configurar agenda</button>
         </div>
       </div>
@@ -544,6 +588,15 @@ export function renderManage(container: HTMLElement): () => void {
       cleanups.push(() => openAgendaBtn.removeEventListener("click", h));
     }
 
+    const newBookingBtn = $<HTMLButtonElement>("[data-new-booking]", content);
+    if (newBookingBtn) {
+      const h = (): void => {
+        void wizard.openNew();
+      };
+      newBookingBtn.addEventListener("click", h);
+      cleanups.push(() => newBookingBtn.removeEventListener("click", h));
+    }
+
     bindAgendaRows();
   }
 
@@ -566,6 +619,15 @@ export function renderManage(container: HTMLElement): () => void {
       cleanups.push(() => btn.removeEventListener("click", h));
     });
 
+    $$("[data-revert-app]", content).forEach((btn) => {
+      const id = btn.getAttribute("data-id")!;
+      const h = (): void => {
+        void handleRevertCompletion(id);
+      };
+      btn.addEventListener("click", h);
+      cleanups.push(() => btn.removeEventListener("click", h));
+    });
+
     $$("[data-cancel-app]", content).forEach((btn) => {
       const id = btn.getAttribute("data-id")!;
       const h = (): void => {
@@ -580,9 +642,13 @@ export function renderManage(container: HTMLElement): () => void {
       const h = (event: Event): void => {
         if (event.target instanceof Element && event.target.closest("button, a, select, input")) return;
         void (async () => {
-          const appts = await listAppointments();
-          const app = appts.find((a) => a.id === id) ?? null;
-          if (app) openDetailModal(app);
+          try {
+            const appts = await listAppointments();
+            const app = appts.find((a) => a.id === id) ?? null;
+            if (app) openDetailModal(app);
+          } catch {
+            showToast("Não foi possível carregar os detalhes.", "error");
+          }
         })();
       };
       row.addEventListener("click", h);
@@ -591,38 +657,67 @@ export function renderManage(container: HTMLElement): () => void {
   }
 
   async function handleSetStatus(id: string, status: Appointment["status"]): Promise<void> {
-    const appts = await listAppointments();
-    const app = appts.find((a) => a.id === id);
-
-    if (status === "cancelado") {
+if (status === "cancelado") {
       const confirmed = await confirmDialog({
         title: "Cancelar agendamento",
-        message: `Confirmar o cancelamento do agendamento de ${app?.clienteNome ?? "cliente"}?`,
-        confirmLabel: "Cancelar agendamento",
+        message: "Tem certeza que deseja cancelar este agendamento?",
+        confirmLabel: "Sim, cancelar",
         danger: true,
       });
       if (!confirmed) return;
-      await cancelAppointment(id);
+      try {
+        await cancelAppointment(id);
+      } catch (error) {
+        showToast(errorMessage(error, "Não foi possível cancelar o agendamento."), "error");
+        return;
+      }
       showToast("Agendamento cancelado.");
     } else if (status === "confirmado") {
       const confirmed = await confirmDialog({
         title: "Confirmar presença",
-        message: "Marcar este agendamento como confirmado?",
+        message: "Confirmar a presença do cliente neste horário?",
         confirmLabel: "Confirmar",
       });
       if (!confirmed) return;
-      await confirmAppointment(id);
+      try {
+        await confirmAppointment(id);
+      } catch (error) {
+        showToast(errorMessage(error, "Não foi possível confirmar a presença."), "error");
+        return;
+      }
       showToast("Presença confirmada.");
     } else if (status === "concluido") {
       const confirmed = await confirmDialog({
         title: "Concluir atendimento",
-        message: "Marcar este agendamento como concluído?",
+        message: "Marcar este atendimento como concluído? Essa ação libera o horário como finalizado.",
         confirmLabel: "Concluir",
       });
       if (!confirmed) return;
-      await concludeAppointment(id);
+      try {
+        await concludeAppointment(id);
+      } catch (error) {
+        showToast(errorMessage(error, "Não foi possível concluir o atendimento."), "error");
+        return;
+      }
       showToast("Atendimento concluído.");
     }
+    await renderAgendamentos();
+  }
+
+  async function handleRevertCompletion(id: string): Promise<void> {
+    const confirmed = await confirmDialog({
+      title: "Reverter conclusão",
+      message: 'Este atendimento voltará para o status "Confirmado". Deseja continuar?',
+      confirmLabel: "Reverter",
+    });
+    if (!confirmed) return;
+    try {
+      await revertCompletion(id);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Não foi possível reverter a conclusão.", "error");
+      return;
+    }
+    showToast("Conclusão revertida. Atendimento voltou para Confirmado.");
     await renderAgendamentos();
   }
 
@@ -659,6 +754,10 @@ export function renderManage(container: HTMLElement): () => void {
                 actions = `<span class="actions-cell">
                   <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-conclude-app data-id="${escapeHtml(a.id)}">CONCLUIR</button>
                   <button type="button" class="btn btn--sm btn--danger-outline" data-cancel-app data-id="${escapeHtml(a.id)}">Cancelar</button>
+                </span>`;
+              } else if (a.status === "concluido") {
+                actions = `<span class="actions-cell">
+                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-revert-app data-id="${escapeHtml(a.id)}">Reverter conclusão</button>
                 </span>`;
               } else {
                 actions = `<span class="actions-cell"><span class="muted-note">Sem ações</span></span>`;
@@ -782,9 +881,11 @@ export function renderManage(container: HTMLElement): () => void {
       if (!blocked.includes(dateIso)) {
         blocked = [...blocked, dateIso];
         const newConfig: ScheduleConfig = { ...config, blockedDates: blocked };
-        void saveSchedule(newConfig, professionalId).then(() => {
-          showToast("Data bloqueada.");
-        });
+        void saveSchedule(newConfig, professionalId)
+          .then(() => {
+            showToast("Data bloqueada.");
+          })
+          .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível bloquear a data."), "error"));
         (overlay.querySelector("[data-blocked-list]") as HTMLUListElement).insertAdjacentHTML(
           "beforeend",
           `<li><span>${escapeHtml(formatDateMedium(dateIso))}</span><button type="button" class="btn btn--sm btn--ghost" data-remove-blocked="${escapeHtml(dateIso)}" aria-label="Remover">${icon("x", 14)}</button></li>`,
@@ -803,9 +904,11 @@ export function renderManage(container: HTMLElement): () => void {
       }
       let exceptions = config.exceptions.filter((e) => e.dateIso !== dateIso);
       exceptions = [...exceptions, { dateIso, start, end }];
-      void saveSchedule({ ...config, exceptions }, professionalId).then(() => {
-        showToast("Abertura excepcional adicionada.");
-      });
+      void saveSchedule({ ...config, exceptions }, professionalId)
+        .then(() => {
+          showToast("Abertura excepcional adicionada.");
+        })
+        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível adicionar a abertura excepcional."), "error"));
       (overlay.querySelector("[data-exception-list]") as HTMLUListElement).insertAdjacentHTML(
         "beforeend",
         `<li><span>${escapeHtml(formatDateMedium(dateIso))} · ${start}–${end}</span><button type="button" class="btn btn--sm btn--ghost" data-remove-exception="${escapeHtml(dateIso)}" aria-label="Remover">${icon("x", 14)}</button></li>`,
@@ -823,10 +926,12 @@ export function renderManage(container: HTMLElement): () => void {
         ...config,
         blockedDates: config.blockedDates.filter((d) => d !== dateIso),
       };
-      void saveSchedule(newConfig, professionalId).then(() => {
-        btn.closest("li")?.remove();
-        showToast("Data desbloqueada.");
-      });
+      void saveSchedule(newConfig, professionalId)
+        .then(() => {
+          btn.closest("li")?.remove();
+          showToast("Data desbloqueada.");
+        })
+        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível desbloquear a data."), "error"));
     });
 
     overlay.querySelector("[data-exception-list]")!.addEventListener("click", (event) => {
@@ -837,10 +942,12 @@ export function renderManage(container: HTMLElement): () => void {
         ...config,
         exceptions: config.exceptions.filter((e) => e.dateIso !== dateIso),
       };
-      void saveSchedule(newConfig, professionalId).then(() => {
-        btn.closest("li")?.remove();
-        showToast("Exceção removida.");
-      });
+      void saveSchedule(newConfig, professionalId)
+        .then(() => {
+          btn.closest("li")?.remove();
+          showToast("Exceção removida.");
+        })
+        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível remover a exceção."), "error"));
     });
 
     overlay.querySelector<HTMLFormElement>("#schedule-form")!.addEventListener("submit", (event) => {
@@ -854,10 +961,12 @@ export function renderManage(container: HTMLElement): () => void {
           end: (overlay.querySelector<HTMLInputElement>(`[data-day-end="${day}"]`)!).value,
         };
       }
-      void saveSchedule({ ...config, weekly }, professionalId).then(() => {
-        showToast("Agenda configurada.");
-        finish();
-      });
+      void saveSchedule({ ...config, weekly }, professionalId)
+        .then(() => {
+          showToast("Agenda configurada.");
+          finish();
+        })
+        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível salvar a agenda."), "error"));
     });
 
     overlay.querySelectorAll("[data-close]").forEach((el) => el.addEventListener("click", finish));
@@ -935,7 +1044,6 @@ export function renderManage(container: HTMLElement): () => void {
           <thead>
             <tr>
               <th>Nome do Serviço</th>
-              <th>Categoria</th>
               <th>Duração</th>
               <th>Preço</th>
               ${actionsHeader}
@@ -947,7 +1055,6 @@ export function renderManage(container: HTMLElement): () => void {
                 (s) => `
                   <tr>
                     <td><strong>${escapeHtml(s.name)}</strong></td>
-                    <td>${escapeHtml(s.category || "-")}</td>
                     <td>${s.durationMin} min</td>
                     <td>${formatCurrency(s.price)}</td>
                     ${actionsCell(s.id)}
@@ -1001,8 +1108,8 @@ export function renderManage(container: HTMLElement): () => void {
     try {
       await setServicoStatus(service.id, false);
       showToast("Serviço removido.");
-    } catch {
-      showToast("Erro ao remover serviço.", "error");
+    } catch (error) {
+      showToast(errorMessage(error, "Erro ao remover serviço."), "error");
     }
     renderServicos();
   }
@@ -1010,7 +1117,6 @@ export function renderManage(container: HTMLElement): () => void {
   function openServiceModal(service: Service | null): void {
     if (!isAdmin) return; // Recepcionista não altera serviços (PRD).
     const isEdit = Boolean(service);
-    const categories = loadCategories();
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.setAttribute("aria-hidden", "true");
@@ -1021,46 +1127,35 @@ export function renderManage(container: HTMLElement): () => void {
           <button type="button" class="modal__close" data-close aria-label="Fechar">${icon("x", 18)}</button>
         </div>
         <form class="modal__body" id="svc-form" novalidate>
-          <div class="form-grid">
-            <div class="field">
-              <label class="field__label" for="svc-name">Nome *</label>
-              <input type="text" id="svc-name" value="${escapeHtml(service?.name ?? "")}" maxlength="60" required>
-              <span class="field__error">Informe o nome.</span>
-            </div>
-            <div class="field">
-              <label class="field__label" for="svc-category">Categoria</label>
-              <input type="text" id="svc-category" list="svc-categories" value="${escapeHtml(service?.category ?? "")}" maxlength="30">
-              <datalist id="svc-categories">
-                ${categories.map((c) => `<option value="${escapeHtml(c)}">`).join("")}
-              </datalist>
-              <span class="field__hint">Digite um nome novo para adicionar categoria</span>
-            </div>
+          <div class="field">
+            <label class="field__label" for="svc-name">Nome *</label>
+            <input type="text" id="svc-name" value="${escapeHtml(service?.name ?? "")}" maxlength="60" placeholder="CORTE DE CABELO" required>
+            <span class="field__error">Informe o nome.</span>
+          </div>
+          <div class="field">
+            <label class="field__label" for="svc-desc">Descrição</label>
+            <textarea id="svc-desc" rows="3" maxlength="200" placeholder="Descreva o serviço (opcional)">${escapeHtml(service?.description ?? "")}</textarea>
           </div>
           <div class="form-grid">
             <div class="field">
               <label class="field__label" for="svc-duration">Duração (min) *</label>
-              <input type="number" id="svc-duration" value="${service?.durationMin ?? 30}" min="10" step="5" required>
+              <input type="number" id="svc-duration" value="${service?.durationMin ?? 45}" min="10" max="240" step="5" required>
             </div>
             <div class="field">
               <label class="field__label" for="svc-price">Preço (R$) *</label>
-              <input type="number" id="svc-price" value="${service?.price ?? 0}" min="0" step="0.5" required>
-            </div>
-            <div class="field">
-              <label class="field__label" for="svc-icon">Ícone</label>
-              <select id="svc-icon">
-                ${SERVICE_ICONS.map(
-                  (o) => `<option value="${o.value}" ${service?.icon === o.value ? "selected" : ""}>${o.label}</option>`,
-                ).join("")}
-              </select>
+              <input type="number" id="svc-price" value="${service?.price ?? ""}" min="1" step="0.01" placeholder="55.00" required>
             </div>
           </div>
           <div class="modal__footer">
             <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
-            <button type="submit" class="btn btn--primary">${isEdit ? "Salvar" : "Criar serviço"}</button>
+            <button type="submit" class="btn btn--primary">Salvar serviço</button>
           </div>
         </form>
       </div>
     `;
+
+    const nameInput = overlay.querySelector<HTMLInputElement>("#svc-name")!;
+    attachUppercaseMask(nameInput);
 
     const form = overlay.querySelector<HTMLFormElement>("#svc-form")!;
     const finish = (): void => {
@@ -1070,22 +1165,26 @@ export function renderManage(container: HTMLElement): () => void {
 
     const submitHandler = async (event: Event): Promise<void> => {
       event.preventDefault();
-      const name = ($("#svc-name", overlay) as HTMLInputElement).value.trim();
-      const duration = Number(($("#svc-duration", overlay) as HTMLInputElement).value);
-      const price = Number(($("#svc-price", overlay) as HTMLInputElement).value);
+      const name = nameInput.value.trim().toUpperCase();
+      const description = (overlay.querySelector<HTMLTextAreaElement>("#svc-desc")?.value ?? "").trim();
+      const duration = Number((overlay.querySelector<HTMLInputElement>("#svc-duration")!).value);
+      const price = Number((overlay.querySelector<HTMLInputElement>("#svc-price")!).value);
       if (name.length < 3) {
         showToast("Informe o nome do serviço.", "error");
         return;
       }
-      if (!Number.isFinite(duration) || duration < 10 || !Number.isFinite(price) || price < 0) {
-        showToast("Verifique duração e preço.", "error");
+      if (!Number.isFinite(duration) || duration < 10 || duration > 240) {
+        showToast("Duração deve ser entre 10 e 240 minutos.", "error");
         return;
       }
-      const category = ($("#svc-category", overlay) as HTMLInputElement).value.trim();
-      const iconSel = ($("#svc-icon", overlay) as HTMLSelectElement).value as ServiceIcon;
-      const description = service?.description ?? "";
-      if (category && !loadCategories().includes(category)) {
-        saveCategories([...loadCategories(), category]);
+      if (!Number.isFinite(price) || price < 1) {
+        showToast("Informe um preço válido.", "error");
+        return;
+      }
+      const submitBtn = form.querySelector<HTMLButtonElement>("button[type=submit]");
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.classList.add("is-loading");
       }
       try {
         if (isEdit && service) {
@@ -1095,13 +1194,15 @@ export function renderManage(container: HTMLElement): () => void {
           await createServico({ name, description, durationMin: duration, price });
           showToast("Serviço criado!");
         }
-        // PENDÊNCIA: icon e category são campos frontend-only; o backend não os persiste.
-        void iconSel;
-        void category;
         finish();
         renderServicos();
-      } catch {
-        showToast("Erro ao salvar serviço. Verifique os dados.", "error");
+      } catch (error) {
+        showToast(errorMessage(error, "Erro ao salvar serviço. Verifique os dados."), "error");
+      } finally {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.classList.remove("is-loading");
+        }
       }
     };
 
@@ -1117,7 +1218,15 @@ export function renderManage(container: HTMLElement): () => void {
   // ----------------------------------------------------------- Profissionais
   async function renderProfissionais(): Promise<void> {
     refreshCaches();
-    const appts = await listAppointments();
+    let appts: Appointment[] = [];
+    try {
+      appts = await listAppointments();
+    } catch (error) {
+      content.innerHTML = `
+        <p class="panel__empty" role="alert">${escapeHtml(errorMessage(error, "Não foi possível carregar os profissionais."))}</p>
+      `;
+      return;
+    }
     const now = new Date();
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
     const counts = new Map<string, number>();
@@ -1203,8 +1312,8 @@ export function renderManage(container: HTMLElement): () => void {
       const usuario = await findByProfessionalId(id);
       if (usuario) await deleteUsuarioInterno(usuario.id);
       showToast("Profissional excluído.");
-    } catch {
-      showToast("Erro ao excluir profissional.", "error");
+    } catch (error) {
+      showToast(errorMessage(error, "Erro ao excluir profissional."), "error");
     }
     await renderProfissionais();
   }
@@ -1284,6 +1393,14 @@ export function renderManage(container: HTMLElement): () => void {
         return;
       }
 
+      const submitBtn = form.querySelector<HTMLButtonElement>("button[type=submit]");
+      const setBusy = (busy: boolean): void => {
+        if (!submitBtn) return;
+        submitBtn.disabled = busy;
+        submitBtn.classList.toggle("is-loading", busy);
+      };
+      setBusy(true);
+
       if (isEdit && pro) {
         try {
           const existing = await findByProfessionalId(pro.id);
@@ -1299,8 +1416,10 @@ export function renderManage(container: HTMLElement): () => void {
             });
           }
           showToast("Profissional atualizado.");
-        } catch {
-          showToast("Erro ao atualizar profissional.", "error");
+        } catch (error) {
+          showToast(errorMessage(error, "Erro ao atualizar profissional."), "error");
+        } finally {
+          setBusy(false);
         }
         finish();
         await renderProfissionais();
@@ -1318,8 +1437,10 @@ export function renderManage(container: HTMLElement): () => void {
         showToast(`Profissional cadastrado! Senha padrão: ${CONFIG.defaultPassword}. Altere em Configurações.`, "success");
         finish();
         await renderProfissionais();
-      } catch {
-        showToast("Não foi possível cadastrar o profissional. Verifique se o e-mail já está em uso.", "error");
+      } catch (error) {
+        showToast(errorMessage(error, "Não foi possível cadastrar o profissional. Verifique se o e-mail já está em uso."), "error");
+      } finally {
+        setBusy(false);
       }
     };
 
@@ -1375,10 +1496,3 @@ export function renderManage(container: HTMLElement): () => void {
     cleanupPanel();
   };
 }
-
-const SERVICE_ICONS: Array<{ value: ServiceIcon; label: string }> = [
-  { value: "scissors", label: "Tesoura" },
-  { value: "beard", label: "Barba" },
-  { value: "layers", label: "Camadas" },
-  { value: "sparkle", label: "Estrela" },
-];

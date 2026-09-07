@@ -975,7 +975,7 @@
         "tags": [
           "Agendamentos"
         ],
-        "summary": "Cria um agendamento",
+        "summary": "Cria um agendamento (cliente agenda para si; recepcionista/admin informam cliente_id)",
         "security": [
           {
             "bearerAuth": []
@@ -1202,6 +1202,48 @@
                 }
               }
             }
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/agendamentos/{id}/reverter": {
+      "patch": {
+        "tags": [
+          "Agendamentos"
+        ],
+        "summary": "Reverte a conclusao de um agendamento para confirmado (profissional/recepcionista/admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agendamento revertido para confirmado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agendamento"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
           },
           "403": {
             "$ref": "#/components/responses/Erro403"
@@ -2121,6 +2163,11 @@
           "observacao": {
             "type": "string",
             "nullable": true
+          },
+          "cliente_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Obrigatório quando o solicitante é recepcionista/admin (agenda em nome do cliente). Ignorado para o papel cliente."
           }
         }
       },

@@ -2,6 +2,8 @@ import { CONFIG } from "../config.js";
 import type { Appointment, BookingDraft, Professional } from "../types.js";
 import { fetchBarbeiros, loadProfessionals, loadServices } from "../services/catalog.js";
 import { createAppointment, reschedule } from "../services/booking.js";
+import { buscarClientes, criarCliente } from "../services/clientes.js";
+import { getSession } from "../services/auth.js";
 import { isDateOpen, slotsForDate } from "../services/schedule.js";
 import { $, $$, clearElement, clearFormErrors, escapeHtml, initials } from "../ui/dom.js";
 import { icon, serviceIcon } from "../ui/icons.js";
@@ -9,7 +11,13 @@ import { formatCurrency, formatDateLong, toIsoDate } from "../ui/format.js";
 import { closeModal, openModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
 
-const TOTAL_STEPS = 3;
+type StepName = "cliente" | "servicos" | "horario" | "confirmacao";
+
+interface ClienteSelecionado {
+  id: string;
+  nome: string;
+  email: string;
+}
 
 interface WizardState {
   step: number;
@@ -19,6 +27,9 @@ interface WizardState {
   time: string | null;
   rescheduleId: string | null;
   rescheduleAppointment: Appointment | null;
+  cliente: ClienteSelecionado | null;
+  clientResults: ClienteSelecionado[];
+  clientSearchPerformed: boolean;
 }
 
 export interface BookingWizardHandle {
@@ -30,7 +41,20 @@ export interface BookingWizardOptions {
   onBookingCreated?: () => void;
 }
 
+// O modal #booking-modal é global e compartilhado por todas as views
+// (landing, minhaConta, manage). O wizard só pode ser inicializado UMA vez:
+// re-inicializar anexaria listeners duplicados em elementos persistentes e
+// causaria submissões duplas. O callback de sucesso é trocável conforme a
+// view ativa (só uma view está ativa por vez na SPA).
+let activeHandle: BookingWizardHandle | null = null;
+let onBookingCreatedRef: (() => void) | null = null;
+
 export function initBookingWizard(options: BookingWizardOptions = {}): BookingWizardHandle {
+  if (activeHandle) {
+    onBookingCreatedRef = options.onBookingCreated ?? null;
+    return activeHandle;
+  }
+  onBookingCreatedRef = options.onBookingCreated ?? null;
   let catalogServices = loadServices();
   let catalogProfessionals: Professional[] = [];
 
@@ -46,6 +70,13 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       catalogProfessionals = loadProfessionals().filter((p) => p.cargo === "barbeiro");
     }
   };
+
+  // Recepcionista e admin operam em MODO OPERADOR: o primeiro passo identifica
+  // o cliente (buscar existente ou cadastrar novo) e o agendamento é criado em
+  // nome desse cliente. Cliente autenticado usa o fluxo padrão (token).
+  const sessionRole = getSession()?.role;
+  const operatorMode = sessionRole === "recepcionista" || sessionRole === "admin";
+
   const overlay = $("#booking-modal")!;
   const form = $<HTMLFormElement>("#booking-form")!;
   const stepsItems = $$("#booking-steps .steps__item");
@@ -65,14 +96,41 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   const successTitle = $("#booking-success-title")!;
   const summaryEl = $("#booking-summary")!;
 
+  // Passo Cliente (modo operador)
+  const clientSearchInput = $<HTMLInputElement>("#booking-client-search")!;
+  const clientResultsBox = $("#booking-client-results")!;
+  const clientCreateToggle = $<HTMLButtonElement>("[data-client-create-toggle]", form)!;
+  const clientCreateForm = $<HTMLElement>("[data-client-create-form]", form)!;
+  const clientCreateSubmit = $<HTMLButtonElement>("[data-client-create-submit]", form)!;
+  const clientCreateCancel = $<HTMLButtonElement>("[data-client-create-cancel]", form)!;
+
+  const clientStepItem = stepsItems.find((el) => el.dataset.stepName === "cliente");
+  const clientPanel = panels.find((el) => el.dataset.stepName === "cliente");
+  if (clientStepItem) clientStepItem.hidden = !operatorMode;
+  if (clientPanel) clientPanel.hidden = !operatorMode;
+
+  // Passos visíveis (ordem real do wizard para o papel atual).
+  const steps = stepsItems.filter((el) => !el.hidden);
+  const stepPanels = panels.filter((el) => !el.hidden);
+  const stepNames = stepPanels.map((el) => el.dataset.stepName as StepName);
+  const TOTAL_STEPS = stepPanels.length;
+  const positionOf = (name: StepName): number => {
+    const index = stepNames.indexOf(name);
+    return index >= 0 ? index : 0;
+  };
+  const positionName = (pos: number): StepName => stepNames[pos] ?? "confirmacao";
+
   const state: WizardState = {
-    step: 1,
+    step: 0,
     serviceId: null,
     professionalId: null,
     dateIso: null,
     time: null,
     rescheduleId: null,
     rescheduleAppointment: null,
+    cliente: null,
+    clientResults: [],
+    clientSearchPerformed: false,
   };
 
   const today = new Date();
@@ -90,7 +148,13 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     const candidate = new Date(today);
     for (let attempt = 0; attempt < 7; attempt++) {
       const iso = toIsoDate(candidate);
-      if (await isDateEnabled(iso)) return iso;
+      let enabled = false;
+      try {
+        enabled = await isDateEnabled(iso);
+      } catch {
+        return minIso;
+      }
+      if (enabled) return iso;
       candidate.setDate(candidate.getDate() + 1);
     }
     return minIso;
@@ -114,7 +178,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
         state.dateIso = null;
         state.time = null;
         void renderSlots();
-        validateStep(2, false);
+        validateStep(positionOf("horario"), false);
         return;
       }
       if (value < minIso || value > maxIso) {
@@ -123,7 +187,13 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
         return;
       }
       void (async () => {
-        const enabled = await isDateEnabled(value);
+        let enabled = false;
+        try {
+          enabled = await isDateEnabled(value);
+        } catch {
+          showToast("Não foi possível verificar a disponibilidade. Tente novamente.", "error");
+          return;
+        }
         if (!enabled) {
           showToast("A barbearia está fechada nesta data. Escolha outra.", "error");
           dateInput.value = state.dateIso ?? "";
@@ -132,7 +202,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
         state.dateIso = value;
         state.time = null;
         await renderSlots();
-        validateStep(2, false);
+        validateStep(positionOf("horario"), false);
       })();
     });
   }
@@ -162,7 +232,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
         if (input.checked) state.serviceId = service.id;
         updateTotal();
         void renderProfessionals();
-        validateStep(1, false);
+        validateStep(positionOf("servicos"), false);
       });
       servicesBox.appendChild(label);
     }
@@ -203,14 +273,18 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
           state.professionalId = pro.id;
           // Ao trocar de profissional, reavalia a data e os horários.
           void (async () => {
-            const hasSlots = await isDateEnabled(state.dateIso ?? "");
-            if (state.dateIso && hasSlots) {
-              state.time = null;
-              await renderSlots();
+            try {
+              const hasSlots = await isDateEnabled(state.dateIso ?? "");
+              if (state.dateIso && hasSlots) {
+                state.time = null;
+                await renderSlots();
+              }
+            } catch {
+              /* renderSlots mostrará o erro de disponibilidade ao usuário */
             }
           })();
         }
-        validateStep(2, false);
+        validateStep(positionOf("horario"), false);
       });
       prosBox.appendChild(label);
     }
@@ -237,7 +311,17 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
 
     // slotsForDate() já retorna apenas slots realmente livres (filtra
     // ocupados via endpoint /horarios/funcionario-disponibilidade).
-    const slots = await slotsForDate(state.dateIso, state.professionalId);
+    let slots: string[];
+    try {
+      slots = await slotsForDate(state.dateIso, state.professionalId);
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim() !== ""
+          ? error.message
+          : "Não foi possível carregar os horários disponíveis. Tente novamente.";
+      showSlotsHint(message, "error");
+      return;
+    }
     if (slots.length === 0) {
       showSlotsHint("A barbearia está fechada nesta data. Escolha outra.", "error");
       return;
@@ -266,7 +350,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
         state.time = hour;
         $$(".slot", slotsBox).forEach((el) => el.classList.remove("is-selected"));
         btn.classList.add("is-selected");
-        validateStep(2, false);
+        validateStep(positionOf("horario"), false);
       });
       slotsBox.appendChild(btn);
     }
@@ -280,35 +364,48 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     totalEl.textContent = formatCurrency(total);
   }
 
-  function goToStep(step: number): void {
-    state.step = step;
+  function goToStep(pos: number): void {
+    state.step = pos;
+    const activeName = positionName(pos);
+    stepPanels.forEach((panel, index) => {
+      panel.classList.toggle("is-active", index === pos);
+    });
+    // Por segurança, painéis ocultos nunca ficam ativos.
     panels.forEach((panel) => {
-      panel.classList.toggle("is-active", Number(panel.dataset.step) === step);
+      if (panel.hidden) panel.classList.remove("is-active");
     });
-    stepsItems.forEach((item, index) => {
-      item.classList.toggle("is-active", index + 1 === step);
-      item.classList.toggle("is-done", index + 1 < step);
+    steps.forEach((item, index) => {
+      item.classList.toggle("is-active", index === pos);
+      item.classList.toggle("is-done", index < pos);
+      const dot = item.querySelector(".steps__dot");
+      if (dot) dot.textContent = `${index + 1}`;
     });
-    progressFill.style.width = `${(step / TOTAL_STEPS) * 100}%`;
-    prevBtn.hidden = step === 1 || step === TOTAL_STEPS;
-    nextBtn.hidden = step === TOTAL_STEPS;
-    footer.classList.toggle("wizard__footer--summary", step === TOTAL_STEPS);
-    nextBtn.textContent = step === 2 ? "Confirmar agendamento" : "Continuar";
-    if (step === 2) {
+    progressFill.style.width = `${((pos + 1) / TOTAL_STEPS) * 100}%`;
+    prevBtn.hidden = pos === 0 || pos === TOTAL_STEPS - 1;
+    nextBtn.hidden = pos === TOTAL_STEPS - 1;
+    footer.classList.toggle("wizard__footer--summary", pos === TOTAL_STEPS - 1);
+    nextBtn.textContent = activeName === "horario" ? "Confirmar agendamento" : "Continuar";
+    if (activeName === "horario") {
       void renderSlots();
     }
-    const activePanel = panels.find((p) => Number(p.dataset.step) === step);
+    const activePanel = stepPanels[pos];
     if (activePanel) activePanel.scrollTop = 0;
     bodyScroll.scrollTop = 0;
   }
 
-  function validateStep(step: number, report: boolean): boolean {
-    if (step === 1) {
+  function validateStep(pos: number, report: boolean): boolean {
+    const name = positionName(pos);
+    if (name === "cliente") {
+      const valid = Boolean(state.cliente);
+      if (!valid && report) showToast("Selecione ou cadastre um cliente.", "error");
+      return valid;
+    }
+    if (name === "servicos") {
       const valid = Boolean(state.serviceId);
       if (!valid && report) showToast("Selecione um serviço.", "error");
       return valid;
     }
-    if (step === 2) {
+    if (name === "horario") {
       const valid = Boolean(state.professionalId && state.dateIso && state.time);
       if (!valid && report) {
         showToast(
@@ -320,9 +417,6 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       }
       return valid;
     }
-    // Passo 3 é apenas a tela de sucesso; o cliente autenticado vem do token
-    // no backend. Não há mais formulário de dados do cliente no wizard.
-    if (step === 3) return true;
     return true;
   }
 
@@ -354,12 +448,14 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
 
   async function submit(): Promise<void> {
     if (!state.professionalId || !state.serviceId || !state.dateIso || !state.time) return;
+    if (operatorMode && !state.cliente) return;
 
     const draft: BookingDraft = {
       funcionario_id: state.professionalId,
       servico_id: state.serviceId,
       data: state.dateIso,
       hora: state.time,
+      ...(operatorMode && state.cliente ? { clienteId: state.cliente.id } : {}),
     };
 
     nextBtn.disabled = true;
@@ -377,15 +473,19 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
         ? "Horário atualizado!"
         : "Agendamento realizado!";
       buildSummaryRows(appointment);
-      goToStep(TOTAL_STEPS);
+      goToStep(TOTAL_STEPS - 1);
       showToast(
         state.rescheduleId
           ? "Horário do agendamento atualizado."
           : "Agendamento criado! Aguarde a confirmação da barbearia.",
       );
-      options.onBookingCreated?.();
-    } catch {
-      showToast("Não foi possível concluir o agendamento. Tente novamente.", "error");
+onBookingCreatedRef?.();
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim() !== ""
+          ? error.message
+          : "Não foi possível concluir o agendamento. Tente novamente.";
+      showToast(message, "error");
     } finally {
       nextBtn.disabled = false;
     }
@@ -398,22 +498,181 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     state.time = null;
     state.rescheduleId = null;
     state.rescheduleAppointment = null;
+    state.cliente = null;
+    state.clientResults = [];
+    state.clientSearchPerformed = false;
     form.reset();
     clearFormErrors(form);
     dateInput.value = state.dateIso;
+    if (operatorMode) {
+      clientSearchInput.value = "";
+      clearElement(clientResultsBox);
+      clientCreateForm.hidden = true;
+      clientCreateToggle.hidden = false;
+    }
     renderServices();
     await renderProfessionals();
     await renderSlots();
-    goToStep(1);
+    goToStep(operatorMode ? positionOf("cliente") : positionOf("servicos"));
+  }
+
+  // ------------------------------------------------------------- Passo Cliente
+  function renderClientResults(): void {
+    clearElement(clientResultsBox);
+
+    if (state.cliente) {
+      clientResultsBox.insertAdjacentHTML(
+        "beforeend",
+        `<div class="client-picked">
+          <span class="avatar avatar--sm">${initials(state.cliente.nome)}</span>
+          <span class="client-picked__info">
+            <strong>${escapeHtml(state.cliente.nome)}</strong>
+            <small>${escapeHtml(state.cliente.email)}</small>
+          </span>
+          <span class="client-picked__check">${icon("check", 14)}</span>
+          <button type="button" class="btn btn--sm btn--ghost" data-clear-client>Alterar</button>
+        </div>`,
+      );
+      return;
+    }
+
+    if (state.clientSearchPerformed && state.clientResults.length === 0) {
+      clientResultsBox.innerHTML = `<p class="options-empty options-empty--alert">${icon("user-plus", 18)}<span>Nenhum cliente encontrado. Use "Cadastrar novo cliente" para criá-lo.</span></p>`;
+      return;
+    }
+
+    for (const c of state.clientResults) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "option-card client-option client-option--btn";
+      btn.setAttribute("data-pick-client", c.id);
+      btn.innerHTML = `
+        <span class="avatar avatar--sm">${initials(c.nome)}</span>
+        <span class="pro-option__info">
+          <strong>${escapeHtml(c.nome)}</strong>
+          <small>${escapeHtml(c.email)}</small>
+        </span>
+        <span class="option-check">${icon("check", 14)}</span>`;
+      clientResultsBox.appendChild(btn);
+    }
+  }
+
+  function setCliente(cliente: ClienteSelecionado): void {
+    state.cliente = cliente;
+    state.clientResults = [];
+    state.clientSearchPerformed = false;
+    renderClientResults();
+    validateStep(positionOf("cliente"), false);
+  }
+
+  function clearCliente(): void {
+    state.cliente = null;
+    renderClientResults();
+    validateStep(positionOf("cliente"), false);
+  }
+
+  if (operatorMode) {
+    $<HTMLButtonElement>("[data-client-search]", form)!.addEventListener("click", () => {
+      void runClientSearch();
+    });
+    clientSearchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void runClientSearch();
+      }
+    });
+    clientResultsBox.addEventListener("click", (event) => {
+      const target = event.target as HTMLElement;
+      const pick = target.closest("[data-pick-client]");
+      if (pick) {
+        const id = pick.getAttribute("data-pick-client")!;
+        const cliente = state.clientResults.find((c) => c.id === id);
+        if (cliente) setCliente(cliente);
+        return;
+      }
+      if (target.closest("[data-clear-client]")) {
+        clearCliente();
+      }
+    });
+    clientCreateToggle.addEventListener("click", () => {
+      clientCreateToggle.hidden = true;
+      clientCreateForm.hidden = false;
+    });
+    clientCreateCancel.addEventListener("click", () => {
+      clientCreateForm.hidden = true;
+      clientCreateToggle.hidden = false;
+    });
+    clientCreateSubmit.addEventListener("click", () => {
+      void createNewClient();
+    });
+  }
+
+  async function runClientSearch(): Promise<void> {
+    const term = clientSearchInput.value.trim();
+    if (!term) {
+      showToast("Digite um nome ou e-mail para buscar.", "error");
+      return;
+    }
+    const searchBtn = form.querySelector<HTMLButtonElement>("[data-client-search]");
+    if (searchBtn) searchBtn.disabled = true;
+    try {
+      const found = await buscarClientes(term);
+      state.clientResults = found.map((c) => ({ id: c.id, nome: c.nome, email: c.email }));
+      state.clientSearchPerformed = true;
+      if (state.cliente && !state.clientResults.some((c) => c.id === state.cliente?.id)) {
+        state.cliente = null;
+      }
+      renderClientResults();
+    } finally {
+      if (searchBtn) searchBtn.disabled = false;
+    }
+  }
+
+  async function createNewClient(): Promise<void> {
+    const nome = form.querySelector<HTMLInputElement>("#client-create-nome")!.value.trim();
+    const email = form.querySelector<HTMLInputElement>("#client-create-email")!.value.trim().toLowerCase();
+    const telefone = form.querySelector<HTMLInputElement>("#client-create-telefone")!.value.trim();
+    const senha = form.querySelector<HTMLInputElement>("#client-create-senha")!.value;
+
+    if (nome.length < 2) {
+      showToast("Informe o nome do cliente.", "error");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+      showToast("Informe um e-mail válido.", "error");
+      return;
+    }
+    if (senha.length < 6) {
+      showToast("A senha deve ter no mínimo 6 caracteres.", "error");
+      return;
+    }
+
+    const submitBtn = form.querySelector<HTMLButtonElement>("[data-client-create-submit]");
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      const created = await criarCliente({ nome, email, telefone, senha });
+      setCliente({ id: created.id, nome: created.nome, email: created.email });
+      clientCreateForm.hidden = true;
+      clientCreateToggle.hidden = false;
+      clientSearchInput.value = "";
+      showToast("Cliente cadastrado e selecionado.", "success");
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Não foi possível cadastrar o cliente.",
+        "error",
+      );
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
   }
 
   prevBtn.addEventListener("click", () => {
-    if (state.step > 1) goToStep(state.step - 1);
+    if (state.step > 0) goToStep(state.step - 1);
   });
 
   nextBtn.addEventListener("click", () => {
-    if (state.step === 2) {
-      if (validateStep(2, true)) {
+    if (positionName(state.step) === "horario") {
+      if (validateStep(state.step, true)) {
         void submit();
       }
       return;
@@ -429,7 +688,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   });
 
   overlay.addEventListener("modal:close", () => {
-    if (state.step === TOTAL_STEPS) void resetWizard();
+    if (positionName(state.step) === "confirmacao") void resetWizard();
   });
 
   async function openNew(preselectServiceId?: string): Promise<void> {
@@ -449,6 +708,15 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   async function openForReschedule(appointment: Appointment): Promise<void> {
     await refreshCatalog();
     await resetWizard();
+    // Em modo operador o reagendamento também pertence a um cliente; o id já
+    // vem no agendamento (não passa pelo passo Cliente).
+    if (operatorMode) {
+      state.cliente = {
+        id: appointment.clienteId,
+        nome: appointment.clienteNome ?? "",
+        email: "",
+      };
+    }
     state.rescheduleId = appointment.id;
     if (appointment.servicoId) {
       state.serviceId = appointment.servicoId;
@@ -463,7 +731,13 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     renderProfessionals();
 
     let rescheduleIso = appointment.data;
-    if (rescheduleIso >= minIso && rescheduleIso <= maxIso && (await isDateEnabled(rescheduleIso))) {
+    let rescheduleOpen = false;
+    try {
+      rescheduleOpen = rescheduleIso >= minIso && rescheduleIso <= maxIso && (await isDateEnabled(rescheduleIso));
+    } catch {
+      rescheduleOpen = false;
+    }
+    if (rescheduleOpen) {
       state.dateIso = rescheduleIso;
     } else {
       state.dateIso = await defaultDateIso();
@@ -471,14 +745,15 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     dateInput.value = state.dateIso;
     state.time = appointment.data === state.dateIso ? appointment.hora : null;
     renderSlots();
-    goToStep(2);
+    goToStep(positionOf("horario"));
     openModal(overlay);
   }
 
   initDateField();
   renderServices();
   void renderProfessionals();
-  goToStep(1);
+  goToStep(operatorMode ? positionOf("cliente") : positionOf("servicos"));
 
-  return { openNew, openForReschedule };
+  activeHandle = { openNew, openForReschedule };
+  return activeHandle;
 }

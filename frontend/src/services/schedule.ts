@@ -1,5 +1,4 @@
-import { CONFIG } from "../config.js";
-import { httpJson, isMockMode } from "./api.js";
+import { httpJson } from "./api.js";
 
 // ── Tipos de contrato HTTP (espelho de shared/types — mantidos localmente
 // para evitar import fora do rootDir do frontend) ────────────────────────
@@ -74,11 +73,6 @@ export function minutesToTime(minutes: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-function weekdayOf(dateIso: string): number {
-  const [y, m, d] = dateIso.split("-").map(Number);
-  return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1).getDay();
-}
-
 function defaultWeekly(): Record<number, DaySchedule> {
   return {
     0: { open: false, start: "09:00", end: "19:00" },
@@ -96,15 +90,6 @@ export function defaultSchedule(): ScheduleConfig {
     weekly: defaultWeekly(),
     blockedDates: [],
     exceptions: [],
-  };
-}
-
-function sanitizeDay(raw: unknown): DaySchedule {
-  const source = (raw ?? {}) as Partial<DaySchedule>;
-  return {
-    open: Boolean(source.open),
-    start: isValidTime(source.start ?? "") ? source.start! : "09:00",
-    end: isValidTime(source.end ?? "") ? source.end! : "19:00",
   };
 }
 
@@ -174,45 +159,6 @@ function generateSlots(start: string, end: string): string[] {
   return slots;
 }
 
-// ── Helpers de mock (localStorage) ───────────────────────────────────────
-
-function loadScheduleFromStorage(): ScheduleConfig {
-  let config = defaultSchedule();
-  try {
-    const raw = localStorage.getItem(CONFIG.scheduleKey);
-    if (!raw) return config;
-    const parsed = JSON.parse(raw) as Partial<ScheduleConfig>;
-    if (parsed.weekly && typeof parsed.weekly === "object") {
-      for (let day = 0; day <= 6; day++) {
-        config.weekly[day] = sanitizeDay(parsed.weekly[day]);
-      }
-    }
-    if (Array.isArray(parsed.blockedDates)) {
-      config.blockedDates = parsed.blockedDates.filter(
-        (d): d is string =>
-          typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d),
-      );
-    }
-    if (Array.isArray(parsed.exceptions)) {
-      config.exceptions = parsed.exceptions.filter(
-        (e): e is ScheduleException =>
-          Boolean(e) &&
-          typeof e.dateIso === "string" &&
-          /^\d{4}-\d{2}-\d{2}$/.test(e.dateIso) &&
-          isValidTime(e.start ?? "") &&
-          isValidTime(e.end ?? ""),
-      );
-    }
-  } catch {
-    config = defaultSchedule();
-  }
-  return config;
-}
-
-function saveScheduleToStorage(config: ScheduleConfig): void {
-  localStorage.setItem(CONFIG.scheduleKey, JSON.stringify(config));
-}
-
 // ── Funções auxiliares de consulta (sync, usadas por utils abaixo) ──────
 
 export function exceptionFor(
@@ -229,60 +175,15 @@ export function isDateBlocked(
   return config.blockedDates.includes(dateIso);
 }
 
-/**
- * Versão síncrona de `isDateOpen` (lê do ScheduleConfig in-memory).
- * Usada internamente quando já se tem o config carregado.
- */
-function isDateOpenFromConfig(dateIso: string, config: ScheduleConfig): boolean {
-  if (isDateBlocked(dateIso, config)) return false;
-  if (exceptionFor(dateIso, config)) return true;
-  return config.weekly[weekdayOf(dateIso)]?.open === true;
-}
-
-/**
- * Versão síncrona de `slotsForDate` (lê do ScheduleConfig in-memory).
- */
-function slotsForDateFromConfig(
-  dateIso: string,
-  config: ScheduleConfig,
-): string[] {
-  if (isDateBlocked(dateIso, config)) return [];
-
-  const exception = exceptionFor(dateIso, config);
-  let day: DaySchedule;
-  if (exception) {
-    day = { open: true, start: exception.start, end: exception.end };
-  } else {
-    const weeklyDay = config.weekly[weekdayOf(dateIso)];
-    if (!weeklyDay || !weeklyDay.open) return [];
-    day = weeklyDay;
-  }
-
-  return generateSlots(day.start, day.end);
-}
-
 // ── API pública ─────────────────────────────────────────────────────────
 
 /**
- * Carrega a configuração de horários de um funcionário.
- *
- * **Modo mock:** lê de `localStorage` (comportamento legado).
- * **Modo API:** chama `GET /horarios?funcionario_id={id}` e mapeia a lista
- * de `HorarioTrabalhoDTO` para `ScheduleConfig`.
- *
- * Mapeamento API → ScheduleConfig:
- * - Cada `HorarioTrabalhoDTO` com `ativo=true` define `weekly[dia_semana]`.
- * - Dias sem registro → `{ open: false }`.
- * - `blockedDates` e `exceptions` são mantidos apenas em localStorage
- *   (o backend não os modela).
+ * Carrega a configuração de horários de um funcionário via
+ * `GET /horarios?funcionario_id={id}`.
  */
 export async function loadSchedule(
   funcionarioId?: string,
 ): Promise<ScheduleConfig> {
-  if (isMockMode()) {
-    return loadScheduleFromStorage();
-  }
-
   try {
     const qs = funcionarioId
       ? `?funcionario_id=${encodeURIComponent(funcionarioId)}`
@@ -295,39 +196,20 @@ export async function loadSchedule(
 }
 
 /**
- * Salva a configuração de horários de um funcionário.
- *
- * **Modo mock:** grava em `localStorage` (comportamento legado).
- * **Modo API:** compara o estado desejado com o backend e executa
- * `POST`/`PUT`/`DELETE` necessários para cada dia da semana.
- *
- * `blockedDates` e `exceptions` continuam sendo gravados em localStorage
- * (o backend não os suporta).
- *
- * O modal de agenda em `manage.ts` resolve o `funcionarioId` do usuário
- * logado e o repassa para esta função.
+ * Salva a configuração de horários de um funcionário, comparando o estado
+ * desejado com o backend e executando `POST`/`PUT`/`DELETE` por dia.
  */
 export async function saveSchedule(
   config: ScheduleConfig,
   funcionarioId?: string,
 ): Promise<void> {
-  // Sempre persiste blockedDates/exceptions localmente
-  if (isMockMode()) {
-    saveScheduleToStorage(config);
-    return;
-  }
-
   if (!funcionarioId) return;
 
-  // Busca horários atuais para calcular o diff
-  let existing: HorarioTrabalhoDTO[] = [];
-  try {
-    existing = await httpJson<HorarioTrabalhoDTO[]>(
-      `/horarios?funcionario_id=${encodeURIComponent(funcionarioId)}`,
-    );
-  } catch {
-    return;
-  }
+  // Busca horários atuais para calcular o diff. Falha aqui é falha de
+  // gravação: propagamos para o caller exibir feedback ao usuário.
+  const existing: HorarioTrabalhoDTO[] = await httpJson<HorarioTrabalhoDTO[]>(
+    `/horarios?funcionario_id=${encodeURIComponent(funcionarioId)}`,
+  );
 
   const existingByDay = new Map<number, HorarioTrabalhoDTO>();
   for (const h of existing) {
@@ -376,74 +258,47 @@ export async function saveSchedule(
       });
     }
   }
-
-  // Mantém blockedDates/exceptions no localStorage (sem equivalente backend)
-  saveScheduleToStorage({
-    weekly: config.weekly,
-    blockedDates: config.blockedDates,
-    exceptions: config.exceptions,
-  });
 }
 
 /**
- * Retorna os horários disponíveis (slots de 30 min) para uma data.
- *
- * **Modo mock:** gera localmente a partir do `ScheduleConfig` em localStorage.
- * **Modo API:** chama `GET /horarios/funcionario-disponibilidade` e gera
- * slots a partir dos `horario_trabalho` retornados.
- *
- * O endpoint de disponibilidade é público (não exige autenticação), permitindo
- * que o booking wizard obtenha slots sem login.
+ * Retorna os horários disponíveis (slots de 30 min) para uma data via
+ * `GET /horarios/funcionario-disponibilidade` (público).
  */
 export async function slotsForDate(
   dateIso: string,
   funcionarioId?: string,
 ): Promise<string[]> {
-  if (isMockMode()) {
-    return slotsForDateFromConfig(dateIso, loadScheduleFromStorage());
-  }
-
   if (!funcionarioId) return [];
 
-  try {
-    const resp = await httpJson<{ horarios: HorarioTrabalhoDTO[]; ocupados: string[] }>(
-      `/horarios/funcionario-disponibilidade?funcionario_id=${encodeURIComponent(funcionarioId)}&data=${dateIso}`,
-    );
-    // O endpoint retorna { horarios, ocupados }.
-    // Geramos os slots de 30 min a partir de cada horário ativo
-    // e excluímos os que já estão ocupados por agendamentos.
-    const ocupadosSet = new Set(resp.ocupados);
-    const slots: string[] = [];
-    for (const h of resp.horarios) {
-      if (!h.ativo) continue;
-      const start = normalizeTime(h.hora_inicio);
-      const end = normalizeTime(h.hora_fim);
-      for (const slot of generateSlots(start, end)) {
-        if (!ocupadosSet.has(slot)) {
-          slots.push(slot);
-        }
+  const resp = await httpJson<{ horarios: HorarioTrabalhoDTO[]; ocupados: string[] }>(
+    `/horarios/funcionario-disponibilidade?funcionario_id=${encodeURIComponent(funcionarioId)}&data=${dateIso}`,
+  );
+  // O endpoint retorna { horarios, ocupados }.
+  // Geramos os slots de 30 min a partir de cada horário ativo
+  // e excluímos os que já estão ocupados por agendamentos.
+  const ocupadosSet = new Set(resp.ocupados);
+  const slots: string[] = [];
+  for (const h of resp.horarios) {
+    if (!h.ativo) continue;
+    const start = normalizeTime(h.hora_inicio);
+    const end = normalizeTime(h.hora_fim);
+    for (const slot of generateSlots(start, end)) {
+      if (!ocupadosSet.has(slot)) {
+        slots.push(slot);
       }
     }
-    return slots;
-  } catch {
-    return [];
   }
+  return slots;
 }
 
 /**
- * Verifica se uma data está aberta (tem horários disponíveis).
- *
- * **Modo mock:** verifica `blockedDates`, `exceptions` e `weekly` localmente.
- * **Modo API:** delega para `slotsForDate` (verifica se há ao menos 1 slot).
+ * Verifica se uma data está aberta (tem horários disponíveis), delegando
+ * para `slotsForDate`.
  */
 export async function isDateOpen(
   dateIso: string,
   funcionarioId?: string,
 ): Promise<boolean> {
-  if (isMockMode()) {
-    return isDateOpenFromConfig(dateIso, loadScheduleFromStorage());
-  }
-
   if (!funcionarioId) return false;
 
   const slots = await slotsForDate(dateIso, funcionarioId);
