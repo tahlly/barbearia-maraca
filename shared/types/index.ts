@@ -83,6 +83,10 @@ export interface CreateAgendamentoRequest {
   data: string;
   hora: string;
   observacao?: string | null;
+  // OBRIGATÓRIO quando o solicitante é recepcionista/admin (cria para um
+  // cliente informado). Ignorado/desnecessário para o papel cliente, cujo
+  // registro é resolvido pelo token JWT.
+  cliente_id?: string;
 }
 
 // ---- Domínio Horários ----

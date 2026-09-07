@@ -7,6 +7,7 @@ import {
   cancelarAgendamento,
   confirmarAgendamento,
   concluirAgendamento,
+  reverterConclusaoAgendamento,
 } from '../services/agendamento-service';
 import { UnauthorizedError } from '../errors/UnauthorizedError';
 
@@ -16,6 +17,9 @@ const criarSchema = z.object({
   data: z.string(),
   hora: z.string(),
   observacao: z.string().max(1000).nullable().optional(),
+  // Permite que recepcionista/admin criem agendamento em nome de um cliente.
+  // A service valida a obrigatoriedade conforme o papel do solicitante.
+  cliente_id: z.string().uuid('cliente_id deve ser um UUID').optional(),
 });
 
 const listarSchema = z.object({
@@ -72,5 +76,12 @@ export async function concluirHandler(req: Request, res: Response): Promise<void
   const user = exigirUsuario(req);
   const id = idSchema.parse(req.params.id);
   const agendamento = await concluirAgendamento(user.id, user.role, id);
+  res.json(agendamento);
+}
+
+export async function reverterHandler(req: Request, res: Response): Promise<void> {
+  const user = exigirUsuario(req);
+  const id = idSchema.parse(req.params.id);
+  const agendamento = await reverterConclusaoAgendamento(user.id, user.role, id);
   res.json(agendamento);
 }
