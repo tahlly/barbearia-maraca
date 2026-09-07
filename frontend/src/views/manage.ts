@@ -7,7 +7,6 @@ import {
   loadServices,
   loadProfessionals,
   loadCategories,
-  saveCategories,
   createServico,
   updateServico,
   setServicoStatus,
@@ -17,6 +16,7 @@ import {
   cancelAppointment,
   confirmAppointment,
   concludeAppointment,
+  revertCompletion,
 } from "../services/booking.js";
 import {
   createUsuarioInterno,
@@ -29,7 +29,9 @@ import { DEFAULT_DAYS, loadSchedule, saveSchedule, type ScheduleConfig } from ".
 import { confirmDialog, openModal, closeModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
 import { renderSettingsForm } from "../features/settingsForm.js";
-import type { Service, ServiceIcon, Appointment, Professional } from "../types.js";
+import { initBookingWizard } from "../features/bookingWizard.js";
+import { attachUppercaseMask } from "../ui/mask.js";
+import type { Service, Appointment, Professional } from "../types.js";
 import { CONFIG } from "../config.js";
 
 type ManageTab = "dashboard" | "servicos" | "profissionais" | "agendamentos" | "configuracoes";
@@ -136,6 +138,13 @@ export function renderManage(container: HTMLElement): () => void {
   });
 
   const cleanups: Array<() => void> = [];
+  // Wizard de agendamento em MODO OPERADOR: recepcionista/admin escolhem ou
+  // cadastram o cliente no primeiro passo e criam o agendamento em nome dele.
+  const wizard = initBookingWizard({
+    onBookingCreated: () => {
+      void renderAgendamentos();
+    },
+  });
   const state: DashboardFilter = {
     mode: "todos",
     ano: new Date().getFullYear(),
@@ -482,6 +491,7 @@ export function renderManage(container: HTMLElement): () => void {
           <p class="manage-head__sub">Controle completo da agenda do salão e status das reservas</p>
         </div>
         <div class="toolbar">
+          <button type="button" class="btn btn--primary" data-new-booking>${icon("plus", 16)} Novo agendamento</button>
           <button type="button" class="btn btn--ghost" data-open-agenda>${icon("sliders", 16)} Configurar agenda</button>
         </div>
       </div>
@@ -578,6 +588,15 @@ export function renderManage(container: HTMLElement): () => void {
       cleanups.push(() => openAgendaBtn.removeEventListener("click", h));
     }
 
+    const newBookingBtn = $<HTMLButtonElement>("[data-new-booking]", content);
+    if (newBookingBtn) {
+      const h = (): void => {
+        void wizard.openNew();
+      };
+      newBookingBtn.addEventListener("click", h);
+      cleanups.push(() => newBookingBtn.removeEventListener("click", h));
+    }
+
     bindAgendaRows();
   }
 
@@ -595,6 +614,15 @@ export function renderManage(container: HTMLElement): () => void {
       const id = btn.getAttribute("data-id")!;
       const h = (): void => {
         void handleSetStatus(id, "concluido");
+      };
+      btn.addEventListener("click", h);
+      cleanups.push(() => btn.removeEventListener("click", h));
+    });
+
+    $$("[data-revert-app]", content).forEach((btn) => {
+      const id = btn.getAttribute("data-id")!;
+      const h = (): void => {
+        void handleRevertCompletion(id);
       };
       btn.addEventListener("click", h);
       cleanups.push(() => btn.removeEventListener("click", h));
@@ -629,44 +657,68 @@ export function renderManage(container: HTMLElement): () => void {
   }
 
   async function handleSetStatus(id: string, status: Appointment["status"]): Promise<void> {
-    try {
-      const appts = await listAppointments();
-      const app = appts.find((a) => a.id === id);
-
-      if (status === "cancelado") {
-        const confirmed = await confirmDialog({
-          title: "Cancelar agendamento",
-          message: `Confirmar o cancelamento do agendamento de ${app?.clienteNome ?? "cliente"}?`,
-          confirmLabel: "Cancelar agendamento",
-          danger: true,
-        });
-        if (!confirmed) return;
+if (status === "cancelado") {
+      const confirmed = await confirmDialog({
+        title: "Cancelar agendamento",
+        message: "Tem certeza que deseja cancelar este agendamento?",
+        confirmLabel: "Sim, cancelar",
+        danger: true,
+      });
+      if (!confirmed) return;
+      try {
         await cancelAppointment(id);
-        showToast("Agendamento cancelado.");
-      } else if (status === "confirmado") {
-        const confirmed = await confirmDialog({
-          title: "Confirmar presença",
-          message: "Marcar este agendamento como confirmado?",
-          confirmLabel: "Confirmar",
-        });
-        if (!confirmed) return;
-        await confirmAppointment(id);
-        showToast("Presença confirmada.");
-      } else if (status === "concluido") {
-        const confirmed = await confirmDialog({
-          title: "Concluir atendimento",
-          message: "Marcar este agendamento como concluído?",
-          confirmLabel: "Concluir",
-        });
-        if (!confirmed) return;
-        await concludeAppointment(id);
-        showToast("Atendimento concluído.");
+      } catch (error) {
+        showToast(errorMessage(error, "Não foi possível cancelar o agendamento."), "error");
+        return;
       }
-      await renderAgendamentos();
-    } catch (error) {
-      showToast(errorMessage(error, "Não foi possível atualizar o status do agendamento."), "error");
-      await renderAgendamentos();
+      showToast("Agendamento cancelado.");
+    } else if (status === "confirmado") {
+      const confirmed = await confirmDialog({
+        title: "Confirmar presença",
+        message: "Confirmar a presença do cliente neste horário?",
+        confirmLabel: "Confirmar",
+      });
+      if (!confirmed) return;
+      try {
+        await confirmAppointment(id);
+      } catch (error) {
+        showToast(errorMessage(error, "Não foi possível confirmar a presença."), "error");
+        return;
+      }
+      showToast("Presença confirmada.");
+    } else if (status === "concluido") {
+      const confirmed = await confirmDialog({
+        title: "Concluir atendimento",
+        message: "Marcar este atendimento como concluído? Essa ação libera o horário como finalizado.",
+        confirmLabel: "Concluir",
+      });
+      if (!confirmed) return;
+      try {
+        await concludeAppointment(id);
+      } catch (error) {
+        showToast(errorMessage(error, "Não foi possível concluir o atendimento."), "error");
+        return;
+      }
+      showToast("Atendimento concluído.");
     }
+    await renderAgendamentos();
+  }
+
+  async function handleRevertCompletion(id: string): Promise<void> {
+    const confirmed = await confirmDialog({
+      title: "Reverter conclusão",
+      message: 'Este atendimento voltará para o status "Confirmado". Deseja continuar?',
+      confirmLabel: "Reverter",
+    });
+    if (!confirmed) return;
+    try {
+      await revertCompletion(id);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Não foi possível reverter a conclusão.", "error");
+      return;
+    }
+    showToast("Conclusão revertida. Atendimento voltou para Confirmado.");
+    await renderAgendamentos();
   }
 
   function buildAgendamentosTable(appointments: Appointment[]): string {
@@ -702,6 +754,10 @@ export function renderManage(container: HTMLElement): () => void {
                 actions = `<span class="actions-cell">
                   <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-conclude-app data-id="${escapeHtml(a.id)}">CONCLUIR</button>
                   <button type="button" class="btn btn--sm btn--danger-outline" data-cancel-app data-id="${escapeHtml(a.id)}">Cancelar</button>
+                </span>`;
+              } else if (a.status === "concluido") {
+                actions = `<span class="actions-cell">
+                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-revert-app data-id="${escapeHtml(a.id)}">Reverter conclusão</button>
                 </span>`;
               } else {
                 actions = `<span class="actions-cell"><span class="muted-note">Sem ações</span></span>`;
@@ -988,7 +1044,6 @@ export function renderManage(container: HTMLElement): () => void {
           <thead>
             <tr>
               <th>Nome do Serviço</th>
-              <th>Categoria</th>
               <th>Duração</th>
               <th>Preço</th>
               ${actionsHeader}
@@ -1000,7 +1055,6 @@ export function renderManage(container: HTMLElement): () => void {
                 (s) => `
                   <tr>
                     <td><strong>${escapeHtml(s.name)}</strong></td>
-                    <td>${escapeHtml(s.category || "-")}</td>
                     <td>${s.durationMin} min</td>
                     <td>${formatCurrency(s.price)}</td>
                     ${actionsCell(s.id)}
@@ -1063,7 +1117,6 @@ export function renderManage(container: HTMLElement): () => void {
   function openServiceModal(service: Service | null): void {
     if (!isAdmin) return; // Recepcionista não altera serviços (PRD).
     const isEdit = Boolean(service);
-    const categories = loadCategories();
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.setAttribute("aria-hidden", "true");
@@ -1074,46 +1127,35 @@ export function renderManage(container: HTMLElement): () => void {
           <button type="button" class="modal__close" data-close aria-label="Fechar">${icon("x", 18)}</button>
         </div>
         <form class="modal__body" id="svc-form" novalidate>
-          <div class="form-grid">
-            <div class="field">
-              <label class="field__label" for="svc-name">Nome *</label>
-              <input type="text" id="svc-name" value="${escapeHtml(service?.name ?? "")}" maxlength="60" required>
-              <span class="field__error">Informe o nome.</span>
-            </div>
-            <div class="field">
-              <label class="field__label" for="svc-category">Categoria</label>
-              <input type="text" id="svc-category" list="svc-categories" value="${escapeHtml(service?.category ?? "")}" maxlength="30">
-              <datalist id="svc-categories">
-                ${categories.map((c) => `<option value="${escapeHtml(c)}">`).join("")}
-              </datalist>
-              <span class="field__hint">Digite um nome novo para adicionar categoria</span>
-            </div>
+          <div class="field">
+            <label class="field__label" for="svc-name">Nome *</label>
+            <input type="text" id="svc-name" value="${escapeHtml(service?.name ?? "")}" maxlength="60" placeholder="CORTE DE CABELO" required>
+            <span class="field__error">Informe o nome.</span>
+          </div>
+          <div class="field">
+            <label class="field__label" for="svc-desc">Descrição</label>
+            <textarea id="svc-desc" rows="3" maxlength="200" placeholder="Descreva o serviço (opcional)">${escapeHtml(service?.description ?? "")}</textarea>
           </div>
           <div class="form-grid">
             <div class="field">
               <label class="field__label" for="svc-duration">Duração (min) *</label>
-              <input type="number" id="svc-duration" value="${service?.durationMin ?? 30}" min="10" step="5" required>
+              <input type="number" id="svc-duration" value="${service?.durationMin ?? 45}" min="10" max="240" step="5" required>
             </div>
             <div class="field">
               <label class="field__label" for="svc-price">Preço (R$) *</label>
-              <input type="number" id="svc-price" value="${service?.price ?? 0}" min="0" step="0.5" required>
-            </div>
-            <div class="field">
-              <label class="field__label" for="svc-icon">Ícone</label>
-              <select id="svc-icon">
-                ${SERVICE_ICONS.map(
-                  (o) => `<option value="${o.value}" ${service?.icon === o.value ? "selected" : ""}>${o.label}</option>`,
-                ).join("")}
-              </select>
+              <input type="number" id="svc-price" value="${service?.price ?? ""}" min="1" step="0.01" placeholder="55.00" required>
             </div>
           </div>
           <div class="modal__footer">
             <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
-            <button type="submit" class="btn btn--primary">${isEdit ? "Salvar" : "Criar serviço"}</button>
+            <button type="submit" class="btn btn--primary">Salvar serviço</button>
           </div>
         </form>
       </div>
     `;
+
+    const nameInput = overlay.querySelector<HTMLInputElement>("#svc-name")!;
+    attachUppercaseMask(nameInput);
 
     const form = overlay.querySelector<HTMLFormElement>("#svc-form")!;
     const finish = (): void => {
@@ -1123,22 +1165,21 @@ export function renderManage(container: HTMLElement): () => void {
 
     const submitHandler = async (event: Event): Promise<void> => {
       event.preventDefault();
-      const name = ($("#svc-name", overlay) as HTMLInputElement).value.trim();
-      const duration = Number(($("#svc-duration", overlay) as HTMLInputElement).value);
-      const price = Number(($("#svc-price", overlay) as HTMLInputElement).value);
+      const name = nameInput.value.trim().toUpperCase();
+      const description = (overlay.querySelector<HTMLTextAreaElement>("#svc-desc")?.value ?? "").trim();
+      const duration = Number((overlay.querySelector<HTMLInputElement>("#svc-duration")!).value);
+      const price = Number((overlay.querySelector<HTMLInputElement>("#svc-price")!).value);
       if (name.length < 3) {
         showToast("Informe o nome do serviço.", "error");
         return;
       }
-      if (!Number.isFinite(duration) || duration < 10 || !Number.isFinite(price) || price < 0) {
-        showToast("Verifique duração e preço.", "error");
+      if (!Number.isFinite(duration) || duration < 10 || duration > 240) {
+        showToast("Duração deve ser entre 10 e 240 minutos.", "error");
         return;
       }
-      const category = ($("#svc-category", overlay) as HTMLInputElement).value.trim();
-      const iconSel = ($("#svc-icon", overlay) as HTMLSelectElement).value as ServiceIcon;
-      const description = service?.description ?? "";
-      if (category && !loadCategories().includes(category)) {
-        saveCategories([...loadCategories(), category]);
+      if (!Number.isFinite(price) || price < 1) {
+        showToast("Informe um preço válido.", "error");
+        return;
       }
       const submitBtn = form.querySelector<HTMLButtonElement>("button[type=submit]");
       if (submitBtn) {
@@ -1153,9 +1194,6 @@ export function renderManage(container: HTMLElement): () => void {
           await createServico({ name, description, durationMin: duration, price });
           showToast("Serviço criado!");
         }
-        // PENDÊNCIA: icon e category são campos frontend-only; o backend não os persiste.
-        void iconSel;
-        void category;
         finish();
         renderServicos();
       } catch (error) {
@@ -1458,10 +1496,3 @@ export function renderManage(container: HTMLElement): () => void {
     cleanupPanel();
   };
 }
-
-const SERVICE_ICONS: Array<{ value: ServiceIcon; label: string }> = [
-  { value: "scissors", label: "Tesoura" },
-  { value: "beard", label: "Barba" },
-  { value: "layers", label: "Camadas" },
-  { value: "sparkle", label: "Estrela" },
-];

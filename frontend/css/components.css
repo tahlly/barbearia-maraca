@@ -347,14 +347,18 @@
 
 .table--fit .cell-actions,
 .table--fit .actions-cell {
+  display: inline-flex;
+  align-items: center;
   flex-wrap: wrap;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
   white-space: normal;
 }
 
 .table--fit .cell-actions .btn--sm {
   min-width: 88px;
-  width: 88px;
-  padding: 6px 8px;
+  width: auto;
+  padding: 6px 10px;
   justify-content: center;
   text-align: center;
   white-space: nowrap;

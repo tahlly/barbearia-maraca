@@ -55,7 +55,11 @@ function mapStatus(status: AgendamentoStatusDTO): AppointmentStatus {
 }
 
 /**
- * Cria um agendamento. O backend resolve o cliente autenticado via token.
+ * Cria um agendamento.
+ *
+ * - Papel cliente: o backend resolve o cliente autenticado via token JWT.
+ * - Recepcionista/admin: deve informar `draft.clienteId` para criar o
+ *   agendamento em nome de um cliente (ver agendamento-service).
  * `draft` recebe os ids já resolvidos (funcionário e serviço únicos).
  * POST /api/agendamentos
  */
@@ -68,6 +72,7 @@ export async function createAppointment(draft: BookingDraft): Promise<Appointmen
       data: draft.data,
       hora: draft.hora,
       observacao: draft.observacao ?? null,
+      ...(draft.clienteId ? { cliente_id: draft.clienteId } : {}),
     }),
   });
   return mapAppointment(dto);
@@ -120,6 +125,19 @@ export async function confirmAppointment(id: string): Promise<Appointment> {
 export async function concludeAppointment(id: string): Promise<Appointment> {
   const dto = await httpJson<AgendamentoDTO>(
     `/agendamentos/${encodeURIComponent(id)}/concluir`,
+    { method: "PATCH" },
+  );
+  return mapAppointment(dto);
+}
+
+/**
+ * Reverte a conclusão de um agendamento para "confirmado"
+ * (profissional/recep/admin). Espelha `concludeAppointment`.
+ * PATCH /api/agendamentos/:id/reverter
+ */
+export async function revertCompletion(id: string): Promise<Appointment> {
+  const dto = await httpJson<AgendamentoDTO>(
+    `/agendamentos/${encodeURIComponent(id)}/reverter`,
     { method: "PATCH" },
   );
   return mapAppointment(dto);
