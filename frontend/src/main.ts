@@ -56,7 +56,10 @@ function init(): void {
   /* Popula o cache de catálogo (serviços e profissionais) no boot.
      É fire-and-forget: enquanto a resposta não chega, o cache pode estar
      vazio; as views que dependem dele recarregam assincronamente. */
-  void primeCatalog();
+  void primeCatalog().catch(() => {
+    /* Silencioso: falha de rede no boot não deve quebrar a SPA;
+       as views tratam os próprios erros ao carregar dados. */
+  });
 }
 
 if (document.readyState === "loading") {

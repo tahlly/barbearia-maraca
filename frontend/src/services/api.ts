@@ -71,6 +71,51 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   });
 }
 
+/** Caminhos de autenticação: nesses casos 401 significa credenciais inválidas,
+ *  não sessão expirada. */
+const AUTH_PATHS = ["/auth/login", "/auth/register", "/auth/google"];
+
+/** Painel padrão por papel, usado só para redirecionar após 403. */
+const ROLE_PANEL_BY_SESSION: Record<string, string> = {
+  superusuario: "/superusuario",
+  admin: "/admin",
+  recepcionista: "/recepcionista",
+  profissional: "/profissional",
+  cliente: "/minha-conta",
+};
+
+interface ApiErrorBody {
+  erro?: boolean;
+  mensagem?: string;
+  message?: string;
+  error?: string;
+}
+
+/** Extrai a mensagem legível de erro do corpo da resposta, quando houver. */
+async function readErrorMessage(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as ApiErrorBody;
+    for (const key of ["mensagem", "message", "error"] as const) {
+      const value = body[key];
+      if (typeof value === "string" && value.trim() !== "") return value;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function readSessionRole(): string | null {
+  try {
+    const raw = sessionStorage.getItem(CONFIG.sessionKey);
+    if (!raw) return null;
+    const session = JSON.parse(raw) as { role?: string };
+    return session.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function httpJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
@@ -83,19 +128,36 @@ export async function httpJson<T>(path: string, init: RequestInit = {}): Promise
     throw new ApiError("Não foi possível conectar ao servidor.", 0);
   }
 
-  /* 401 → sessão inválida: limpa storage e redireciona para login */
+  const isAuthPath = AUTH_PATHS.some((p) => path.startsWith(p));
+
+  /* 401 em caminho de autenticação → credenciais inválidas (sem redirecionar). */
+  if (response.status === 401 && isAuthPath) {
+    const serverMessage = (await readErrorMessage(response)) ?? "Credenciais inválidas. Verifique e tente novamente.";
+    throw new ApiError(serverMessage, 401);
+  }
+
+  /* 401 em caminho autenticado → sessão expirada: limpa storage e vai ao login. */
   if (response.status === 401) {
-    sessionStorage.removeItem(CONFIG.sessionKey);
-    navigateTo("/login");
-    throw new ApiError("Sessão expirada. Faça login novamente.", 401);
+    if (readTokenFromSession()) {
+      sessionStorage.removeItem(CONFIG.sessionKey);
+      navigateTo("/login");
+    }
+    const serverMessage = (await readErrorMessage(response)) ?? "Sessão expirada. Faça login novamente.";
+    throw new ApiError(serverMessage, 401);
+  }
+
+  /* 403 → acesso negado: mensagem de permissão e redireciona para o painel do papel. */
+  if (response.status === 403) {
+    const role = readSessionRole();
+    if (role) navigateTo(ROLE_PANEL_BY_SESSION[role] ?? "/login");
+    const serverMessage = (await readErrorMessage(response)) ?? "Você não tem permissão para realizar esta ação.";
+    throw new ApiError(serverMessage, 403);
   }
 
   if (!response.ok) {
-    const message =
-      response.status === 403
-        ? "Credenciais inválidas. Verifique e tente novamente."
-        : `Erro na requisição (${response.status}). Tente novamente.`;
-    throw new ApiError(message, response.status);
+    const serverMessage =
+      (await readErrorMessage(response)) ?? `Erro na requisição (${response.status}). Tente novamente.`;
+    throw new ApiError(serverMessage, response.status);
   }
   return (await response.json()) as T;
 }

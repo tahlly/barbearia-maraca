@@ -61,6 +61,28 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     else renderConfiguracoes();
   }
 
+  // ------------------------------------------------------ Estado de erro da lista
+  let appointmentsError: string | null = null;
+
+  async function fetchAppointments(): Promise<Appointment[]> {
+    try {
+      const list = await listAppointments();
+      appointmentsError = null;
+      return list;
+    } catch (error) {
+      appointmentsError =
+        error instanceof Error ? error.message : "Não foi possível carregar os agendamentos.";
+      return [];
+    }
+  }
+
+  function renderAppointmentsError(): void {
+    const table = $("#conta-agenda-table", content);
+    if (table && appointmentsError) {
+      table.innerHTML = `<p class="panel__empty" role="alert">${escapeHtml(appointmentsError)}</p>`;
+    }
+  }
+
   // ------------------------------------------------------------- Agendamentos
   function renderAgendamentos(): void {
     prosCache = loadProfessionals();
@@ -156,18 +178,20 @@ export function renderMinhaConta(container: HTMLElement): () => void {
       filtered = applyStatus(filtered);
       filtered = applyDates(filtered);
       $("#conta-agenda-table", content)!.innerHTML = buildTable(filtered);
-      bindRows();
+      bindRows(filtered);
+    }
+
+    async function reloadList(): Promise<void> {
+      const list = await fetchAppointments();
+      if (appointmentsError) renderAppointmentsError();
+      else refresh(list);
     }
 
     const onSearch = (): void => {
-      void (async () => {
-        refresh(await listAppointments());
-      })();
+      void reloadList();
     };
     const onFilter = (): void => {
-      void (async () => {
-        refresh(await listAppointments());
-      })();
+      void reloadList();
     };
 
     const onClear = (): void => {
@@ -175,9 +199,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
       if (fim) fim.value = defaultEnd;
       if (search) search.value = "";
       if (filter) filter.value = "todos";
-      void (async () => {
-        refresh(await listAppointments());
-      })();
+      void reloadList();
     };
 
     search?.addEventListener("input", onSearch);
@@ -188,9 +210,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     cleanups.push(() => search?.removeEventListener("input", onSearch));
     cleanups.push(() => filter?.removeEventListener("change", onFilter));
 
-    void (async () => {
-      refresh(await listAppointments());
-    })();
+    void reloadList();
   }
 
   function buildTable(appointments: Appointment[]): string {
@@ -234,30 +254,26 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     `;
   }
 
-  function bindRows(): void {
-    void (async () => {
-      const appointments = await listAppointments();
+  function bindRows(appointments: Appointment[]): void {
+    $$("[data-reschedule]", content).forEach((btn) => {
+      const id = btn.getAttribute("data-reschedule")!;
+      const appointment = appointments.find((a) => a.id === id);
+      if (!appointment) return;
+      const h = (): void => wizard.openForReschedule(appointment);
+      btn.addEventListener("click", h);
+      cleanups.push(() => btn.removeEventListener("click", h));
+    });
 
-      $$("[data-reschedule]", content).forEach((btn) => {
-        const id = btn.getAttribute("data-reschedule")!;
-        const appointment = appointments.find((a) => a.id === id);
-        if (!appointment) return;
-        const h = (): void => wizard.openForReschedule(appointment);
-        btn.addEventListener("click", h);
-        cleanups.push(() => btn.removeEventListener("click", h));
-      });
-
-      $$("[data-cancel]", content).forEach((btn) => {
-        const id = btn.getAttribute("data-cancel")!;
-        const appointment = appointments.find((a) => a.id === id);
-        if (!appointment) return;
-        const h = (): void => {
-          void handleCancel(appointment);
-        };
-        btn.addEventListener("click", h);
-        cleanups.push(() => btn.removeEventListener("click", h));
-      });
-    })();
+    $$("[data-cancel]", content).forEach((btn) => {
+      const id = btn.getAttribute("data-cancel")!;
+      const appointment = appointments.find((a) => a.id === id);
+      if (!appointment) return;
+      const h = (): void => {
+        void handleCancel(appointment);
+      };
+      btn.addEventListener("click", h);
+      cleanups.push(() => btn.removeEventListener("click", h));
+    });
   }
 
   async function handleCancel(appointment: Appointment): Promise<void> {
@@ -269,15 +285,16 @@ export function renderMinhaConta(container: HTMLElement): () => void {
       danger: true,
     });
     if (!confirmed) return;
-    const updated = appointment.status === "pendente" || appointment.status === "confirmado"
-      ? await cancelAppointment(appointment.id)
-      : null;
-    if (updated) {
+    try {
+      if (appointment.status === "pendente" || appointment.status === "confirmado") {
+        await cancelAppointment(appointment.id);
+      }
       showToast("Agendamento cancelado.");
-    } else {
-      showToast("Não foi possível cancelar. Tente novamente.", "error");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Não foi possível cancelar. Tente novamente.", "error");
+    } finally {
+      renderAgendamentos();
     }
-    renderAgendamentos();
   }
 
   // ------------------------------------------------------------- Configurações

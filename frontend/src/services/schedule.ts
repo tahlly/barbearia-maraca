@@ -319,15 +319,11 @@ export async function saveSchedule(
 
   if (!funcionarioId) return;
 
-  // Busca horários atuais para calcular o diff
-  let existing: HorarioTrabalhoDTO[] = [];
-  try {
-    existing = await httpJson<HorarioTrabalhoDTO[]>(
-      `/horarios?funcionario_id=${encodeURIComponent(funcionarioId)}`,
-    );
-  } catch {
-    return;
-  }
+  // Busca horários atuais para calcular o diff. Falha aqui é falha de
+  // gravação: propagamos para o caller exibir feedback ao usuário.
+  const existing: HorarioTrabalhoDTO[] = await httpJson<HorarioTrabalhoDTO[]>(
+    `/horarios?funcionario_id=${encodeURIComponent(funcionarioId)}`,
+  );
 
   const existingByDay = new Map<number, HorarioTrabalhoDTO>();
   for (const h of existing) {
@@ -405,29 +401,25 @@ export async function slotsForDate(
 
   if (!funcionarioId) return [];
 
-  try {
-    const resp = await httpJson<{ horarios: HorarioTrabalhoDTO[]; ocupados: string[] }>(
-      `/horarios/funcionario-disponibilidade?funcionario_id=${encodeURIComponent(funcionarioId)}&data=${dateIso}`,
-    );
-    // O endpoint retorna { horarios, ocupados }.
-    // Geramos os slots de 30 min a partir de cada horário ativo
-    // e excluímos os que já estão ocupados por agendamentos.
-    const ocupadosSet = new Set(resp.ocupados);
-    const slots: string[] = [];
-    for (const h of resp.horarios) {
-      if (!h.ativo) continue;
-      const start = normalizeTime(h.hora_inicio);
-      const end = normalizeTime(h.hora_fim);
-      for (const slot of generateSlots(start, end)) {
-        if (!ocupadosSet.has(slot)) {
-          slots.push(slot);
-        }
+  const resp = await httpJson<{ horarios: HorarioTrabalhoDTO[]; ocupados: string[] }>(
+    `/horarios/funcionario-disponibilidade?funcionario_id=${encodeURIComponent(funcionarioId)}&data=${dateIso}`,
+  );
+  // O endpoint retorna { horarios, ocupados }.
+  // Geramos os slots de 30 min a partir de cada horário ativo
+  // e excluímos os que já estão ocupados por agendamentos.
+  const ocupadosSet = new Set(resp.ocupados);
+  const slots: string[] = [];
+  for (const h of resp.horarios) {
+    if (!h.ativo) continue;
+    const start = normalizeTime(h.hora_inicio);
+    const end = normalizeTime(h.hora_fim);
+    for (const slot of generateSlots(start, end)) {
+      if (!ocupadosSet.has(slot)) {
+        slots.push(slot);
       }
     }
-    return slots;
-  } catch {
-    return [];
   }
+  return slots;
 }
 
 /**

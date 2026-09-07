@@ -90,7 +90,13 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     const candidate = new Date(today);
     for (let attempt = 0; attempt < 7; attempt++) {
       const iso = toIsoDate(candidate);
-      if (await isDateEnabled(iso)) return iso;
+      let enabled = false;
+      try {
+        enabled = await isDateEnabled(iso);
+      } catch {
+        return minIso;
+      }
+      if (enabled) return iso;
       candidate.setDate(candidate.getDate() + 1);
     }
     return minIso;
@@ -123,7 +129,13 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
         return;
       }
       void (async () => {
-        const enabled = await isDateEnabled(value);
+        let enabled = false;
+        try {
+          enabled = await isDateEnabled(value);
+        } catch {
+          showToast("Não foi possível verificar a disponibilidade. Tente novamente.", "error");
+          return;
+        }
         if (!enabled) {
           showToast("A barbearia está fechada nesta data. Escolha outra.", "error");
           dateInput.value = state.dateIso ?? "";
@@ -203,10 +215,14 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
           state.professionalId = pro.id;
           // Ao trocar de profissional, reavalia a data e os horários.
           void (async () => {
-            const hasSlots = await isDateEnabled(state.dateIso ?? "");
-            if (state.dateIso && hasSlots) {
-              state.time = null;
-              await renderSlots();
+            try {
+              const hasSlots = await isDateEnabled(state.dateIso ?? "");
+              if (state.dateIso && hasSlots) {
+                state.time = null;
+                await renderSlots();
+              }
+            } catch {
+              /* renderSlots mostrará o erro de disponibilidade ao usuário */
             }
           })();
         }
@@ -237,7 +253,17 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
 
     // slotsForDate() já retorna apenas slots realmente livres (filtra
     // ocupados via endpoint /horarios/funcionario-disponibilidade).
-    const slots = await slotsForDate(state.dateIso, state.professionalId);
+    let slots: string[];
+    try {
+      slots = await slotsForDate(state.dateIso, state.professionalId);
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim() !== ""
+          ? error.message
+          : "Não foi possível carregar os horários disponíveis. Tente novamente.";
+      showSlotsHint(message, "error");
+      return;
+    }
     if (slots.length === 0) {
       showSlotsHint("A barbearia está fechada nesta data. Escolha outra.", "error");
       return;
@@ -384,8 +410,12 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
           : "Agendamento criado! Aguarde a confirmação da barbearia.",
       );
       options.onBookingCreated?.();
-    } catch {
-      showToast("Não foi possível concluir o agendamento. Tente novamente.", "error");
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim() !== ""
+          ? error.message
+          : "Não foi possível concluir o agendamento. Tente novamente.";
+      showToast(message, "error");
     } finally {
       nextBtn.disabled = false;
     }
@@ -463,7 +493,13 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     renderProfessionals();
 
     let rescheduleIso = appointment.data;
-    if (rescheduleIso >= minIso && rescheduleIso <= maxIso && (await isDateEnabled(rescheduleIso))) {
+    let rescheduleOpen = false;
+    try {
+      rescheduleOpen = rescheduleIso >= minIso && rescheduleIso <= maxIso && (await isDateEnabled(rescheduleIso));
+    } catch {
+      rescheduleOpen = false;
+    }
+    if (rescheduleOpen) {
       state.dateIso = rescheduleIso;
     } else {
       state.dateIso = await defaultDateIso();
