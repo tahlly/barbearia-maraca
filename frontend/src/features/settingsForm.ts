@@ -170,12 +170,12 @@ export function renderSettingsForm(
         showToast("Informe um nome válido.", "error");
         return;
       }
-      if (wantsPassword && pwNew !== pwConfirm) {
-        showToast("As novas senhas não coincidem.", "error");
+      if (wantsPassword && pwNew.length === 0) {
+        showToast("Informe e confirme a nova senha.", "error");
         return;
       }
-      if (wantsPassword && (pwCurrent === "" || pwNew.length === 0)) {
-        showToast("Preencha senha atual e nova senha.", "error");
+      if (wantsPassword && pwNew !== pwConfirm) {
+        showToast("As novas senhas não coincidem.", "error");
         return;
       }
       if (wantsEmail) {

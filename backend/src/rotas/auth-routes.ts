@@ -82,7 +82,8 @@ const authRoutes = Router();
  *       properties:
  *         nome: { type: string }
  *         email: { type: string, format: email }
- *         senha: { type: string, format: password, minLength: 6 }
+ *         senhaAtual: { type: string }
+ *         novaSenha: { type: string, format: password, minLength: 6 }
  *     AuthLogoutResponse:
  *       type: object
  *       properties:

@@ -141,8 +141,26 @@ export async function autenticarComGoogle(idToken: string): Promise<LoginRespons
 
 export async function atualizarPerfil(
   usuarioId: string,
-  dados: { nome?: string; email?: string; senha?: string }
+  dados: { nome?: string; email?: string; senhaAtual?: string; novaSenha?: string }
 ): Promise<{ nome: string | null; email: string }> {
+  // Buscar o usuário logo no início para validar existência e regras de senha
+  const usuario = await findUsuarioById(usuarioId);
+  if (!usuario) throw new NotFoundError('Usuário não encontrado');
+
+  // Regra de verificação de senha atual:
+  // - Usuário com senha_hash existente ao tentar trocar senha ou email exige senhaAtual.
+  // - Conta criada via Google (senha_hash NULL) define a primeira senha sem exigir senhaAtual.
+  const alterandoCredencial = dados.novaSenha !== undefined || dados.email !== undefined;
+  if (usuario.senha_hash && alterandoCredencial) {
+    if (!dados.senhaAtual) {
+      throw new UnauthorizedError('Senha atual é obrigatória');
+    }
+    const senhaValida = await bcrypt.compare(dados.senhaAtual, usuario.senha_hash);
+    if (!senhaValida) {
+      throw new UnauthorizedError('Senha atual incorreta');
+    }
+  }
+
   // Se email fornecido, verificar duplicidade
   if (dados.email) {
     const existente = await findUsuarioByEmail(dados.email);
@@ -151,15 +169,11 @@ export async function atualizarPerfil(
     }
   }
 
-  // Hash senha se fornecida
+  // Hash nova senha se fornecida
   let senhaHash: string | undefined;
-  if (dados.senha) {
-    senhaHash = await bcrypt.hash(dados.senha, SALT_ROUNDS);
+  if (dados.novaSenha) {
+    senhaHash = await bcrypt.hash(dados.novaSenha, SALT_ROUNDS);
   }
-
-  // Buscar tipo do usuário
-  const usuario = await findUsuarioById(usuarioId);
-  if (!usuario) throw new NotFoundError('Usuário não encontrado');
 
   // Transaction: atualizar usuario + cliente/funcionario
   await db.transaction(async (trx) => {
@@ -185,7 +199,7 @@ export async function atualizarPerfil(
   // Retornar dados atualizados
   return {
     nome: dados.nome ?? null,
-    email: dados.email ?? (await findUsuarioById(usuarioId))!.email,
+    email: dados.email ?? usuario.email,
   };
 }
 

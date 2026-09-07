@@ -119,7 +119,7 @@ export async function updateSessionUser(data: {
 
     const usuario = await findUsuarioByEmail(session.userEmail);
     if (!usuario) return { ok: false, message: "Usuário não encontrado." };
-    if (data.senhaAtual !== undefined && data.senhaAtual !== usuario.senha) {
+    if (data.senhaAtual !== undefined && usuario.senha && data.senhaAtual !== usuario.senha) {
       return { ok: false, message: "Senha atual incorreta." };
     }
     if (data.email !== undefined) {

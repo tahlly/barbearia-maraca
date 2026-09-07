@@ -108,8 +108,9 @@ export async function logout(_req: Request, res: Response): Promise<void> {
 const atualizarPerfilSchema = z.object({
   nome: z.string().min(1).optional(),
   email: z.string().email().optional(),
-  senha: z.string().min(6).optional(),
-}).refine((data) => data.nome !== undefined || data.email !== undefined || data.senha !== undefined, {
+  senhaAtual: z.string().optional(),
+  novaSenha: z.string().min(6).optional(),
+}).refine((data) => data.nome !== undefined || data.email !== undefined || data.novaSenha !== undefined, {
   message: 'Pelo menos um campo deve ser fornecido',
 });
 
