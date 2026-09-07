@@ -352,3 +352,37 @@ export async function loginWithGoogle(
     return { ok: false, message: "Falha ao autenticar com Google. Tente novamente." };
   }
 }
+
+/**
+ * Fluxo completo de login com Google, pronto para ser usado por qualquer tela
+ * (não apenas pelo login do cliente).
+ *
+ * Encapsula em uma única chamada: prompt do Google Identity Services → leitura
+ * do perfil → POST /auth/google → persistência da sessão. Uma tela nova pode
+ * plugar o botão Google com apenas:
+ *
+ *   const result = await loginComGoogle();
+ *   if (result.ok && result.session) {
+ *     redirectForRole(result.session.role);
+ *   }
+ *
+ * Nenhuma tela precisa conhecer validação de token, endpoints ou sessionStorage.
+ */
+export async function loginComGoogle(): Promise<GoogleAuthResult> {
+  let idToken: string;
+  try {
+    idToken = await promptGoogleIdToken();
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "Login com Google indisponível.",
+    };
+  }
+
+  const profile = decodeGoogleProfile(idToken);
+  if (!profile) {
+    return { ok: false, message: "Não foi possível ler as informações da conta Google." };
+  }
+
+  return loginWithGoogle(idToken, profile);
+}
