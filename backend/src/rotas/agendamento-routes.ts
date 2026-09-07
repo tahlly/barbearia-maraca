@@ -45,11 +45,15 @@ const agendamentoRoutes = Router();
  *         data: { type: string, format: date }
  *         hora: { type: string, example: '09:00' }
  *         observacao: { type: string, nullable: true }
+ *         cliente_id:
+ *           type: string
+ *           format: uuid
+ *           description: Obrigatório quando o solicitante é recepcionista/admin (agenda em nome do cliente). Ignorado para o papel cliente.
  *
  * /api/agendamentos:
  *   post:
  *     tags: [Agendamentos]
- *     summary: Cria um agendamento
+ *     summary: Cria um agendamento (cliente agenda para si; recepcionista/admin informam cliente_id)
  *     security:
  *       - bearerAuth: []
  *     requestBody:

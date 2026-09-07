@@ -29,6 +29,7 @@ import { DEFAULT_DAYS, loadSchedule, saveSchedule, type ScheduleConfig } from ".
 import { confirmDialog, openModal, closeModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
 import { renderSettingsForm } from "../features/settingsForm.js";
+import { initBookingWizard } from "../features/bookingWizard.js";
 import { attachUppercaseMask } from "../ui/mask.js";
 import type { Service, Appointment, Professional } from "../types.js";
 import { CONFIG } from "../config.js";
@@ -133,6 +134,13 @@ export function renderManage(container: HTMLElement): () => void {
   });
 
   const cleanups: Array<() => void> = [];
+  // Wizard de agendamento em MODO OPERADOR: recepcionista/admin escolhem ou
+  // cadastram o cliente no primeiro passo e criam o agendamento em nome dele.
+  const wizard = initBookingWizard({
+    onBookingCreated: () => {
+      void renderAgendamentos();
+    },
+  });
   const state: DashboardFilter = {
     mode: "todos",
     ano: new Date().getFullYear(),
@@ -449,6 +457,7 @@ export function renderManage(container: HTMLElement): () => void {
           <p class="manage-head__sub">Controle completo da agenda do salão e status das reservas</p>
         </div>
         <div class="toolbar">
+          <button type="button" class="btn btn--primary" data-new-booking>${icon("plus", 16)} Novo agendamento</button>
           <button type="button" class="btn btn--ghost" data-open-agenda>${icon("sliders", 16)} Configurar agenda</button>
         </div>
       </div>
@@ -543,6 +552,15 @@ export function renderManage(container: HTMLElement): () => void {
       };
       openAgendaBtn.addEventListener("click", h);
       cleanups.push(() => openAgendaBtn.removeEventListener("click", h));
+    }
+
+    const newBookingBtn = $<HTMLButtonElement>("[data-new-booking]", content);
+    if (newBookingBtn) {
+      const h = (): void => {
+        void wizard.openNew();
+      };
+      newBookingBtn.addEventListener("click", h);
+      cleanups.push(() => newBookingBtn.removeEventListener("click", h));
     }
 
     bindAgendaRows();

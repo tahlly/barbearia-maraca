@@ -17,6 +17,9 @@ const criarSchema = z.object({
   data: z.string(),
   hora: z.string(),
   observacao: z.string().max(1000).nullable().optional(),
+  // Permite que recepcionista/admin criem agendamento em nome de um cliente.
+  // A service valida a obrigatoriedade conforme o papel do solicitante.
+  cliente_id: z.string().uuid('cliente_id deve ser um UUID').optional(),
 });
 
 const listarSchema = z.object({

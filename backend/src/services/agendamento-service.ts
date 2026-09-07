@@ -13,6 +13,7 @@ import type { AgendamentoDTO, AgendamentoStatus, CreateAgendamentoRequest } from
 import { ForbiddenError } from '../errors/ForbiddenError';
 import { NotFoundError } from '../errors/NotFoundError';
 import { ValidationError } from '../errors/ValidationError';
+import { buscarClientePorId } from '../repositories/cliente-repository';
 import { formatarData, formatarHora } from '../utils/formatadores';
 
 type Role = 'admin' | 'recepcionista' | 'profissional' | 'cliente';
@@ -84,13 +85,30 @@ export async function criarAgendamento(
   role: string,
   dados: CreateAgendamentoRequest,
 ): Promise<AgendamentoDTO> {
-  if (!isRole(role) || role !== 'cliente') {
-    throw new ForbiddenError('Somente clientes podem criar agendamentos');
+  if (!isRole(role)) {
+    throw new ForbiddenError('Acesso negado');
   }
 
-  const cliente = await buscarClientePorUsuarioId(usuarioId);
-  if (!cliente) {
-    throw new ForbiddenError('Perfil de cliente não encontrado');
+  // Quem pode criar? Cliente (próprio registro via token) OU
+  // recepcionista/admin (em nome de um cliente informado em `cliente_id`).
+  let clienteId: string;
+  if (role === 'cliente') {
+    const cliente = await buscarClientePorUsuarioId(usuarioId);
+    if (!cliente) {
+      throw new ForbiddenError('Perfil de cliente não encontrado');
+    }
+    clienteId = cliente.id;
+  } else if (role === 'recepcionista' || role === 'admin') {
+    if (!dados.cliente_id) {
+      throw new ValidationError('cliente_id é obrigatório para criação de agendamento');
+    }
+    const cliente = await buscarClientePorId(dados.cliente_id);
+    if (!cliente) {
+      throw new NotFoundError('Cliente não encontrado');
+    }
+    clienteId = cliente.id;
+  } else {
+    throw new ForbiddenError('Somente clientes, recepcionista ou admin podem criar agendamentos');
   }
 
   if (!(await funcionarioExisteAtivo(dados.funcionario_id))) {
@@ -105,7 +123,7 @@ export async function criarAgendamento(
 
   try {
     const row = await criar({
-      clienteId: cliente.id,
+      clienteId,
       funcionarioId: dados.funcionario_id,
       servicoId: dados.servico_id,
       data: dados.data,

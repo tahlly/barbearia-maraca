@@ -51,7 +51,9 @@ export interface Appointment {
 
 /**
  * Body de criação de agendamento, alinhado a `CreateAgendamentoRequest`.
- * O backend resolve cliente a partir do token JWT.
+ * O backend resolve cliente a partir do token JWT quando `clienteId` não é
+ * informado; recepcionista/admin devem informar `clienteId` (agendar em nome
+ * do cliente).
  */
 export interface BookingDraft {
   funcionario_id: string;
@@ -59,6 +61,7 @@ export interface BookingDraft {
   data: string;
   hora: string;
   observacao?: string | null;
+  clienteId?: string;
 }
 
 export interface Session {
