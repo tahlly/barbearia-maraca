@@ -19,7 +19,6 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@typescript/typescript-win32-x64": "^7.0.2",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
