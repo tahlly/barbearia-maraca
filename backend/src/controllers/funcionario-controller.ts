@@ -10,7 +10,7 @@ const CARGOS = ['barbeiro', 'recepcionista', 'administrador'] as const;
 const criarFuncionarioSchema = z.object({
   nome: z.string().min(1, 'Nome é obrigatório'),
   email: z.string().email('Email inválido'),
-  senha: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
+  senha: z.string().min(4, 'Senha deve ter no mínimo 4 caracteres').max(64).optional(),
   telefone: z.string().optional(),
   cargo: z.enum(CARGOS).optional(),
   especialidade: z.string().max(100).optional(),

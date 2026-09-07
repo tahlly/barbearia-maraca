@@ -98,6 +98,7 @@ export async function loginLocal(req: Request, res: Response): Promise<void> {
       userEmail: resultado.user.email,
       expiresAt: expiresAt(),
       role: resultado.role,
+      precisaTrocarSenha: resultado.precisaTrocarSenha ?? false,
       user: resultado.user,
     });
   } catch (error: unknown) {

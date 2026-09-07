@@ -44,11 +44,11 @@ const funcionarioRoutes = Router();
  *         updatedAt: { type: string }
  *     CreateFuncionarioRequest:
  *       type: object
- *       required: [nome, email, senha]
+ *       required: [nome, email]
  *       properties:
  *         nome: { type: string }
  *         email: { type: string, format: email }
- *         senha: { type: string, format: password, minLength: 6 }
+ *         senha: { type: string, format: password, minLength: 4 }
  *         telefone: { type: string }
  *         cargo:
  *           type: string

@@ -171,7 +171,11 @@ export async function atualizarPerfil(
     // Atualizar usuario
     const updateUsuario: Record<string, unknown> = {};
     if (dados.email) updateUsuario.email = dados.email;
-    if (senhaHash) updateUsuario.senha_hash = senhaHash;
+    if (senhaHash) {
+      updateUsuario.senha_hash = senhaHash;
+      // Senha alterada: primeiro acesso concluído
+      updateUsuario.primeiro_acesso = false;
+    }
     if (Object.keys(updateUsuario).length > 0) {
       updateUsuario.updated_at = new Date();
       await trx('usuario').where('id', usuarioId).update(updateUsuario);
@@ -249,6 +253,7 @@ export async function login(data: {
     token: gerarTokenJWT(usuario, role),
     user: buildUsuarioDTO(usuario, nome, cargo),
     role,
+    precisaTrocarSenha: usuario.primeiro_acesso === true,
   };
 }
 

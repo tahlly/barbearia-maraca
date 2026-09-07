@@ -6,5 +6,5 @@ export const CONFIG = {
   maxLoginAttempts: 5,
   lockoutMs: 30 * 1000,
   bookingHorizonDays: 45,
-  defaultPassword: import.meta.env.VITE_DEFAULT_PASSWORD ?? "",
+  defaultPassword: import.meta.env.VITE_DEFAULT_PASSWORD ?? "123456",
 } as const;

@@ -9,6 +9,7 @@ export interface UsuarioRow {
   avatar_url: string | null;
   reset_token_hash: string | null;
   reset_token_expires_at: Date | null;
+  primeiro_acesso: boolean;
 }
 
 export async function findUsuarioByEmail(email: string): Promise<UsuarioRow | null> {
@@ -101,11 +102,12 @@ export async function findUsuarioById(id: string): Promise<UsuarioRow | undefine
 
 export async function atualizarUsuario(
   id: string,
-  dados: { email?: string; senhaHash?: string }
+  dados: { email?: string; senhaHash?: string; primeiroAcesso?: boolean }
 ): Promise<void> {
   const update: Record<string, unknown> = {};
   if (dados.email !== undefined) update.email = dados.email;
   if (dados.senhaHash !== undefined) update.senha_hash = dados.senhaHash;
+  if (dados.primeiroAcesso !== undefined) update.primeiro_acesso = dados.primeiroAcesso;
   if (Object.keys(update).length === 0) return;
   update.updated_at = new Date();
   await db('usuario').where('id', id).update(update);
