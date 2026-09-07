@@ -21,7 +21,7 @@ const TRANSICOES: Record<AgendamentoStatus, AgendamentoStatus[]> = {
   pendente: ['confirmado', 'cancelado'],
   confirmado: ['concluido', 'cancelado'],
   cancelado: [],
-  concluido: [],
+  concluido: ['confirmado'],
 };
 
 function isRole(value: string): value is Role {
@@ -258,4 +258,12 @@ export async function concluirAgendamento(
   id: string,
 ): Promise<AgendamentoDTO> {
   return alterarStatusOperacional(usuarioId, role, id, 'concluido');
+}
+
+export async function reverterConclusaoAgendamento(
+  usuarioId: string,
+  role: string,
+  id: string,
+): Promise<AgendamentoDTO> {
+  return alterarStatusOperacional(usuarioId, role, id, 'confirmado');
 }

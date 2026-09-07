@@ -16,6 +16,7 @@ import {
   cancelAppointment,
   confirmAppointment,
   concludeAppointment,
+  revertCompletion,
 } from "../services/booking.js";
 import {
   createUsuarioInterno,
@@ -566,6 +567,15 @@ export function renderManage(container: HTMLElement): () => void {
       cleanups.push(() => btn.removeEventListener("click", h));
     });
 
+    $$("[data-revert-app]", content).forEach((btn) => {
+      const id = btn.getAttribute("data-id")!;
+      const h = (): void => {
+        void handleRevertCompletion(id);
+      };
+      btn.addEventListener("click", h);
+      cleanups.push(() => btn.removeEventListener("click", h));
+    });
+
     $$("[data-cancel-app]", content).forEach((btn) => {
       const id = btn.getAttribute("data-id")!;
       const h = (): void => {
@@ -591,38 +601,67 @@ export function renderManage(container: HTMLElement): () => void {
   }
 
   async function handleSetStatus(id: string, status: Appointment["status"]): Promise<void> {
-    const appts = await listAppointments();
-    const app = appts.find((a) => a.id === id);
-
     if (status === "cancelado") {
       const confirmed = await confirmDialog({
         title: "Cancelar agendamento",
-        message: `Confirmar o cancelamento do agendamento de ${app?.clienteNome ?? "cliente"}?`,
-        confirmLabel: "Cancelar agendamento",
+        message: "Tem certeza que deseja cancelar este agendamento?",
+        confirmLabel: "Sim, cancelar",
         danger: true,
       });
       if (!confirmed) return;
-      await cancelAppointment(id);
+      try {
+        await cancelAppointment(id);
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : "Não foi possível cancelar. Tente novamente.", "error");
+        return;
+      }
       showToast("Agendamento cancelado.");
     } else if (status === "confirmado") {
       const confirmed = await confirmDialog({
         title: "Confirmar presença",
-        message: "Marcar este agendamento como confirmado?",
+        message: "Confirmar a presença do cliente neste horário?",
         confirmLabel: "Confirmar",
       });
       if (!confirmed) return;
-      await confirmAppointment(id);
+      try {
+        await confirmAppointment(id);
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : "Não foi possível confirmar. Tente novamente.", "error");
+        return;
+      }
       showToast("Presença confirmada.");
     } else if (status === "concluido") {
       const confirmed = await confirmDialog({
         title: "Concluir atendimento",
-        message: "Marcar este agendamento como concluído?",
+        message: "Marcar este atendimento como concluído? Essa ação libera o horário como finalizado.",
         confirmLabel: "Concluir",
       });
       if (!confirmed) return;
-      await concludeAppointment(id);
+      try {
+        await concludeAppointment(id);
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : "Não foi possível concluir. Tente novamente.", "error");
+        return;
+      }
       showToast("Atendimento concluído.");
     }
+    await renderAgendamentos();
+  }
+
+  async function handleRevertCompletion(id: string): Promise<void> {
+    const confirmed = await confirmDialog({
+      title: "Reverter conclusão",
+      message: 'Este atendimento voltará para o status "Confirmado". Deseja continuar?',
+      confirmLabel: "Reverter",
+    });
+    if (!confirmed) return;
+    try {
+      await revertCompletion(id);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Não foi possível reverter a conclusão.", "error");
+      return;
+    }
+    showToast("Conclusão revertida. Atendimento voltou para Confirmado.");
     await renderAgendamentos();
   }
 
@@ -659,6 +698,10 @@ export function renderManage(container: HTMLElement): () => void {
                 actions = `<span class="actions-cell">
                   <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-conclude-app data-id="${escapeHtml(a.id)}">CONCLUIR</button>
                   <button type="button" class="btn btn--sm btn--danger-outline" data-cancel-app data-id="${escapeHtml(a.id)}">Cancelar</button>
+                </span>`;
+              } else if (a.status === "concluido") {
+                actions = `<span class="actions-cell">
+                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-revert-app data-id="${escapeHtml(a.id)}">Reverter conclusão</button>
                 </span>`;
               } else {
                 actions = `<span class="actions-cell"><span class="muted-note">Sem ações</span></span>`;

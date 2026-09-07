@@ -1143,6 +1143,48 @@
         }
       }
     },
+    "/api/agendamentos/{id}/reverter": {
+      "patch": {
+        "tags": [
+          "Agendamentos"
+        ],
+        "summary": "Reverte a conclusao de um agendamento para confirmado (profissional/recepcionista/admin)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agendamento revertido para confirmado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agendamento"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
     "/api/horarios/funcionario-disponibilidade": {
       "get": {
         "tags": [

@@ -126,6 +126,19 @@ export async function concludeAppointment(id: string): Promise<Appointment> {
 }
 
 /**
+ * Reverte a conclusão de um agendamento para "confirmado"
+ * (profissional/recep/admin). Espelha `concludeAppointment`.
+ * PATCH /api/agendamentos/:id/reverter
+ */
+export async function revertCompletion(id: string): Promise<Appointment> {
+  const dto = await httpJson<AgendamentoDTO>(
+    `/agendamentos/${encodeURIComponent(id)}/reverter`,
+    { method: "PATCH" },
+  );
+  return mapAppointment(dto);
+}
+
+/**
  * Reagendar: não há endpoint próprio no backend. A composição recomendada é
  * **cancelar o agendamento antigo** e **criar um novo** com os novos dados.
  * Esta função cancela o antigo e devolve o agendamento cancelado; a view deve

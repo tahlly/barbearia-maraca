@@ -7,6 +7,7 @@ import {
   cancelarAgendamento,
   confirmarAgendamento,
   concluirAgendamento,
+  reverterConclusaoAgendamento,
 } from '../services/agendamento-service';
 import { UnauthorizedError } from '../errors/UnauthorizedError';
 
@@ -72,5 +73,12 @@ export async function concluirHandler(req: Request, res: Response): Promise<void
   const user = exigirUsuario(req);
   const id = idSchema.parse(req.params.id);
   const agendamento = await concluirAgendamento(user.id, user.role, id);
+  res.json(agendamento);
+}
+
+export async function reverterHandler(req: Request, res: Response): Promise<void> {
+  const user = exigirUsuario(req);
+  const id = idSchema.parse(req.params.id);
+  const agendamento = await reverterConclusaoAgendamento(user.id, user.role, id);
   res.json(agendamento);
 }

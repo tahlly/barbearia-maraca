@@ -8,6 +8,7 @@ import {
   cancelarHandler,
   confirmarHandler,
   concluirHandler,
+  reverterHandler,
 } from '../controllers/agendamento-controller';
 
 const agendamentoRoutes = Router();
@@ -167,6 +168,28 @@ const agendamentoRoutes = Router();
  *             schema: { $ref: '#/components/schemas/Agendamento' }
  *       '403':
  *         $ref: '#/components/responses/Erro403'
+ *
+ * /api/agendamentos/{id}/reverter:
+ *   patch:
+ *     tags: [Agendamentos]
+ *     summary: Reverte a conclusao de um agendamento para confirmado (profissional/recepcionista/admin)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       '200':
+ *         description: Agendamento revertido para confirmado
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Agendamento' }
+ *       '400':
+ *         $ref: '#/components/responses/Erro400'
+ *       '403':
+ *         $ref: '#/components/responses/Erro403'
  */
 
 agendamentoRoutes.post('/', authenticate, criarHandler);
@@ -182,6 +205,11 @@ agendamentoRoutes.patch(
   '/:id/concluir',
   authorize('profissional', 'recepcionista', 'admin'),
   concluirHandler,
+);
+agendamentoRoutes.patch(
+  '/:id/reverter',
+  authorize('profissional', 'recepcionista', 'admin'),
+  reverterHandler,
 );
 
 export default agendamentoRoutes;
