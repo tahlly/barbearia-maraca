@@ -1,6 +1,6 @@
 export type ServiceIcon = "scissors" | "beard" | "layers" | "sparkle";
 
-export type UserRole = "superusuario" | "admin" | "recepcionista" | "profissional" | "cliente";
+export type UserRole = "admin" | "recepcionista" | "profissional" | "cliente";
 
 export interface Service {
   id: string;
@@ -67,6 +67,7 @@ export interface Session {
   userEmail: string;
   expiresAt: number;
   role: UserRole;
+  precisaTrocarSenha?: boolean;
 }
 
 export interface Cliente {
