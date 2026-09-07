@@ -1,5 +1,4 @@
-import { CONFIG } from "../config.js";
-import { httpJson, isMockMode } from "./api.js";
+import { httpJson } from "./api.js";
 
 // ── Tipos de contrato HTTP (espelho de shared/types — mantidos localmente
 // para evitar import fora do rootDir do frontend) ────────────────────────
@@ -103,27 +102,6 @@ function funcionarioToUsuario(f: FuncionarioDTO): UsuarioInterno {
   };
 }
 
-// ── Helpers de mock (localStorage, comportamento legado) ─────────────────
-
-function readList(): UsuarioInterno[] {
-  const raw = localStorage.getItem(CONFIG.usuariosKey);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as UsuarioInterno[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeList(list: UsuarioInterno[]): void {
-  localStorage.setItem(CONFIG.usuariosKey, JSON.stringify(list));
-}
-
-function createId(): string {
-  return `USR-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-}
-
 // ── Cache de funcionários (API mode) ────────────────────────────────────
 
 /**
@@ -156,36 +134,18 @@ async function fetchAllFromApi(): Promise<UsuarioInterno[]> {
 // ── API pública ─────────────────────────────────────────────────────────
 
 /**
- * Retorna a lista de usuários internos.
- *
- * **Modo mock:** lê de `localStorage`.
- * **Modo API:** busca todos os funcionários via API e mapeia.
+ * Retorna a lista de usuários internos (funcionários) via API.
  */
 export async function listUsuariosInternos(): Promise<UsuarioInterno[]> {
-  if (isMockMode()) {
-    return readList();
-  }
   return fetchAllFromApi();
 }
 
 /**
- * Busca um usuário interno por e-mail.
- *
- * **Modo mock:** filtra a lista em `localStorage`.
- * **Modo API:** chama `GET /funcionarios/buscar?email=...` (autenticado;
- * admin/recepcionista encontram qualquer funcionário; um profissional só o
- * próprio). Retorna `null` em 404/erro para o caller tratar como inexistente.
+ * Busca um usuário interno por e-mail via API.
  */
 export async function findUsuarioByEmail(
   email: string,
 ): Promise<UsuarioInterno | null> {
-  if (isMockMode()) {
-    const normalized = email.trim().toLowerCase();
-    return (
-      readList().find((u) => u.email.toLowerCase() === normalized) ?? null
-    );
-  }
-
   try {
     const funcionario = await httpJson<FuncionarioDTO>(
       `/funcionarios/buscar?email=${encodeURIComponent(email.trim().toLowerCase())}`,
@@ -197,42 +157,8 @@ export async function findUsuarioByEmail(
 }
 
 /**
- * Valida credenciais de um usuário interno.
- *
- * **Modo mock:** compara email/senha no `localStorage`.
- * **Modo API:** retorna `null` — autenticação é tratada pelo endpoint
- * `POST /auth/login` no backend. Esta função NÃO é chamada em modo API
- * (o `auth.ts` só a invoca dentro de `isMockMode()`).
- */
-export function validateUsuarioInterno(
-  email: string,
-  senha: string,
-): UsuarioInterno | null {
-  // Em modo API, autenticação é feita via /auth/login (auth.ts).
-  // Esta função é chamada apenas no path mock de auth.ts.
-  if (isMockMode()) {
-    const usuario = readList().find(
-      (u) => u.email.toLowerCase() === email.trim().toLowerCase(),
-    );
-    if (!usuario) return null;
-    return usuario.senha === senha ? usuario : null;
-  }
-  return null;
-}
-
-/**
- * Cria um novo usuário interno.
- *
- * **Modo mock:** adiciona ao `localStorage`.
- * **Modo API:** chama `POST /funcionarios` (cria `usuario` + `funcionario`
- * atomicamente no backend).
- *
- * Decisão: o backend cria o registro de autenticação (`usuario`) e o
- * registro de funcionário em uma única requisição. O campo `professionalId`
- * do mock não é necessário — o backend retorna o ID do funcionário criado.
- *
- * PENDÊNCIA: `senha` é obrigatória no backend (mín. 6 caracteres).
- * Se o chamador não fornecer senha, a requisição falhará.
+ * Cria um novo usuário interno via `POST /funcionarios` (cria `usuario` +
+ * `funcionario` atomicamente no backend).
  */
 export async function createUsuarioInterno(data: {
   nome: string;
@@ -241,20 +167,6 @@ export async function createUsuarioInterno(data: {
   role: "admin" | "profissional" | "recepcionista";
   professionalId?: string;
 }): Promise<UsuarioInterno> {
-  if (isMockMode()) {
-    const usuario: UsuarioInterno = {
-      id: createId(),
-      nome: data.nome.trim(),
-      email: data.email.trim().toLowerCase(),
-      senha: data.senha,
-      role: data.role,
-      professionalId: data.professionalId,
-      createdAt: new Date().toISOString(),
-    };
-    writeList([...readList(), usuario]);
-    return usuario;
-  }
-
   const response = await httpJson<{
     id: string;
     usuarioId: string;
@@ -287,14 +199,7 @@ export async function createUsuarioInterno(data: {
 }
 
 /**
- * Atualiza um usuário interno.
- *
- * **Modo mock:** atualiza no `localStorage`.
- * **Modo API:** chama `PUT /funcionarios/:id`.
- *
- * O `PUT /funcionarios/:id` aceita `nome`, `telefone`, `cargo`, `especialidade`,
- * `foto`, `descricao`, `email` e `senha`. `email` e `senha` são opcionais e
- * só são enviados quando o chamador os fornece (o backend aplica quando presente).
+ * Atualiza um usuário interno via `PUT /funcionarios/:id`.
  *
  * PENDÊNCIA: O parâmetro `id` é o `usuarioId` do frontend, mas o backend
  * espera o `funcionarioId`. A função tenta resolver internamente via busca.
@@ -303,27 +208,6 @@ export async function updateUsuarioInterno(
   id: string,
   data: { nome?: string; email?: string; senha?: string; especialidade?: string; cargo?: CargoFuncionario },
 ): Promise<UsuarioInterno | null> {
-  if (isMockMode()) {
-    const list = readList();
-    const index = list.findIndex((u) => u.id === id);
-    if (index < 0) return null;
-    const current = list[index]!;
-    const updated: UsuarioInterno = {
-      ...current,
-      nome: data.nome !== undefined ? data.nome.trim() : current.nome,
-      email:
-        data.email !== undefined
-          ? data.email.trim().toLowerCase()
-          : current.email,
-      senha: data.senha !== undefined ? data.senha : current.senha,
-    };
-    list[index] = updated;
-    writeList(list);
-    return updated;
-  }
-
-  // No modo API, precisamos do funcionarioId (não do usuarioId).
-  // Busca o usuário na lista para obter o professionalId.
   const usuarios = await fetchAllFromApi();
   const usuario = usuarios.find((u) => u.id === id);
   if (!usuario?.professionalId) return null;
@@ -348,21 +232,14 @@ export async function updateUsuarioInterno(
 }
 
 /**
- * Busca um usuário interno pelo ID do funcionário.
+ * Busca um usuário interno pelo ID do funcionário via `GET /funcionarios/:id`.
  *
- * **Modo mock:** filtra a lista em `localStorage`.
- * **Modo API:** chama `GET /funcionarios/:id` (autenticado).
- *
- * Decisão: O parâmetro `professionalId` corresponde diretamente ao `id`
+ * O parâmetro `professionalId` corresponde diretamente ao `id`
  * do `FuncionarioDTO` no backend.
  */
 export async function findByProfessionalId(
   professionalId: string,
 ): Promise<UsuarioInterno | null> {
-  if (isMockMode()) {
-    return readList().find((u) => u.professionalId === professionalId) ?? null;
-  }
-
   try {
     const funcionario = await httpJson<FuncionarioDTO>(
       `/funcionarios/${encodeURIComponent(professionalId)}`,
@@ -374,23 +251,12 @@ export async function findByProfessionalId(
 }
 
 /**
- * Remove (desativa) um usuário interno.
+ * Remove (desativa) um usuário interno via `PATCH /funcionarios/:id/status`.
  *
- * **Modo mock:** remove do `localStorage`.
- * **Modo API:** chama `PATCH /funcionarios/:id/status` com `ativo: false`.
- *
- * PENDÊNCIA: O backend não possui endpoint de exclusão física (`DELETE`).
- * A operação é uma desativação lógica. Dados permanecem no banco.
- *
- * PENDÊNCIA: O parâmetro `id` é o `usuarioId`. A função resolve
- * internamente para o `funcionarioId` via busca.
+ * O backend não possui exclusão física (`DELETE`); a operação é uma
+ * desativação lógica.
  */
 export async function deleteUsuarioInterno(id: string): Promise<void> {
-  if (isMockMode()) {
-    writeList(readList().filter((u) => u.id !== id));
-    return;
-  }
-
   const usuarios = await fetchAllFromApi();
   const usuario = usuarios.find((u) => u.id === id);
   if (!usuario?.professionalId) return;

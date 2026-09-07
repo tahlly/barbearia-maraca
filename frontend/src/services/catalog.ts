@@ -206,24 +206,12 @@ export async function setServicoStatus(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Stubs de compatibilidade (chamados por manage.ts / seed.ts em      */
-/*  edição paralela — NÃO remover assinatura até esses agentes limparem) */
+/*  Categorias (não modeladas pelo backend; mantidas para o modal de   */
+/*  profissional em manage.ts)                                         */
 /* ------------------------------------------------------------------ */
-
-export function saveServices(_services: Service[]): void {
-  /* no-op: a fonte de verdade agora é a API */
-}
-
-export function saveProfessionals(_professionals: Professional[]): void {
-  /* no-op: a fonte de verdade agora é a API */
-}
 
 export const DEFAULT_CATEGORIES: string[] = [];
 
 export function loadCategories(): string[] {
   return [...DEFAULT_CATEGORIES];
-}
-
-export function saveCategories(_categories: string[]): void {
-  /* no-op */
 }

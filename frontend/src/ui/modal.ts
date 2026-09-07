@@ -70,6 +70,8 @@ document.addEventListener("keydown", (event: KeyboardEvent) => {
   const top = openOverlays[openOverlays.length - 1];
   if (!top) return;
   if (event.key === "Escape") {
+    // Overlays bloqueantes (ex.: primeiro acesso) não podem ser fechados com Escape.
+    if (top.dataset.blocking === "true") return;
     event.preventDefault();
     closeModal(top);
     top.dispatchEvent(new CustomEvent("modal:close"));

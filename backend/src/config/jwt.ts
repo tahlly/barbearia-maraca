@@ -3,7 +3,32 @@ import jwt, { type SignOptions } from 'jsonwebtoken';
 
 const DEV_SECRET = 'dev-secret-nao-usar-em-producao';
 
-export const JWT_SECRET = process.env.JWT_SECRET || DEV_SECRET;
+function resolveJwtSecret(): string {
+  const configured = process.env.JWT_SECRET;
+  const isProduction = process.env.NODE_ENV === 'production';
+  const insecure =
+    !configured || configured.trim() === '' || configured === DEV_SECRET;
+
+  if (isProduction) {
+    if (insecure) {
+      throw new Error(
+        'JWT_SECRET é obrigatório em produção. Defina JWT_SECRET com um valor forte e privado antes de iniciar a aplicação.',
+      );
+    }
+    return configured;
+  }
+
+  if (insecure) {
+    console.warn(
+      '[config/jwt] Aviso: JWT_SECRET não definido. Usando segredo de desenvolvimento inseguro — defina JWT_SECRET antes de produção.',
+    );
+    return DEV_SECRET;
+  }
+
+  return configured;
+}
+
+export const JWT_SECRET = resolveJwtSecret();
 export const JWT_EXPIRES_IN: SignOptions['expiresIn'] =
   (process.env.JWT_EXPIRES_IN as SignOptions['expiresIn'] | undefined) ?? '30m';
 
