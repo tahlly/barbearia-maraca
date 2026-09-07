@@ -7,6 +7,8 @@ export interface UsuarioRow {
   tipo: string;
   google_id: string | null;
   avatar_url: string | null;
+  reset_token_hash: string | null;
+  reset_token_expires_at: Date | null;
 }
 
 export async function findUsuarioByEmail(email: string): Promise<UsuarioRow | null> {
@@ -115,4 +117,30 @@ export async function atualizarClienteNome(usuarioId: string, nome: string): Pro
 
 export async function atualizarFuncionarioNome(usuarioId: string, nome: string): Promise<void> {
   await db('funcionario').where('usuario_id', usuarioId).update({ nome });
+}
+
+export async function salvarTokenResetSenha(
+  usuarioId: string,
+  tokenHash: string,
+  expiresAt: Date
+): Promise<void> {
+  await db('usuario').where('id', usuarioId).update({
+    reset_token_hash: tokenHash,
+    reset_token_expires_at: expiresAt,
+  });
+}
+
+export async function findUsuarioByResetTokenHash(tokenHash: string): Promise<UsuarioRow | null> {
+  const row = await db('usuario')
+    .where('reset_token_hash', tokenHash)
+    .andWhere('reset_token_expires_at', '>', new Date())
+    .first();
+  return (row as UsuarioRow) ?? null;
+}
+
+export async function limparTokenResetSenha(usuarioId: string): Promise<void> {
+  await db('usuario').where('id', usuarioId).update({
+    reset_token_hash: null,
+    reset_token_expires_at: null,
+  });
 }
