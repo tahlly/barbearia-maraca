@@ -26,6 +26,7 @@
     "google-auth-library": "^11.0.2",
     "jsonwebtoken": "^9.0.3",
     "knex": "^3.3.0",
+    "nodemailer": "^10.0.0",
     "pg": "^8.23.0",
     "swagger-ui-express": "^5.0.1",
     "zod": "^4.5.4"
@@ -37,6 +38,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/knex": "^0.15.2",
     "@types/node": "^26.4.0",
+    "@types/nodemailer": "^8.0.1",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
     "cross-env": "^10.1.0",

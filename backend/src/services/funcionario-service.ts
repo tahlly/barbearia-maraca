@@ -7,6 +7,7 @@ import { ForbiddenError } from '../errors/ForbiddenError';
 import type { FuncionarioPublicoDTO, FuncionarioCompletoDTO, FuncionarioCriadoDTO } from '../dtos/funcionario-dto';
 
 const SALT_ROUNDS = 10;
+const SENHA_PADRAO = '123456';
 
 // ── Listagens ─────────────────────────────────────────────────
 
@@ -81,7 +82,7 @@ export async function buscarFuncionarioPorEmail(
 export async function criarFuncionario(dados: {
   nome: string;
   email: string;
-  senha: string;
+  senha?: string;
   telefone?: string;
   cargo?: string;
   especialidade?: string;
@@ -92,7 +93,10 @@ export async function criarFuncionario(dados: {
     throw new ValidationError('Email já cadastrado');
   }
 
-  const senhaHash = await bcrypt.hash(dados.senha, SALT_ROUNDS);
+  // Senha padrão quando não informada; o usuário será forçado a trocá-la
+  // no primeiro acesso (primeiro_acesso = true).
+  const senha = dados.senha ?? SENHA_PADRAO;
+  const senhaHash = await bcrypt.hash(senha, SALT_ROUNDS);
 
   return funcionarioRepo.criar({
     email: dados.email,

@@ -11,6 +11,7 @@ export interface LoginResponseDTO {
   token: string;
   user: UsuarioDTO;
   role: string;
+  precisaTrocarSenha?: boolean;
 }
 
 export interface GoogleLoginRequestDTO {

@@ -1,7 +1,7 @@
 ---
 description: Transforma tarefas em planos executáveis, seleciona o especialista correto, controla dependências, coordena handoffs e impede mudanças fora dos requisitos aprovados.
 mode: all
-# steps: 12
+steps: 12
 color: "#DC2626"
 permissions:
   - action: subagent

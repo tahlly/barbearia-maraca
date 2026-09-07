@@ -12,6 +12,14 @@ x-backend-environment: &backend-environment
   GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
   GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
   GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_SECURE: ${SMTP_SECURE:-false}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASS: ${SMTP_PASS:-}
+  SMTP_FROM: ${SMTP_FROM:-}
+  RESET_TOKEN_TTL_MIN: ${RESET_TOKEN_TTL_MIN:-30}
+  FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
 
 x-backend-service: &backend-service
   build:

@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { signToken } from '../config/jwt';
 import db from '../database/connection';
@@ -17,8 +18,11 @@ import {
   criarClienteCompleto,
   obterClienteNome,
   obterFuncionarioNome,
+  salvarTokenResetSenha,
+  findUsuarioByResetTokenHash,
   type UsuarioRow,
 } from '../repositories/auth-repository';
+import { enviarEmailRecuperacaoSenha } from './email-service';
 import type { LoginResponseDTO, UsuarioDTO } from '../dtos/auth-dto';
 
 const DEFAULT_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
@@ -33,6 +37,7 @@ export interface GoogleProfile {
 }
 
 const SALT_ROUNDS = 10;
+const RESET_TOKEN_TTL_MS = (Number(process.env.RESET_TOKEN_TTL_MIN) || 30) * 60 * 1000;
 
 export function mapearTipoParaRole(tipo: string, cargo?: string | null): string {
   if (tipo === 'cliente') return 'cliente';
@@ -180,7 +185,11 @@ export async function atualizarPerfil(
     // Atualizar usuario
     const updateUsuario: Record<string, unknown> = {};
     if (dados.email) updateUsuario.email = dados.email;
-    if (senhaHash) updateUsuario.senha_hash = senhaHash;
+    if (senhaHash) {
+      updateUsuario.senha_hash = senhaHash;
+      // Senha alterada: primeiro acesso concluído
+      updateUsuario.primeiro_acesso = false;
+    }
     if (Object.keys(updateUsuario).length > 0) {
       updateUsuario.updated_at = new Date();
       await trx('usuario').where('id', usuarioId).update(updateUsuario);
@@ -258,5 +267,53 @@ export async function login(data: {
     token: gerarTokenJWT(usuario, role),
     user: buildUsuarioDTO(usuario, nome, cargo),
     role,
+    precisaTrocarSenha: usuario.primeiro_acesso === true,
   };
+}
+
+export async function solicitarRecuperacaoSenha(email: string): Promise<void> {
+  const usuario = await findUsuarioByEmail(email);
+
+  // Nunca revelar se o e-mail existe: se não encontrar, retorna silenciosamente.
+  if (!usuario) return;
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+
+  await salvarTokenResetSenha(usuario.id, tokenHash, expiresAt);
+
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const link = `${frontendUrl}/#/login?token=${token}`;
+
+  try {
+    await enviarEmailRecuperacaoSenha(usuario.email, link);
+  } catch (error) {
+    // Não deixar falha de SMTP vazar pro usuário; logar para diagnóstico operacional.
+    console.error('[email-service] Falha ao enviar e-mail de recuperação:', error);
+  }
+}
+
+export async function redefinirSenha(token: string, novaSenha: string): Promise<void> {
+  if (!token) {
+    throw new ValidationError('Token inválido ou expirado');
+  }
+
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const usuario = await findUsuarioByResetTokenHash(tokenHash);
+
+  if (!usuario) {
+    throw new ValidationError('Token inválido ou expirado');
+  }
+
+  const senhaHash = await bcrypt.hash(novaSenha, SALT_ROUNDS);
+
+  await db.transaction(async (trx) => {
+    await trx('usuario').where('id', usuario.id).update({
+      senha_hash: senhaHash,
+      reset_token_hash: null,
+      reset_token_expires_at: null,
+      updated_at: new Date(),
+    });
+  });
 }

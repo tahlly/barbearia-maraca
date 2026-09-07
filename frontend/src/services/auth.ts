@@ -164,6 +164,10 @@ export function requireSession(): Session {
     navigateTo("/login");
     throw new Error("Sessão expirada");
   }
+  if (session.precisaTrocarSenha) {
+    navigateTo("/login");
+    throw new Error("Primeiro acesso pendente");
+  }
   return session;
 }
 
@@ -173,11 +177,41 @@ export function requireRole(allowed: UserRole[]): Session {
     navigateTo("/login");
     throw new Error("Sessão expirada");
   }
+  if (session.precisaTrocarSenha) {
+    navigateTo("/login");
+    throw new Error("Primeiro acesso pendente");
+  }
   if (!allowed.includes(session.role)) {
     redirectForRole(session.role);
     throw new Error("Acesso não autorizado");
   }
   return session;
+}
+
+export async function solicitarRecuperacaoSenha(email: string): Promise<{ ok: boolean; message?: string }> {
+  try {
+    await httpJson<{ mensagem: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email: normalize(email) }),
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError) return { ok: false, message: error.message };
+    return { ok: false, message: "Não foi possível enviar as instruções." };
+  }
+}
+
+export async function redefinirSenha(token: string, novaSenha: string): Promise<{ ok: boolean; message?: string }> {
+  try {
+    await httpJson<{ mensagem: string }>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, novaSenha }),
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError) return { ok: false, message: error.message };
+    return { ok: false, message: "Não foi possível redefinir a senha." };
+  }
 }
 
 export function logout(): void {
