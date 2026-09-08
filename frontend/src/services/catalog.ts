@@ -10,6 +10,7 @@ interface ServicoPublicoDTO {
   id: string;
   nome: string;
   descricao?: string | null;
+  categoria?: string | null;
   duracao_minutos: number;
   preco: string;
 }
@@ -18,6 +19,7 @@ interface ServicoAdminDTO {
   id: string;
   nome: string;
   descricao: string | null;
+  categoria?: string | null;
   duracao_minutos: number;
   preco: string;
   ativo: boolean;
@@ -28,6 +30,7 @@ interface FuncionarioPublicoDTO {
   nome: string;
   cargo: CargoFuncionario;
   especialidade: string | null;
+  categoria?: string | null;
   foto: string | null;
   descricao: string | null;
 }
@@ -51,7 +54,7 @@ function mapServico(dto: ServicoPublicoDTO): Service {
     durationMin: dto.duracao_minutos,
     price: parseFloat(dto.preco),
     icon: "scissors",
-    category: "",
+    category: dto.categoria ?? "",
     active: true,
   };
 }
@@ -64,7 +67,7 @@ function mapServicoAdmin(dto: ServicoAdminDTO): Service {
     durationMin: dto.duracao_minutos,
     price: parseFloat(dto.preco),
     icon: "scissors",
-    category: "",
+    category: dto.categoria ?? "",
     active: dto.ativo,
   };
 }
@@ -81,7 +84,7 @@ function mapProfissional(dto: FuncionarioPublicoDTO): Professional {
         : dto.cargo === "administrador"
           ? "Administrador"
           : "Barbeiro"),
-    category: "",
+    category: dto.categoria ?? "",
     active: true,
     photo: dto.foto ?? undefined,
     cargo: dto.cargo,
@@ -149,6 +152,7 @@ export async function primeCatalog(): Promise<void> {
 export async function createServico(data: {
   name: string;
   description: string;
+  category: string;
   durationMin: number;
   price: number;
 }): Promise<Service> {
@@ -157,6 +161,7 @@ export async function createServico(data: {
     body: JSON.stringify({
       nome: data.name,
       descricao: data.description || null,
+      categoria: data.category || null,
       duracao_minutos: data.durationMin,
       preco: data.price,
     }),
@@ -170,6 +175,7 @@ export async function updateServico(
   data: {
     name: string;
     description: string;
+    category: string;
     durationMin: number;
     price: number;
   },
@@ -181,6 +187,7 @@ export async function updateServico(
       body: JSON.stringify({
         nome: data.name,
         descricao: data.description || null,
+        categoria: data.category || null,
         duracao_minutos: data.durationMin,
         preco: data.price,
       }),
@@ -206,12 +213,16 @@ export async function setServicoStatus(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Categorias (não modeladas pelo backend; mantidas para o modal de   */
-/*  profissional em manage.ts)                                         */
+/*  Categorias — derivadas dinamicamente das categorias persistidas    */
+/*  nos serviços (o backend não modela uma tabela própria de categorias) */
 /* ------------------------------------------------------------------ */
 
-export const DEFAULT_CATEGORIES: string[] = [];
-
 export function loadCategories(): string[] {
-  return [...DEFAULT_CATEGORIES];
+  const set = new Set<string>();
+  for (const s of _servicesCache) {
+    if (s.category && s.category.trim().length > 0) {
+      set.add(s.category.trim());
+    }
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, "pt-BR"));
 }

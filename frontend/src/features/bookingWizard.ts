@@ -244,14 +244,24 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     // Somente barbeiros podem ser agendados. Itens sem o campo `cargo`
     // (payload antigo) NÃO são exibidos, para não permitir agendar com
     // recepcionista/administrador que não possuem horario_trabalho.
-    const available = catalogProfessionals.filter((p) => p.active && p.cargo === "barbeiro");
+    const byRole = catalogProfessionals.filter((p) => p.active && p.cargo === "barbeiro");
+
+    // Filtra pela categoria do serviço selecionado. Se o serviço ainda não
+    // tem categoria (ex.: cadastro anterior à funcionalidade), exibe todos os
+    // barbeiros (fallback).
+    const selectedService = catalogServices.find((s) => s.id === state.serviceId);
+    const cat = selectedService?.category?.trim();
+    const available =
+      cat && cat.length > 0
+        ? byRole.filter((p) => (p.category?.trim() ?? "") === cat)
+        : byRole;
 
     if (state.professionalId && !available.some((p) => p.id === state.professionalId)) {
       state.professionalId = null;
     }
 
     if (available.length === 0) {
-      prosBox.innerHTML = `<p class="options-empty options-empty--alert options-empty--error">${icon("alert-circle", 18)}<span>Nenhum profissional disponível no momento.</span></p>`;
+      prosBox.innerHTML = `<p class="options-empty options-empty--alert options-empty--error">${icon("alert-circle", 18)}<span>${cat ? `Nenhum profissional disponível para a categoria "${escapeHtml(cat)}".` : "Nenhum profissional disponível no momento."}</span></p>`;
       return;
     }
 

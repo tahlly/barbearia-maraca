@@ -12,6 +12,7 @@ interface FuncionarioDTO {
   telefone: string | null;
   cargo: CargoFuncionario;
   especialidade: string | null;
+  categoria: string | null;
   foto: string | null;
   descricao: string | null;
   ativo: boolean;
@@ -27,6 +28,7 @@ interface CreateFuncionarioRequest {
   telefone?: string;
   cargo?: CargoFuncionario;
   especialidade?: string;
+  categoria?: string;
 }
 
 interface UpdateFuncionarioRequest {
@@ -34,6 +36,7 @@ interface UpdateFuncionarioRequest {
   telefone?: string;
   cargo?: CargoFuncionario;
   especialidade?: string;
+  categoria?: string;
   foto?: string;
   descricao?: string;
   email?: string;
@@ -49,6 +52,7 @@ export interface UsuarioInterno {
   senha: string;
   role: "admin" | "profissional" | "recepcionista";
   professionalId?: string;
+  categoria?: string;
   createdAt: string;
 }
 
@@ -98,6 +102,7 @@ function funcionarioToUsuario(f: FuncionarioDTO): UsuarioInterno {
     senha: "",
     role: cargoToRole(f.cargo),
     professionalId: f.id,
+    categoria: f.categoria ?? "",
     createdAt: f.createdAt,
   };
 }
@@ -166,6 +171,7 @@ export async function createUsuarioInterno(data: {
   senha: string;
   role: "admin" | "profissional" | "recepcionista";
   professionalId?: string;
+  categoria?: string;
 }): Promise<UsuarioInterno> {
   const response = await httpJson<{
     id: string;
@@ -175,6 +181,7 @@ export async function createUsuarioInterno(data: {
     telefone: string | null;
     cargo: string;
     especialidade: string | null;
+    categoria: string | null;
   }>("/funcionarios", {
     method: "POST",
     body: JSON.stringify({
@@ -182,6 +189,7 @@ export async function createUsuarioInterno(data: {
       email: data.email.trim().toLowerCase(),
       senha: data.senha,
       cargo: roleToCargo(data.role),
+      categoria: data.categoria?.trim() ? data.categoria.trim() : undefined,
     } satisfies CreateFuncionarioRequest),
   });
 
@@ -206,7 +214,7 @@ export async function createUsuarioInterno(data: {
  */
 export async function updateUsuarioInterno(
   id: string,
-  data: { nome?: string; email?: string; senha?: string; especialidade?: string; cargo?: CargoFuncionario },
+  data: { nome?: string; email?: string; senha?: string; especialidade?: string; categoria?: string; cargo?: CargoFuncionario },
 ): Promise<UsuarioInterno | null> {
   const usuarios = await fetchAllFromApi();
   const usuario = usuarios.find((u) => u.id === id);
@@ -215,6 +223,10 @@ export async function updateUsuarioInterno(
   const payload: UpdateFuncionarioRequest = {};
   if (data.nome !== undefined) payload.nome = data.nome.trim();
   if (data.especialidade !== undefined) payload.especialidade = data.especialidade;
+  if (data.categoria !== undefined) {
+    const categoria = data.categoria.trim();
+    if (categoria.length > 0) payload.categoria = categoria;
+  }
   if (data.cargo !== undefined) payload.cargo = data.cargo;
   if (data.email !== undefined) payload.email = data.email.trim();
   if (data.senha !== undefined && data.senha !== "") payload.senha = data.senha;
