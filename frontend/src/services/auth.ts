@@ -1,15 +1,13 @@
 import { CONFIG } from "../config.js";
 import { navigateTo } from "../router.js";
 import type { Session, UserRole } from "../types.js";
-import { findAdminByEmail, updateAdmin, validateAdminLogin } from "./admins.js";
-import { ApiError, delay, httpJson, isMockMode } from "./api.js";
-import { validateClienteLogin } from "./clientes.js";
-import { findUsuarioByEmail, updateUsuarioInterno, validateUsuarioInterno } from "./usuarios.js";
+import { ApiError, apiFetch, httpJson } from "./api.js";
 
 export interface LoginResult {
   ok: boolean;
   role?: UserRole;
   message?: string;
+  precisaTrocarSenha?: boolean;
 }
 
 export interface AuthRedirect {
@@ -18,7 +16,6 @@ export interface AuthRedirect {
 }
 
 export const ROLE_REDIRECTS: Record<UserRole, string> = {
-  superusuario: "/superusuario",
   admin: "/admin",
   recepcionista: "/recepcionista",
   profissional: "/profissional",
@@ -27,14 +24,6 @@ export const ROLE_REDIRECTS: Record<UserRole, string> = {
 
 export function redirectForRole(role: UserRole): void {
   navigateTo(ROLE_REDIRECTS[role] ?? "/");
-}
-
-function createToken(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 function persistSession(session: Session): void {
@@ -46,8 +35,7 @@ function normalize(email: string): string {
 }
 
 /**
- * Atualiza os dados do usuário da sessão atual (nome/senha/email) no mock.
- * O admin busca na lista de administradores; os demais vão aos usuários internos.
+ * Atualiza os dados do usuário da sessão atual (nome/senha/email) via API.
  */
 export async function updateSessionUser(data: {
   nome?: string;
@@ -55,63 +43,8 @@ export async function updateSessionUser(data: {
   senhaAtual?: string;
   novaSenha?: string;
 }): Promise<{ ok: boolean; message?: string }> {
-  if (isMockMode()) {
-    await delay(500);
-    const session = getSession();
-    if (!session) return { ok: false, message: "Sessão ausente." };
-
-    if (session.role === "admin") {
-      const admin = findAdminByEmail(session.userEmail);
-      if (!admin) {
-        return { ok: false, message: "Sessão administrativa não reconhecida." };
-      }
-      if (data.senhaAtual !== undefined && data.senhaAtual !== admin.senha) {
-        return { ok: false, message: "Senha atual incorreta." };
-      }
-      if (data.email !== undefined) {
-        const target = data.email.trim().toLowerCase();
-        if (target !== admin.email && (findAdminByEmail(target) || findUsuarioByEmail(target))) {
-          return { ok: false, message: "E-mail já cadastrado." };
-        }
-      }
-      updateAdmin(admin.id, {
-        nome: data.nome,
-        email: data.email,
-        senha: data.novaSenha,
-      });
-      const updated = findAdminByEmail(data.email ?? admin.email);
-      persistSession({
-        ...session,
-        userName: updated?.nome ?? data.nome ?? session.userName,
-        userEmail: updated?.email ?? session.userEmail,
-      });
-      return { ok: true };
-    }
-
-    const usuario = findUsuarioByEmail(session.userEmail);
-    if (!usuario) return { ok: false, message: "Usuário não encontrado." };
-    if (data.senhaAtual !== undefined && data.senhaAtual !== usuario.senha) {
-      return { ok: false, message: "Senha atual incorreta." };
-    }
-    if (data.email !== undefined) {
-      const target = data.email.trim().toLowerCase();
-      if (target !== usuario.email && findUsuarioByEmail(target)) {
-        return { ok: false, message: "E-mail já cadastrado." };
-      }
-    }
-    updateUsuarioInterno(usuario.id, {
-      nome: data.nome,
-      email: data.email,
-      senha: data.novaSenha,
-    });
-    const updated = findUsuarioByEmail(data.email ?? usuario.email);
-    persistSession({
-      ...session,
-      userName: updated?.nome ?? data.nome ?? session.userName,
-      userEmail: updated?.email ?? session.userEmail,
-    });
-    return { ok: true };
-  }
+  const session = getSession();
+  if (!session) return { ok: false, message: "Sessão ausente." };
 
   try {
     await httpJson<{ ok: boolean }>("/auth/me", {
@@ -138,51 +71,8 @@ export async function updateSessionUser(data: {
  * Retorna o papel para direcionamento; em caso de falha retorna mensagem.
  */
 export async function loginInterno(email: string, password: string): Promise<LoginResult> {
-  if (isMockMode()) {
-    await delay(700);
-    const norm = normalize(email);
-
-    const superAdmin = CONFIG.demoSuperAdmin;
-    if (norm === superAdmin.email && password === superAdmin.password) {
-      persistSession({
-        token: createToken(),
-        userName: superAdmin.name,
-        userEmail: norm,
-        expiresAt: Date.now() + CONFIG.sessionTtlMs,
-        role: "superusuario",
-      });
-      return { ok: true, role: "superusuario" };
-    }
-
-    const admin = validateAdminLogin(email, password);
-    if (admin) {
-      persistSession({
-        token: createToken(),
-        userName: admin.nome,
-        userEmail: admin.email,
-        expiresAt: Date.now() + CONFIG.sessionTtlMs,
-        role: "admin",
-      });
-      return { ok: true, role: "admin" };
-    }
-
-    const usuario = validateUsuarioInterno(email, password);
-    if (usuario) {
-      persistSession({
-        token: createToken(),
-        userName: usuario.nome,
-        userEmail: usuario.email,
-        expiresAt: Date.now() + CONFIG.sessionTtlMs,
-        role: usuario.role,
-      });
-      return { ok: true, role: usuario.role };
-    }
-
-    return { ok: false, message: "Credenciais inválidas. Verifique e tente novamente." };
-  }
-
   try {
-    const data = await httpJson<{ token: string; userName: string; userEmail: string; expiresAt?: number; role: UserRole }>(
+    const data = await httpJson<{ token: string; userName: string; userEmail: string; expiresAt?: number; role: UserRole; precisaTrocarSenha?: boolean }>(
       "/auth/login",
       { method: "POST", body: JSON.stringify({ email: normalize(email), password }) },
     );
@@ -192,8 +82,9 @@ export async function loginInterno(email: string, password: string): Promise<Log
       userEmail: data.userEmail,
       expiresAt: data.expiresAt ?? Date.now() + CONFIG.sessionTtlMs,
       role: data.role,
+      precisaTrocarSenha: data.precisaTrocarSenha ?? false,
     });
-    return { ok: true, role: data.role };
+    return { ok: true, role: data.role, precisaTrocarSenha: data.precisaTrocarSenha ?? false };
   } catch (error) {
     if (error instanceof ApiError) {
       return { ok: false, message: error.message };
@@ -206,24 +97,8 @@ export async function loginInterno(email: string, password: string): Promise<Log
  * Login da área do cliente (conta cadastrada).
  */
 export async function loginCliente(email: string, password: string): Promise<LoginResult> {
-  if (isMockMode()) {
-    await delay(700);
-    const cliente = validateClienteLogin(email, password);
-    if (cliente) {
-      persistSession({
-        token: createToken(),
-        userName: cliente.nome,
-        userEmail: cliente.email,
-        expiresAt: Date.now() + CONFIG.sessionTtlMs,
-        role: "cliente",
-      });
-      return { ok: true, role: "cliente" };
-    }
-    return { ok: false, message: "Credenciais inválidas. Verifique e tente novamente." };
-  }
-
   try {
-    const data = await httpJson<{ token: string; userName: string; userEmail: string; expiresAt?: number; role: UserRole }>(
+    const data = await httpJson<{ token: string; userName: string; userEmail: string; expiresAt?: number; role: UserRole; precisaTrocarSenha?: boolean }>(
       "/auth/login",
       { method: "POST", body: JSON.stringify({ email: normalize(email), password }) },
     );
@@ -233,13 +108,37 @@ export async function loginCliente(email: string, password: string): Promise<Log
       userEmail: data.userEmail,
       expiresAt: data.expiresAt ?? Date.now() + CONFIG.sessionTtlMs,
       role: data.role,
+      precisaTrocarSenha: data.precisaTrocarSenha ?? false,
     });
-    return { ok: true, role: data.role };
+    return { ok: true, role: data.role, precisaTrocarSenha: data.precisaTrocarSenha ?? false };
   } catch (error) {
     if (error instanceof ApiError) {
       return { ok: false, message: error.message };
     }
     return { ok: false, message: "Credenciais inválidas. Verifique e tente novamente." };
+  }
+}
+
+/**
+ * Conclui o primeiro acesso: define a nova senha (PATCH /auth/me) e limpa a
+ * flag de troca obrigatória da sessão local.
+ */
+export async function completeFirstAccess(
+  novaSenha: string,
+): Promise<{ ok: boolean; message?: string }> {
+  const session = getSession();
+  if (!session) return { ok: false, message: "Sessão ausente." };
+
+  try {
+    await httpJson<{ ok: boolean }>("/auth/me", {
+      method: "PATCH",
+      body: JSON.stringify({ senha: novaSenha }),
+    });
+    persistSession({ ...session, precisaTrocarSenha: false });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError) return { ok: false, message: error.message };
+    return { ok: false, message: "Não foi possível atualizar a senha." };
   }
 }
 
@@ -265,6 +164,10 @@ export function requireSession(): Session {
     navigateTo("/login");
     throw new Error("Sessão expirada");
   }
+  if (session.precisaTrocarSenha) {
+    navigateTo("/login");
+    throw new Error("Primeiro acesso pendente");
+  }
   return session;
 }
 
@@ -274,6 +177,10 @@ export function requireRole(allowed: UserRole[]): Session {
     navigateTo("/login");
     throw new Error("Sessão expirada");
   }
+  if (session.precisaTrocarSenha) {
+    navigateTo("/login");
+    throw new Error("Primeiro acesso pendente");
+  }
   if (!allowed.includes(session.role)) {
     redirectForRole(session.role);
     throw new Error("Acesso não autorizado");
@@ -281,7 +188,38 @@ export function requireRole(allowed: UserRole[]): Session {
   return session;
 }
 
+export async function solicitarRecuperacaoSenha(email: string): Promise<{ ok: boolean; message?: string }> {
+  try {
+    await httpJson<{ mensagem: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email: normalize(email) }),
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError) return { ok: false, message: error.message };
+    return { ok: false, message: "Não foi possível enviar as instruções." };
+  }
+}
+
+export async function redefinirSenha(token: string, novaSenha: string): Promise<{ ok: boolean; message?: string }> {
+  try {
+    await httpJson<{ mensagem: string }>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, novaSenha }),
+    });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ApiError) return { ok: false, message: error.message };
+    return { ok: false, message: "Não foi possível redefinir a senha." };
+  }
+}
+
 export function logout(): void {
+  /* Fire-and-forget: notifica o backend sobre o logout sem bloquear o fluxo */
+  apiFetch("/auth/logout", { method: "POST" }).catch(() => {
+    /* ignorar — o logout local continua mesmo se o backend falhar */
+  });
+
   sessionStorage.removeItem(CONFIG.sessionKey);
-  navigateTo("/login");
+  navigateTo("/");
 }

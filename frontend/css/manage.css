@@ -346,6 +346,21 @@ body.light-theme .manage-toolbar select.input {
   color: var(--color-gold);
 }
 
+.pro-card__category {
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  background-color: var(--color-gold-soft);
+  border: 1px solid var(--color-gold-border);
+  border-radius: var(--radius-full);
+}
+
 .pro-card__metric {
   display: flex;
   align-items: center;

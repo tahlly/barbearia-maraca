@@ -10,31 +10,43 @@
     "migrate:rollback": "npx tsx node_modules/knex/bin/cli.js migrate:rollback --knexfile src/knexfile.ts",
     "seed": "npx tsx node_modules/knex/bin/cli.js seed:run --knexfile src/knexfile.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "swagger": "npx tsx swagger.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@typescript/typescript-win32-x64": "^7.0.2",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "google-auth-library": "^11.0.2",
+    "jsonwebtoken": "^9.0.3",
     "knex": "^3.3.0",
+    "nodemailer": "^10.0.0",
     "pg": "^8.23.0",
+    "swagger-ui-express": "^5.0.1",
     "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/knex": "^0.15.2",
     "@types/node": "^26.4.0",
+    "@types/nodemailer": "^8.0.1",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
     "cross-env": "^10.1.0",
+    "swagger-jsdoc": "^6.3.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.23.13",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
   }
 }

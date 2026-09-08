@@ -1,6 +1,6 @@
 export type ServiceIcon = "scissors" | "beard" | "layers" | "sparkle";
 
-export type UserRole = "superusuario" | "admin" | "recepcionista" | "profissional" | "cliente";
+export type UserRole = "admin" | "recepcionista" | "profissional" | "cliente";
 
 export interface Service {
   id: string;
@@ -13,6 +13,8 @@ export interface Service {
   active: boolean;
 }
 
+export type CargoFuncionario = "barbeiro" | "recepcionista" | "administrador";
+
 export interface Professional {
   id: string;
   name: string;
@@ -20,38 +22,46 @@ export interface Professional {
   category: string;
   active: boolean;
   email?: string;
+  photo?: string;
   userRole?: "profissional" | "recepcionista";
   photoUrl?: string;
+  cargo?: CargoFuncionario;
 }
 
 export type AppointmentStatus = "confirmado" | "pendente" | "concluido" | "cancelado";
 
+/**
+ * Espelho do `AgendamentoDTO` do backend (contrato HTTP compartilhado).
+ * Campos em camelCase conforme serialização do backend (knex snake→camel).
+ */
 export interface Appointment {
-  code: string;
-  clientName: string;
-  phone: string;
-  email: string;
-  serviceIds: string[];
-  professionalId: string;
-  dateIso: string;
-  time: string;
-  status: AppointmentStatus;
-  createdAt: string;
-}
-
-export interface BookingDraft {
-  serviceIds: string[];
-  professionalId: string;
-  dateIso: string;
-  time: string;
-  clientName: string;
-  phone: string;
-  email: string;
-}
-
-export interface AdminAppointment extends Appointment {
   id: string;
-  serviceName?: string;
+  clienteId: string;
+  clienteNome: string | null;
+  funcionarioId: string;
+  funcionarioNome: string | null;
+  servicoId: string;
+  servicoNome: string | null;
+  data: string;
+  hora: string;
+  status: AppointmentStatus;
+  observacao?: string | null;
+  criadoEm?: string;
+}
+
+/**
+ * Body de criação de agendamento, alinhado a `CreateAgendamentoRequest`.
+ * O backend resolve cliente a partir do token JWT quando `clienteId` não é
+ * informado; recepcionista/admin devem informar `clienteId` (agendar em nome
+ * do cliente).
+ */
+export interface BookingDraft {
+  funcionario_id: string;
+  servico_id: string;
+  data: string;
+  hora: string;
+  observacao?: string | null;
+  clienteId?: string;
 }
 
 export interface Session {
@@ -60,6 +70,7 @@ export interface Session {
   userEmail: string;
   expiresAt: number;
   role: UserRole;
+  precisaTrocarSenha?: boolean;
 }
 
 export interface Cliente {

@@ -1,10 +1,9 @@
 import { $, clearFormErrors, setFieldError } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
-import { registerCliente, findClienteByEmail } from "../services/clientes.js";
-import { getSession, loginCliente, redirectForRole } from "../services/auth.js";
+import { registerCliente } from "../services/clientes.js";
+import { getSession, loginCliente, redirectForRole, solicitarRecuperacaoSenha } from "../services/auth.js";
 import { loginWithGoogle, promptGoogleIdToken, decodeGoogleProfile } from "../services/googleAuth.js";
 import { showToast } from "../ui/toast.js";
-import { delay, isMockMode } from "../services/api.js";
 import { attachPhoneMask } from "../ui/mask.js";
 
 type ViewName = "login" | "cadastro" | "recover" | "recover-sent";
@@ -246,18 +245,6 @@ export function renderLoginCliente(container: HTMLElement): () => void {
     googleBtn.classList.add("is-loading");
 
     try {
-      if (isMockMode()) {
-        const result = await loginWithGoogle();
-        if (result.ok && result.session) {
-          showToast("Bem-vindo(a)!", "success");
-          redirectForRole(result.session.role);
-        } else {
-          loginAlert.textContent = result.message ?? "Não foi possível entrar com o Google.";
-          loginAlert.hidden = false;
-        }
-        return;
-      }
-
       const idToken = await promptGoogleIdToken();
       const profile = decodeGoogleProfile(idToken);
       if (!profile) {
@@ -307,10 +294,6 @@ export function renderLoginCliente(container: HTMLElement): () => void {
       setFieldError(regEmail, "Informe um e-mail válido.");
       valid = false;
     }
-    if (findClienteByEmail(regEmail.value.trim())) {
-      setFieldError(regEmail, "Já existe uma conta com este e-mail.");
-      valid = false;
-    }
     if (regPhone.value.replace(/\D/g, "").length < 11) {
       setFieldError(regPhone, "Informe um WhatsApp válido com DDD.");
       valid = false;
@@ -328,17 +311,17 @@ export function renderLoginCliente(container: HTMLElement): () => void {
     regSubmit.disabled = true;
     regSubmit.classList.add("is-loading");
     try {
-      registerCliente({
+      await registerCliente({
         nome: regName.value,
         email: regEmail.value,
         telefone: regPhone.value,
         senha: regPassword.value,
       });
-      await loginCliente(regEmail.value, regPassword.value);
       showToast("Conta criada com sucesso! Bem-vindo(a).", "success");
       redirectForRole("cliente");
-    } catch {
-      regAlert.textContent = "Não foi possível criar a conta. Tente novamente.";
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Não foi possível criar a conta.";
+      regAlert.textContent = message;
       regAlert.hidden = false;
     } finally {
       regSubmit.disabled = false;
@@ -369,10 +352,14 @@ export function renderLoginCliente(container: HTMLElement): () => void {
     const btn = recoverForm.querySelector<HTMLButtonElement>("button[type=submit]")!;
     btn.disabled = true;
     btn.classList.add("is-loading");
-    await delay(900);
+    const result = await solicitarRecuperacaoSenha(recoverEmail.value);
     btn.disabled = false;
     btn.classList.remove("is-loading");
-    showView("recover-sent");
+    if (result.ok) {
+      showView("recover-sent");
+    } else {
+      showToast(result.message ?? "Não foi possível enviar as instruções.", "error");
+    }
   };
   recoverForm.addEventListener("submit", handleRecoverSubmit);
   cleanups.push(() => recoverForm.removeEventListener("submit", handleRecoverSubmit));

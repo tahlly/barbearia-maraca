@@ -49,6 +49,60 @@ Se houver conflito, ambiguidade ou lacuna material:
 - integridade referencial
 - Knex para configuração, migrations e seeds quando isso fizer parte do repositório aprovado
 
+## Operação / Desenvolvimento local
+
+### Arquitetura (não óbvia pelos nomes)
+- Monorepo simples: `backend/` (Express + Knex), `frontend/` (Vite + Vanilla TS SPA), `shared/types/**` (contratos HTTP compartilhados — hoje vazio, o Backend é o dono padrão).
+- Backend em camadas: `rotas/` → `controllers/` → `services/` → `repositories/`.
+- Frontend: SPA sem framework, roteamento por hash (`#/...`), entrypoint `frontend/src/main.ts`, `index.html` em `frontend/`.
+- O backend também serve o frontend estático em `http://localhost:3000`; em dev use o Vite (5173).
+
+### Comandos
+```sh
+# Ambiente completo (Postgres 16, migrations, Backend e Frontend via Docker)
+npm run dev:up                # sobe a stack e acompanha os logs
+npm run dev:down              # encerra a stack preservando o volume do banco
+npm run dev:seed              # destrutivo e explícito: reinicializa os dados de demonstração
+
+# Somente o banco via Docker, para execução manual da aplicação
+docker compose up -d db       # porta 5432 (db: barbearia_maraca, user/senha: postgres/postgres)
+
+# Backend (rodar de backend/)
+npm install
+npm run dev                   # tsx src/server.ts -> http://localhost:3000
+npm run migrate:latest        # aplica migrations
+npm run migrate:rollback      # desfaz última batch
+npm run migrate:make -- nome  # cria nova migration
+npm run seed                  # popula dados de teste
+npm run build                 # tsc -> dist/
+npm start                     # node dist/server.js
+
+# Frontend (rodar de frontend/)
+npm install
+npm run dev                   # Vite -> http://localhost:5173 (proxy /api -> :3000)
+npm run typecheck             # tsc --noEmit
+npm run build                 # tsc && vite build
+```
+
+### Gotchas de ambiente (fáceis de errar)
+- **Docker Desktop deve estar aberto e saudável.** Se `docker` não for reconhecido após a instalação, reabra o terminal; no Windows, a CLI padrão fica em `C:\Program Files\Docker\Docker\resources\bin`.
+- **Ordem do Compose:** `db` saudável → `migrate` concluído → `backend` saudável → `frontend`. O comando `npm run dev:up` implementa essa ordem.
+- **Conflito de porta:** se um PostgreSQL nativo ocupar `5432`, use `$env:COMPOSE_DB_PORT=5433` antes dos comandos Docker. Dentro da rede, o Backend continua usando `db:5432`.
+- **Encerramento:** `npm run dev:down` para todos os contêineres do projeto e preserva `postgres_data`; nunca use `docker compose down -v` sem autorização explícita para apagar o banco Docker.
+- **Seed nunca é automática:** `npm run dev:seed` é destrutivo e só pode ser executado mediante solicitação explícita. O fluxo normal executa somente migrations pendentes.
+- **Existe um único `.env`, na raiz do repositório.** Backend, Knex, Vite e Docker Compose usam essa mesma fonte. Nunca recrie `backend/.env` ou `frontend/.env`.
+- **Separação de segredos:** somente variáveis `VITE_*` podem chegar ao código do navegador. `JWT_SECRET`, `DB_PASS`, `GOOGLE_CLIENT_SECRET` e outras variáveis do Backend nunca devem receber o prefixo `VITE_`.
+- **Migrations e seeds são TypeScript** e rodam via `npx tsx node_modules/knex/bin/cli.js ...` (os scripts do `package.json` já fazem isso). Não use `npx knex` direto.
+- **Migrations não devem ser reescritas após aplicadas** — crie novas migrations para mudanças.
+- **Restrição de dupla reserva** é um índice único parcial em `agendamento (funcionario_id, data, hora) WHERE status <> 'cancelado'` (migration `20260902000004`). Cobre horário exato, não sobreposição parcial.
+- **Nomenclatura do schema:** a tabela de equipe é `funcionario` (enum `cargo`: barbeiro/recepcionista/administrador), NÃO `barbeiro`. Horários são `horario_trabalho` + `horario_excecao`, NÃO `horario`.
+- **Seed:** senha padrão dos usuários de teste é `senha123`; o seed não cria agendamentos.
+
+### Commits e fluxo de PR
+- **Commitlint + Husky** validam a mensagem de commit (Conventional Commits, `commitlint.config.cjs`). Formato: `tipo(escopo): descrição` (ex.: `fix(frontend): ...`). Mensagens fora do padrão são **bloqueadas**.
+- **Todas as mudanças entram via Pull Request** (o histórico é todo de merges de PRs). Não commitar/pushar direto na `developer` — crie uma branch (`feat/`, `fix/`, `chore/`, `docs/`), abra PR para `developer`, e faça merge no GitHub.
+- `*.log` e `.env` (qualquer nível) são ignorados — não commitar logs nem credenciais.
+
 ## Restrições globais
 
 Não adote sem aprovação explícita:
@@ -80,6 +134,8 @@ Não adote sem aprovação explícita:
   - **aprovado**
   - **proposta**
   - **pendência**
+- **Guias pessoais de trabalho na raiz do repositório** (`HISTORICO-FRONT-END.md`, `DOCUMENTACAO.md`, `GUIA-ESTUDO-FRONTEND.md`) são de uso local exclusivo do Rai: **nunca** commitá-los, incluí-los em PR, push ou indexá-los (estão registrados em `.git/info/exclude`). Devem ser lidos no início de cada sessão para retomada de contexto.
+- **Comandos destrutivos só com confirmação humana explícita**: `git clean -fd`, `git stash -u` / `git stash drop`, `git reset --hard`, `git checkout -- <caminho>` / `git restore --stage ::all`, `rm` de arquivos não rastreados e `git push --force` são proibidos sem aprovação prévia do responsável humano. Em caso de dúvida, bloqueie e pergunte.
 
 ## Regras de colaboração
 

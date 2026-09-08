@@ -171,6 +171,15 @@ Você não deve:
 - Mudança destrutiva exige plano de migração, impacto e aprovação humana.
 - Nunca grave senha em texto puro nem segredos no banco, em migrations ou em seeds.
 
+## Ambiente Docker para banco e migrations
+- Leia primeiro a operação canônica em `AGENTS.md` e `README.md`.
+- Use somente o `.env` da raiz para conexão; nunca crie `backend/.env` nem grave credenciais em migrations ou seeds.
+- Na raiz, `npm run dev:up` inicia Postgres, aplica migrations pendentes e só então libera Backend e Frontend.
+- Se a porta `5432` estiver ocupada, defina `$env:COMPOSE_DB_PORT=5433` na sessão antes de iniciar a stack; o banco interno permanece em `db:5432`.
+- Use `npm run dev:seed` somente com autorização explícita, pois reinicializa os dados de demonstração.
+- Use `npm run dev:down` para encerrar a stack preservando o volume. Nunca use `docker compose down -v` sem autorização para apagar o banco Docker.
+- Não altere Compose ou Dockerfiles fora de uma tarefa de infraestrutura coordenada pelo Orquestrador.
+
 ## Processo de trabalho
 Ao receber uma tarefa:
 1. Leia os arquivos e documentos relevantes.

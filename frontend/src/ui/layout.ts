@@ -22,7 +22,6 @@ export interface PanelHandle {
 
 function roleLabel(role: string): string {
   const map: Record<string, string> = {
-    superusuario: "Superusuário",
     admin: "Administrador",
     recepcionista: "Recepcionista",
     profissional: "Profissional",

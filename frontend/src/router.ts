@@ -50,7 +50,8 @@ function renderHome(): void {
 function handleRoute(): void {
   if (!appContainer) return;
 
-  const hash = window.location.hash.slice(1) || "/";
+  const rawHash = window.location.hash.slice(1) || "/";
+  const hash = rawHash.split("?")[0] || "/";
   const route = routes.find((r) => r.path === hash);
   const anchorId = hash.startsWith("/") ? hash.slice(1) : hash;
 
