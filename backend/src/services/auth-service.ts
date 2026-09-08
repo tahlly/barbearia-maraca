@@ -284,7 +284,7 @@ export async function solicitarRecuperacaoSenha(email: string): Promise<void> {
   await salvarTokenResetSenha(usuario.id, tokenHash, expiresAt);
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-  const link = `${frontendUrl}/#/login?token=${token}`;
+  const link = `${frontendUrl}/#/login-cliente?token=${token}`;
 
   try {
     await enviarEmailRecuperacaoSenha(usuario.email, link);

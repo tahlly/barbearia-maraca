@@ -1,18 +1,20 @@
 import { $, clearFormErrors, setFieldError } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { registerCliente } from "../services/clientes.js";
-import { getSession, loginCliente, redirectForRole, solicitarRecuperacaoSenha } from "../services/auth.js";
+import { getSession, loginCliente, redirectForRole, solicitarRecuperacaoSenha, redefinirSenha } from "../services/auth.js";
 import { loginWithGoogle, promptGoogleIdToken, decodeGoogleProfile } from "../services/googleAuth.js";
 import { showToast } from "../ui/toast.js";
 import { attachPhoneMask } from "../ui/mask.js";
 
-type ViewName = "login" | "cadastro" | "recover" | "recover-sent";
+type ViewName = "login" | "cadastro" | "recover" | "recover-sent" | "reset" | "reset-done";
 
 const VIEW_IDS: Record<ViewName, string> = {
   login: "client-login-view",
   cadastro: "client-register-view",
   recover: "client-recover-view",
   "recover-sent": "client-recover-sent-view",
+  reset: "client-reset-view",
+  "reset-done": "client-reset-done-view",
 };
 
 function showView(name: ViewName): void {
@@ -42,6 +44,14 @@ function authHeader(title: string, subtitle: string): string {
     <h1 class="auth__title">${title}</h1>
     <p class="auth__subtitle">${subtitle}</p>
   `;
+}
+
+function getResetTokenFromUrl(): string | null {
+  const hash = window.location.hash;
+  const queryIndex = hash.indexOf("?");
+  if (queryIndex === -1) return null;
+  const params = new URLSearchParams(hash.slice(queryIndex + 1));
+  return params.get("token");
 }
 
 export function renderLoginCliente(container: HTMLElement): () => void {
@@ -185,15 +195,65 @@ export function renderLoginCliente(container: HTMLElement): () => void {
         </p>
         <a href="#" class="btn btn--outline btn--block" data-goto="login">Voltar ao login</a>
       </section>
+
+      <section class="auth__box" id="client-reset-view" hidden>
+        <a href="#/" class="auth__close" aria-label="Fechar e voltar ao site">
+          <i class='bx bx-x'></i>
+        </a>
+        ${authHeader("Redefinir Senha", "Crie uma nova senha com pelo menos 8 caracteres, uma letra maiúscula e um caracter especial.")}
+
+        <form id="client-reset-form" novalidate>
+          <div class="field">
+            <label class="field__label" for="client-reset-password">Digite a nova senha</label>
+            <div class="input-wrap">
+              <input type="password" id="client-reset-password" name="new-password" placeholder="**********" autocomplete="new-password" maxlength="64" required>
+              <button type="button" class="input-suffix" id="toggle-client-reset-password" aria-label="Mostrar senha">
+                <i class='bx bx-show'></i>
+              </button>
+            </div>
+            <ul class="auth__rules">
+              <li>A sua senha deve ter pelo menos 8 caracteres.</li>
+              <li>Uma letra maiúscula.</li>
+              <li>Um caracter especial.</li>
+            </ul>
+            <span class="field__error">A senha deve ter 8+ caracteres, com letra maiúscula e caracter especial.</span>
+          </div>
+          <div class="field">
+            <label class="field__label" for="client-reset-confirm">Repita a nova senha</label>
+            <div class="input-wrap">
+              <input type="password" id="client-reset-confirm" name="confirm-password" placeholder="**********" autocomplete="new-password" maxlength="64" required>
+              <button type="button" class="input-suffix" id="toggle-client-reset-confirm" aria-label="Mostrar senha">
+                <i class='bx bx-show'></i>
+              </button>
+            </div>
+            <span class="field__error">As senhas não coincidem.</span>
+          </div>
+          <button type="submit" class="btn btn--primary btn--block btn--lg" id="client-reset-submit">Redefinir senha</button>
+        </form>
+        <a href="#" class="auth__back" data-goto="login">← Voltar ao login</a>
+      </section>
+
+      <section class="auth__box" id="client-reset-done-view" hidden>
+        <a href="#/" class="auth__close" aria-label="Fechar e voltar ao site">
+          <i class='bx bx-x'></i>
+        </a>
+        <span class="auth__guard auth__guard--success" aria-hidden="true"><i class='bx bx-check-circle'></i></span>
+        <h1 class="auth__title">Senha redefinida</h1>
+        <p class="auth__subtitle">Sua nova senha foi definida com sucesso. Faça login para continuar.</p>
+        <a href="#" class="btn btn--primary btn--block" data-goto="login">Ir para o login</a>
+      </section>
     </main>
   `;
 
-  showView("login");
+  const resetToken = getResetTokenFromUrl();
+  showView(resetToken ? "reset" : "login");
   const cleanups: Array<() => void> = [];
 
   cleanups.push(setupPasswordToggle("toggle-client-login-password", "client-login-password"));
   cleanups.push(setupPasswordToggle("toggle-client-register-password", "client-register-password"));
   cleanups.push(setupPasswordToggle("toggle-client-register-confirm", "client-register-confirm"));
+  cleanups.push(setupPasswordToggle("toggle-client-reset-password", "client-reset-password"));
+  cleanups.push(setupPasswordToggle("toggle-client-reset-confirm", "client-reset-confirm"));
 
   const phoneInput = $<HTMLInputElement>("#client-register-phone");
   if (phoneInput) attachPhoneMask(phoneInput);
@@ -363,6 +423,53 @@ export function renderLoginCliente(container: HTMLElement): () => void {
   };
   recoverForm.addEventListener("submit", handleRecoverSubmit);
   cleanups.push(() => recoverForm.removeEventListener("submit", handleRecoverSubmit));
+
+  const resetForm = $<HTMLFormElement>("#client-reset-form")!;
+  const resetPassword = $<HTMLInputElement>("#client-reset-password")!;
+  const resetConfirm = $<HTMLInputElement>("#client-reset-confirm")!;
+  const resetSubmit = $<HTMLButtonElement>("#client-reset-submit")!;
+
+  const handleResetSubmit = async (event: Event): Promise<void> => {
+    event.preventDefault();
+    clearFormErrors(resetForm);
+
+    let valid = true;
+    const passwordPattern = /^(?=.*[A-ZÀ-Ü])(?=.*[^A-Za-z0-9À-ÿ\s]).{8,}$/;
+    if (!passwordPattern.test(resetPassword.value)) {
+      setFieldError(resetPassword, "A senha deve ter 8+ caracteres, com letra maiúscula e caracter especial.");
+      valid = false;
+    }
+    if (resetConfirm.value !== resetPassword.value || resetConfirm.value === "") {
+      setFieldError(resetConfirm, "As senhas não coincidem.");
+      valid = false;
+    }
+    if (!valid) return;
+
+    if (!resetToken) {
+      showToast("Link de redefinição inválido ou expirado.", "error");
+      return;
+    }
+
+    resetSubmit.disabled = true;
+    resetSubmit.classList.add("is-loading");
+    const result = await redefinirSenha(resetToken, resetPassword.value);
+    resetSubmit.disabled = false;
+    resetSubmit.classList.remove("is-loading");
+    if (result.ok) {
+      showView("reset-done");
+    } else {
+      showToast(result.message ?? "Não foi possível redefinir a senha.", "error");
+    }
+  };
+  resetForm.addEventListener("submit", handleResetSubmit);
+  cleanups.push(() => resetForm.removeEventListener("submit", handleResetSubmit));
+
+  const handleResetConfirmInput = (): void => {
+    if (resetConfirm.value.length === 0) return;
+    setFieldError(resetConfirm, resetConfirm.value === resetPassword.value ? null : "As senhas não coincidem.");
+  };
+  resetConfirm.addEventListener("input", handleResetConfirmInput);
+  cleanups.push(() => resetConfirm.removeEventListener("input", handleResetConfirmInput));
 
   const gotoHandlers: Array<() => void> = [];
   const gotoEls = Array.from(document.querySelectorAll("[data-goto]"));
