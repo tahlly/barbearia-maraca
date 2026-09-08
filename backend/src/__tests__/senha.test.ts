@@ -4,6 +4,7 @@ import { ZodError } from 'zod';
 import {
   SENHA_REGEX,
   MENSAGEM_SENHA_FRACA,
+  MENSAGEM_SENHA_MUITO_LONGA,
   senhaForteSchema,
   senhaForteOpcionalSchema,
   senhaForteFuncionarioOpcionalSchema,
@@ -140,6 +141,26 @@ describe('schemas compartilhados (utils/senha)', () => {
     expect(senhaForteOpcionalSchema.safeParse(SENHA_FRACA).success).toBe(false);
   });
 
+  it('senhaForteSchema rejeita senha com mais de 64 caracteres', () => {
+    const longa = `S${'enhaForte!1'.repeat(7)}`;
+    expect(longa.length).toBeGreaterThan(64);
+    const resultado = senhaForteSchema.safeParse(longa);
+    expect(resultado.success).toBe(false);
+    if (!resultado.success) {
+      expect(resultado.error.issues[0]?.message).toBe(MENSAGEM_SENHA_MUITO_LONGA);
+    }
+  });
+
+  it('senhaForteOpcionalSchema rejeita senha com mais de 64 caracteres', () => {
+    const longa = `S${'enhaForte!1'.repeat(7)}`;
+    expect(longa.length).toBeGreaterThan(64);
+    const resultado = senhaForteOpcionalSchema.safeParse(longa);
+    expect(resultado.success).toBe(false);
+    if (!resultado.success) {
+      expect(resultado.error.issues[0]?.message).toBe(MENSAGEM_SENHA_MUITO_LONGA);
+    }
+  });
+
   it('senhaForteFuncionarioOpcionalSchema aceita ausência (senha padrão no service)', () => {
     expect(senhaForteFuncionarioOpcionalSchema.parse(undefined)).toBeUndefined();
     expect(senhaForteFuncionarioOpcionalSchema.safeParse(SENHA_FORTE).success).toBe(true);
@@ -152,7 +173,7 @@ describe('schemas compartilhados (utils/senha)', () => {
     const resultado = senhaForteFuncionarioOpcionalSchema.safeParse(longa);
     expect(resultado.success).toBe(false);
     if (!resultado.success) {
-      expect(resultado.error.issues[0]?.message).toBe('Senha deve ter no máximo 64 caracteres');
+      expect(resultado.error.issues[0]?.message).toBe(MENSAGEM_SENHA_MUITO_LONGA);
     }
   });
 });
@@ -311,6 +332,43 @@ describe('PATCH /api/auth/me — atualizarPerfilHandler (nova senha)', () => {
       senhaAtual: 'SenhaAntiga!123',
       novaSenha: SENHA_FORTE,
     });
+  });
+
+  it('primeiro acesso: aceita novaSenha sem senhaAtual e delega ao service', async () => {
+    // O service (testado em auth-service.test.ts) não exige senhaAtual quando
+    // primeiro_acesso = true. Aqui validamos que o controller repassa o payload
+    // como recebido, sem exigir senhaAtual.
+    const resultadoMock = { id: 'u1', email: 'barbeiro@email.com', nome: 'Barbeiro', tipo: 'funcionario' };
+    vi.mocked(atualizarPerfilService).mockResolvedValue(resultadoMock);
+    const res = criarFakeRes();
+    await atualizarPerfilHandler(
+      {
+        body: { novaSenha: SENHA_FORTE },
+        user: { id: 'u1', role: 'profissional' },
+      } as unknown as Request,
+      res as unknown as Response,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(atualizarPerfilService).toHaveBeenCalledWith('u1', { novaSenha: SENHA_FORTE });
+  });
+
+  it('primeiro acesso: novaSenha acima de 64 caracteres é rejeitada (→ 400)', async () => {
+    const longa = `S${'enhaForte!1'.repeat(7)}`;
+    const promise = atualizarPerfilHandler(
+      {
+        body: { novaSenha: longa },
+        user: { id: 'u1', role: 'cliente' },
+      } as unknown as Request,
+      criarFakeRes() as unknown as Response,
+    );
+
+    await expect(promise).rejects.toBeInstanceOf(ValidationError);
+    await promise.catch((error: unknown) => {
+      expect((error as ValidationError).status).toBe(400);
+      expect((error as ValidationError).message).toBe(MENSAGEM_SENHA_MUITO_LONGA);
+    });
+    expect(atualizarPerfilService).not.toHaveBeenCalled();
   });
 });
 

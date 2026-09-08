@@ -14,6 +14,7 @@ import { ValidationError } from '../errors/ValidationError';
 import {
   SENHA_REGEX,
   MENSAGEM_SENHA_FRACA,
+  MENSAGEM_SENHA_MUITO_LONGA,
   senhaForteSchema,
   senhaForteOpcionalSchema,
 } from '../utils/senha';
@@ -61,6 +62,11 @@ export async function registrarUsuario(req: Request, res: Response): Promise<voi
 
   if (typeof email !== 'string' || typeof senha !== 'string' || typeof nome !== 'string') {
     res.status(400).json({ erro: true, mensagem: 'Dados invalidos' });
+    return;
+  }
+
+  if (senha.length > 64) {
+    res.status(400).json({ erro: true, mensagem: MENSAGEM_SENHA_MUITO_LONGA });
     return;
   }
 

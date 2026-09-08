@@ -154,9 +154,13 @@ export async function atualizarPerfil(
 
   // Regra de verificação de senha atual:
   // - Usuário com senha_hash existente ao tentar trocar senha ou email exige senhaAtual.
+  // - Primeiro acesso (primeiro_acesso = true): a mudança forçada da senha é o
+  //   fluxo intencional — NÃO exige senhaAtual.
   // - Conta criada via Google (senha_hash NULL) define a primeira senha sem exigir senhaAtual.
   const alterandoCredencial = dados.novaSenha !== undefined || dados.email !== undefined;
-  if (usuario.senha_hash && alterandoCredencial) {
+  const ehPrimeiroAcessoTrocandoSenha =
+    usuario.primeiro_acesso === true && dados.novaSenha !== undefined;
+  if (usuario.senha_hash && alterandoCredencial && !ehPrimeiroAcessoTrocandoSenha) {
     if (!dados.senhaAtual) {
       throw new UnauthorizedError('Senha atual é obrigatória');
     }

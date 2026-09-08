@@ -5,6 +5,7 @@ import { getSession, loginCliente, redirectForRole, solicitarRecuperacaoSenha, r
 import { loginWithGoogle, promptGoogleIdToken, decodeGoogleProfile } from "../services/googleAuth.js";
 import { showToast } from "../ui/toast.js";
 import { attachPhoneMask } from "../ui/mask.js";
+import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
 
 type ViewName = "login" | "cadastro" | "recover" | "recover-sent" | "reset" | "reset-done";
 
@@ -434,9 +435,8 @@ export function renderLoginCliente(container: HTMLElement): () => void {
     clearFormErrors(resetForm);
 
     let valid = true;
-    const passwordPattern = /^(?=.*[A-ZÀ-Ü])(?=.*[^A-Za-z0-9À-ÿ\s]).{8,}$/;
-    if (!passwordPattern.test(resetPassword.value)) {
-      setFieldError(resetPassword, "A senha deve ter 8+ caracteres, com letra maiúscula e caracter especial.");
+    if (!isSenhaForte(resetPassword.value)) {
+      setFieldError(resetPassword, SENHA_FORTE_MESSAGE);
       valid = false;
     }
     if (resetConfirm.value !== resetPassword.value || resetConfirm.value === "") {

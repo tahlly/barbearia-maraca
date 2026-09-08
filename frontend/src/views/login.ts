@@ -4,11 +4,10 @@ import { icon } from "../ui/icons.js";
 import { completeFirstAccess, getSession, loginInterno, redirectForRole, solicitarRecuperacaoSenha, redefinirSenha } from "../services/auth.js";
 import { showToast } from "../ui/toast.js";
 import { closeModal, openModal } from "../ui/modal.js";
+import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
 import type { UserRole } from "../types.js";
 
 type ViewName = "login" | "recover" | "recover-sent" | "reset" | "reset-done";
-
-const PASSWORD_RE = /^(?=.*[A-ZÀ-Ü])(?=.*[0-9])(?=.*[^A-Za-z0-9À-ÿ\s]).{8,}$/;
 
 const VIEWS: Record<ViewName, string> = {
   login: "view-login",
@@ -96,7 +95,7 @@ function promptFirstAccess(role: UserRole): void {
               <i class='bx bx-show'></i>
             </button>
           </div>
-          <span class="field__hint">Mínimo 8 caracteres, com letra maiúscula, número e símbolo.</span>
+          <span class="field__hint">${SENHA_FORTE_MESSAGE}.</span>
           <span class="field__error">A senha não atende ao padrão exigido.</span>
         </div>
         <div class="field">
@@ -142,8 +141,8 @@ function promptFirstAccess(role: UserRole): void {
     clearFormErrors(form);
 
     let valid = true;
-    if (!PASSWORD_RE.test(passwordInput.value)) {
-      setFieldError(passwordInput, "A senha não atende ao padrão exigido.");
+    if (!isSenhaForte(passwordInput.value)) {
+      setFieldError(passwordInput, SENHA_FORTE_MESSAGE);
       valid = false;
     }
     if (confirmInput.value !== passwordInput.value || confirmInput.value === "") {
@@ -268,7 +267,7 @@ export function renderLogin(container: HTMLElement): () => void {
         </a>
         <span class="auth__guard" aria-hidden="true"><i class='bx bx-check-shield'></i></span>
         <h1 class="auth__title">Redefinir Senha</h1>
-        <p class="auth__subtitle">Crie uma nova senha com pelo menos 8 caracteres.</p>
+        <p class="auth__subtitle">Crie uma nova senha segura para acessar sua conta.</p>
         <div class="auth__panel">
         <form id="reset-form" novalidate>
           <div class="field">
@@ -280,7 +279,7 @@ export function renderLogin(container: HTMLElement): () => void {
                 <i class='bx bx-show'></i>
               </button>
             </div>
-            <span class="field__error">A nova senha deve ter pelo menos 8 caracteres.</span>
+            <span class="field__error">A senha não atende à política exigida.</span>
           </div>
           <div class="field">
             <label class="field__label" for="reset-confirm">Repetir a nova senha</label>
@@ -437,8 +436,8 @@ export function renderLogin(container: HTMLElement): () => void {
     clearFormErrors(resetForm);
 
     let valid = true;
-    if (resetPassword.value.length < 8) {
-      setFieldError(resetPassword, "A nova senha deve ter pelo menos 8 caracteres.");
+    if (!isSenhaForte(resetPassword.value)) {
+      setFieldError(resetPassword, SENHA_FORTE_MESSAGE);
       valid = false;
     }
     if (resetConfirm.value !== resetPassword.value || resetConfirm.value === "") {

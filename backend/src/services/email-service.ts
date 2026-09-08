@@ -1,4 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer';
+import { LOGO_EMAIL_DATA_URI } from '../utils/email-logo';
 
 let transporter: Transporter | null = null;
 
@@ -18,10 +19,6 @@ function getTransporter(): Transporter {
   return transporter;
 }
 
-function getFrontendUrl(): string {
-  return process.env.FRONTEND_URL || 'http://localhost:5173';
-}
-
 /** Escapa texto para uso seguro dentro de HTML (atributos e conteúdo). */
 function escaparHtml(texto: string): string {
   return texto
@@ -33,8 +30,7 @@ function escaparHtml(texto: string): string {
 }
 
 function montarHtmlRecuperacaoSenha(link: string): string {
-  const frontendUrl = getFrontendUrl();
-  const logoUrl = `${frontendUrl}/assets/images/logo-maraca.png`;
+  const logoUrl = LOGO_EMAIL_DATA_URI;
   const linkSeguro = escaparHtml(link);
 
   return `<!DOCTYPE html>
@@ -48,34 +44,34 @@ function montarHtmlRecuperacaoSenha(link: string): string {
 <body style="margin: 0; padding: 0; background-color: #121214; font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #121214;">
     <tr>
-      <td align="center" style="padding: 40px 16px;">
+      <td align="center" style="padding: 24px 16px;">
         <table
           role="presentation"
-          width="600"
+          width="520"
           cellpadding="0"
           cellspacing="0"
-          style="max-width: 600px; width: 100%; background-color: #1e1e22; border: 1px solid rgba(212, 175, 55, 0.4); border-radius: 16px;"
+          style="max-width: 520px; width: 100%; background-color: #1e1e22; border: 1px solid rgba(212, 175, 55, 0.4); border-radius: 16px;"
         >
           <!-- Cabeçalho com a marca -->
           <tr>
-            <td align="center" style="padding: 40px 32px 8px;">
+            <td align="center" style="padding: 24px 24px 6px;">
               <img
                 src="${logoUrl}"
                 alt="Barbearia Maracá"
-                width="120"
-                style="display: block; width: 120px; height: auto; margin: 0 auto; border: 0; outline: none; text-decoration: none;"
+                width="96"
+                style="display: block; width: 96px; height: auto; margin: 0 auto; border: 0; outline: none; text-decoration: none;"
               />
             </td>
           </tr>
           <tr>
-            <td align="center" style="padding: 8px 32px 24px;">
-              <p style="margin: 0; font-size: 20px; font-weight: 700; letter-spacing: 6px; color: #d4af37; text-transform: uppercase;">
+            <td align="center" style="padding: 4px 24px 14px;">
+              <p style="margin: 0; font-size: 17px; font-weight: 700; letter-spacing: 4px; color: #d4af37; text-transform: uppercase;">
                 Barbearia Maracá
               </p>
             </td>
           </tr>
           <tr>
-            <td style="padding: 0 32px;">
+            <td style="padding: 0 24px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td style="border-top: 1px solid rgba(212, 175, 55, 0.4); height: 1px; font-size: 0; line-height: 0;">&nbsp;</td>
@@ -85,26 +81,26 @@ function montarHtmlRecuperacaoSenha(link: string): string {
           </tr>
           <!-- Conteúdo -->
           <tr>
-            <td style="padding: 32px 32px 8px;">
-              <h1 style="margin: 0 0 16px; font-size: 26px; line-height: 1.3; font-weight: 700; color: #ffffff;">
+            <td style="padding: 24px 24px 4px;">
+              <h1 style="margin: 0 0 10px; font-size: 21px; line-height: 1.3; font-weight: 700; color: #ffffff;">
                 Recuperação de senha
               </h1>
-              <p style="margin: 0 0 28px; font-size: 15px; line-height: 1.6; color: #9a9aa5;">
+              <p style="margin: 0 0 18px; font-size: 14px; line-height: 1.6; color: #9a9aa5;">
                 Recebemos uma solicitação para redefinir sua senha. Se não foi você, pode ignorar este e-mail com segurança.
               </p>
-              <table role="presentation" align="center" cellpadding="0" cellspacing="0" style="margin: 0 auto 20px;">
+              <table role="presentation" align="center" cellpadding="0" cellspacing="0" style="margin: 0 auto 16px;">
                 <tr>
                   <td align="center" style="border-radius: 8px; background-color: #d4af37;">
                     <a
                       href="${linkSeguro}"
                       target="_blank"
                       rel="noopener"
-                      style="display: inline-block; padding: 14px 40px; font-size: 15px; font-weight: 700; color: #121214; text-decoration: none; border-radius: 8px; background-color: #d4af37;"
+                      style="display: inline-block; padding: 12px 32px; font-size: 14px; font-weight: 700; color: #121214; text-decoration: none; border-radius: 8px; background-color: #d4af37;"
                     >Redefinir senha</a>
                   </td>
                 </tr>
               </table>
-              <p style="margin: 0 0 28px; font-size: 13px; line-height: 1.6; color: #9a9aa5; text-align: center; word-break: break-all;">
+              <p style="margin: 0 0 18px; font-size: 12px; line-height: 1.6; color: #9a9aa5; text-align: center; word-break: break-all;">
                 Se o botão não aparecer, copie e cole o link no navegador:<br />
                 <a href="${linkSeguro}" style="color: #d4af37; text-decoration: underline;">${linkSeguro}</a>
               </p>
@@ -112,14 +108,14 @@ function montarHtmlRecuperacaoSenha(link: string): string {
           </tr>
           <!-- Aviso de expiração -->
           <tr>
-            <td style="padding: 0 32px 32px;">
+            <td style="padding: 0 24px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td
                     align="center"
-                    style="background-color: rgba(212, 175, 55, 0.12); border: 1px solid rgba(212, 175, 55, 0.4); border-radius: 8px; padding: 14px 18px;"
+                    style="background-color: rgba(212, 175, 55, 0.12); border: 1px solid rgba(212, 175, 55, 0.4); border-radius: 8px; padding: 10px 14px;"
                   >
-                    <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #e2c252;">
+                    <p style="margin: 0; font-size: 12px; line-height: 1.5; color: #e2c252;">
                       Este link expira em ${RESET_TOKEN_TTL_MIN} minutos.
                     </p>
                   </td>
@@ -128,7 +124,7 @@ function montarHtmlRecuperacaoSenha(link: string): string {
             </td>
           </tr>
           <tr>
-            <td style="padding: 0 32px;">
+            <td style="padding: 0 24px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td style="border-top: 1px solid rgba(212, 175, 55, 0.4); height: 1px; font-size: 0; line-height: 0;">&nbsp;</td>
@@ -138,7 +134,7 @@ function montarHtmlRecuperacaoSenha(link: string): string {
           </tr>
           <!-- Rodapé -->
           <tr>
-            <td align="center" style="padding: 24px 32px 36px;">
+            <td align="center" style="padding: 16px 24px 24px;">
               <p style="margin: 0 0 4px; font-size: 13px; font-weight: 600; color: #ffffff;">Barbearia Maracá</p>
               <p style="margin: 0; font-size: 12px; line-height: 1.6; color: #9a9aa5;">
                 Se você não solicitou esta redefinição, ignore este e-mail.
