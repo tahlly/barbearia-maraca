@@ -14,9 +14,18 @@ import { ValidationError } from '../errors/ValidationError';
 
 const precoSchema = z.union([z.number().min(0), z.string().regex(/^\d+(\.\d{1,2})?$/, 'Preço inválido')]);
 
+const categoriaSchema = z
+  .string()
+  .trim()
+  .min(1, 'Categoria inválida')
+  .max(80, 'Categoria deve ter no máximo 80 caracteres')
+  .optional()
+  .nullable();
+
 const criarServicoSchema = z.object({
   nome: z.string().trim().min(1, 'Nome do serviço é obrigatório'),
   descricao: z.string().trim().min(1).optional().nullable(),
+  categoria: categoriaSchema,
   duracao_minutos: z.number().int().positive('Duração deve ser inteiro positivo'),
   preco: precoSchema,
 });
@@ -25,6 +34,7 @@ const atualizarServicoSchema = z
   .object({
     nome: z.string().trim().min(1, 'Nome do serviço é obrigatório').optional(),
     descricao: z.string().trim().min(1).optional().nullable(),
+    categoria: categoriaSchema,
     duracao_minutos: z.number().int().positive('Duração deve ser inteiro positivo').optional(),
     preco: precoSchema.optional(),
   })
@@ -68,6 +78,7 @@ export async function criarServico(req: Request, res: Response): Promise<void> {
   const servico = await criarNovoServico({
     nome: body.nome,
     descricao: body.descricao ?? null,
+    categoria: body.categoria ?? null,
     duracao_minutos: body.duracao_minutos,
     preco: normalizarPreco(body.preco),
   });
@@ -80,6 +91,7 @@ export async function atualizarServico(req: Request, res: Response): Promise<voi
   const servico = await editarServico(id, {
     nome: body.nome,
     descricao: body.descricao,
+    categoria: body.categoria,
     duracao_minutos: body.duracao_minutos,
     preco: body.preco !== undefined ? normalizarPreco(body.preco) : undefined,
   });

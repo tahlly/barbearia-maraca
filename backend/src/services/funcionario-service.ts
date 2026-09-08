@@ -86,6 +86,7 @@ export async function criarFuncionario(dados: {
   telefone?: string;
   cargo?: string;
   especialidade?: string;
+  categoria?: string;
 }): Promise<FuncionarioCriadoDTO> {
   // Validação de email único (regra de negócio)
   const existente = await findUsuarioByEmail(dados.email);
@@ -105,6 +106,7 @@ export async function criarFuncionario(dados: {
     telefone: dados.telefone,
     cargo: dados.cargo,
     especialidade: dados.especialidade,
+    categoria: dados.categoria,
   });
 }
 
@@ -117,6 +119,7 @@ export async function atualizarFuncionario(
     telefone?: string;
     cargo?: string;
     especialidade?: string;
+    categoria?: string;
     foto?: string;
     descricao?: string;
     email?: string;

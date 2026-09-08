@@ -12,6 +12,7 @@ export interface ServicoDTO {
   id: string;
   nome: string;
   descricao: string | null;
+  categoria: string | null;
   duracao_minutos: number;
   preco: string;
   ativo: boolean;
@@ -23,6 +24,7 @@ export interface ServicoPublicoDTO {
   id: string;
   nome: string;
   descricao: string | null;
+  categoria: string | null;
   duracao_minutos: number;
   preco: string;
 }
@@ -30,6 +32,7 @@ export interface ServicoPublicoDTO {
 export interface CreateServicoInput {
   nome: string;
   descricao?: string | null;
+  categoria?: string | null;
   duracao_minutos: number;
   preco: string;
 }
@@ -37,6 +40,7 @@ export interface CreateServicoInput {
 export interface UpdateServicoInput {
   nome?: string;
   descricao?: string | null;
+  categoria?: string | null;
   duracao_minutos?: number;
   preco?: string;
 }

@@ -11,6 +11,7 @@ interface ServicoRow {
   id: string;
   nome: string;
   descricao: string | null;
+  categoria: string | null;
   duracao_minutos: number;
   preco: string;
   ativo: boolean;
@@ -23,6 +24,7 @@ function toDTO(row: ServicoRow): ServicoDTO {
     id: row.id,
     nome: row.nome,
     descricao: row.descricao,
+    categoria: row.categoria,
     duracao_minutos: row.duracao_minutos,
     preco: String(row.preco),
     ativo: Boolean(row.ativo),
@@ -36,6 +38,7 @@ function toPublicoDTO(row: ServicoRow): ServicoPublicoDTO {
     id: row.id,
     nome: row.nome,
     descricao: row.descricao,
+    categoria: row.categoria,
     duracao_minutos: row.duracao_minutos,
     preco: String(row.preco),
   };
@@ -44,7 +47,7 @@ function toPublicoDTO(row: ServicoRow): ServicoPublicoDTO {
 export async function listarServicosAtivos(): Promise<ServicoPublicoDTO[]> {
   const rows = await db<ServicoRow>('servico')
     .where('ativo', true)
-    .select('id', 'nome', 'descricao', 'duracao_minutos', 'preco', 'ativo', 'created_at', 'updated_at');
+    .select('id', 'nome', 'descricao', 'categoria', 'duracao_minutos', 'preco', 'ativo', 'created_at', 'updated_at');
   return rows.map(toPublicoDTO);
 }
 
@@ -60,6 +63,7 @@ export async function criarServico(input: CreateServicoInput): Promise<ServicoDT
     .insert({
       nome: input.nome,
       descricao: input.descricao ?? null,
+      categoria: input.categoria ?? null,
       duracao_minutos: input.duracao_minutos,
       preco: input.preco,
       ativo: true,
@@ -78,6 +82,9 @@ export async function atualizarServico(
   }
   if (input.descricao !== undefined) {
     patch.descricao = input.descricao;
+  }
+  if (input.categoria !== undefined) {
+    patch.categoria = input.categoria;
   }
   if (input.duracao_minutos !== undefined) {
     patch.duracao_minutos = input.duracao_minutos;

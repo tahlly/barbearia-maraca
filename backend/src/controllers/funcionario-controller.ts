@@ -7,6 +7,13 @@ import { ValidationError } from '../errors/ValidationError';
 
 const CARGOS = ['barbeiro', 'recepcionista', 'administrador'] as const;
 
+const categoriaSchema = z
+  .string()
+  .trim()
+  .min(1, 'Categoria inválida')
+  .max(80, 'Categoria deve ter no máximo 80 caracteres')
+  .optional();
+
 const criarFuncionarioSchema = z.object({
   nome: z.string().min(1, 'Nome é obrigatório'),
   email: z.string().email('Email inválido'),
@@ -14,6 +21,7 @@ const criarFuncionarioSchema = z.object({
   telefone: z.string().optional(),
   cargo: z.enum(CARGOS).optional(),
   especialidade: z.string().max(100).optional(),
+  categoria: categoriaSchema,
 });
 
 const atualizarFuncionarioSchema = z.object({
@@ -21,6 +29,7 @@ const atualizarFuncionarioSchema = z.object({
   telefone: z.string().optional(),
   cargo: z.enum(CARGOS).optional(),
   especialidade: z.string().max(100).optional(),
+  categoria: categoriaSchema,
   foto: z.string().max(255).optional(),
   descricao: z.string().optional(),
   email: z.string().email('Email inválido').optional(),

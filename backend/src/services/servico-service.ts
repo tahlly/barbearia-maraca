@@ -32,6 +32,7 @@ export async function criarNovoServico(input: CreateServicoInput): Promise<Servi
   validarNome(input.nome);
   validarPreco(input.preco);
   validarDuracao(input.duracao_minutos);
+  validarCategoria(input.categoria);
   return criarServico(input);
 }
 
@@ -50,6 +51,9 @@ export async function editarServico(
   }
   if (input.duracao_minutos !== undefined) {
     validarDuracao(input.duracao_minutos);
+  }
+  if (input.categoria !== undefined) {
+    validarCategoria(input.categoria);
   }
 
   const atualizado = await atualizarServico(id, input);
@@ -92,5 +96,11 @@ function validarPreco(preco: string): void {
 function validarDuracao(duracao: number): void {
   if (!Number.isInteger(duracao) || duracao <= 0) {
     throw new ValidationError('Duração deve ser um inteiro positivo (em minutos)');
+  }
+}
+
+function validarCategoria(categoria: string | null | undefined): void {
+  if (categoria && categoria.trim().length > 80) {
+    throw new ValidationError('Categoria deve ter no máximo 80 caracteres');
   }
 }

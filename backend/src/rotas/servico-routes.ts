@@ -20,6 +20,7 @@ const servicoRoutes = Router();
  *         id: { type: string }
  *         nome: { type: string }
  *         descricao: { type: string, nullable: true }
+ *         categoria: { type: string, nullable: true }
  *         duracao_minutos: { type: integer, example: 30 }
  *         preco: { type: string, example: '50.00' }
  *     Servico:
@@ -28,6 +29,7 @@ const servicoRoutes = Router();
  *         id: { type: string }
  *         nome: { type: string }
  *         descricao: { type: string, nullable: true }
+ *         categoria: { type: string, nullable: true }
  *         duracao_minutos: { type: integer, example: 30 }
  *         preco: { type: string, example: '50.00' }
  *         ativo: { type: boolean }
@@ -37,6 +39,7 @@ const servicoRoutes = Router();
  *       properties:
  *         nome: { type: string }
  *         descricao: { type: string, nullable: true }
+ *         categoria: { type: string, nullable: true }
  *         duracao_minutos: { type: integer, example: 30 }
  *         preco:
  *           oneOf:
@@ -48,6 +51,7 @@ const servicoRoutes = Router();
  *       properties:
  *         nome: { type: string }
  *         descricao: { type: string, nullable: true }
+ *         categoria: { type: string, nullable: true }
  *         duracao_minutos: { type: integer, example: 30 }
  *         preco:
  *           oneOf:
@@ -170,10 +174,11 @@ const servicoRoutes = Router();
 // Público (sem autenticação) — apenas serviços ativos (S1-11.3)
 servicoRoutes.get('/', listarServicos);
 
-// Protegido: somente administrador (S1-11.1, S1-11.2)
-servicoRoutes.get('/:id', authorize('admin'), obterServico);
-servicoRoutes.post('/', authorize('admin'), criarServico);
-servicoRoutes.put('/:id', authorize('admin'), atualizarServico);
-servicoRoutes.patch('/:id/status', authorize('admin'), atualizarStatusServico);
+// Protegido: administrador e recepcionista gerenciam serviços
+// (autorização de listagem pública para o catálogo do site).
+servicoRoutes.get('/:id', authorize('admin', 'recepcionista'), obterServico);
+servicoRoutes.post('/', authorize('admin', 'recepcionista'), criarServico);
+servicoRoutes.put('/:id', authorize('admin', 'recepcionista'), atualizarServico);
+servicoRoutes.patch('/:id/status', authorize('admin', 'recepcionista'), atualizarStatusServico);
 
 export default servicoRoutes;

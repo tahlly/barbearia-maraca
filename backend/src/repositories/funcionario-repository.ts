@@ -8,12 +8,13 @@ import type {
 
 // ── Mapeadores ────────────────────────────────────────────────
 
-function toPublicoDTO(row: Pick<FuncionarioRow, 'id' | 'nome' | 'cargo' | 'especialidade' | 'foto' | 'descricao'>): FuncionarioPublicoDTO {
+function toPublicoDTO(row: Pick<FuncionarioRow, 'id' | 'nome' | 'cargo' | 'especialidade' | 'categoria' | 'foto' | 'descricao'>): FuncionarioPublicoDTO {
   return {
     id: row.id,
     nome: row.nome,
     cargo: row.cargo,
     especialidade: row.especialidade,
+    categoria: row.categoria,
     foto: row.foto,
     descricao: row.descricao,
   };
@@ -27,6 +28,7 @@ function toCompletoDTO(row: FuncionarioRow, email: string): FuncionarioCompletoD
     telefone: row.telefone,
     cargo: row.cargo,
     especialidade: row.especialidade,
+    categoria: row.categoria,
     foto: row.foto,
     descricao: row.descricao,
     ativo: row.ativo,
@@ -43,8 +45,8 @@ export async function listarPublicos(cargo?: string): Promise<FuncionarioPublico
   if (cargo) {
     query = query.where('cargo', cargo);
   }
-  const rows = await query.select('id', 'nome', 'cargo', 'especialidade', 'foto', 'descricao');
-  return (rows as Array<Pick<FuncionarioRow, 'id' | 'nome' | 'cargo' | 'especialidade' | 'foto' | 'descricao'>>).map(toPublicoDTO);
+  const rows = await query.select('id', 'nome', 'cargo', 'especialidade', 'categoria', 'foto', 'descricao');
+  return (rows as Array<Pick<FuncionarioRow, 'id' | 'nome' | 'cargo' | 'especialidade' | 'categoria' | 'foto' | 'descricao'>>).map(toPublicoDTO);
 }
 
 export async function listarTodos(): Promise<FuncionarioCompletoDTO[]> {
@@ -57,6 +59,7 @@ export async function listarTodos(): Promise<FuncionarioCompletoDTO[]> {
       'funcionario.telefone',
       'funcionario.cargo',
       'funcionario.especialidade',
+      'funcionario.categoria',
       'funcionario.foto',
       'funcionario.descricao',
       'funcionario.ativo',
@@ -80,6 +83,7 @@ export async function buscarPorId(id: string): Promise<FuncionarioCompletoDTO | 
       'funcionario.telefone',
       'funcionario.cargo',
       'funcionario.especialidade',
+      'funcionario.categoria',
       'funcionario.foto',
       'funcionario.descricao',
       'funcionario.ativo',
@@ -103,6 +107,7 @@ export async function buscarPorEmail(email: string): Promise<FuncionarioCompleto
       'funcionario.telefone',
       'funcionario.cargo',
       'funcionario.especialidade',
+      'funcionario.categoria',
       'funcionario.foto',
       'funcionario.descricao',
       'funcionario.ativo',
@@ -129,6 +134,7 @@ export async function criar(dados: {
   telefone?: string;
   cargo?: string;
   especialidade?: string;
+  categoria?: string;
 }): Promise<FuncionarioCriadoDTO> {
   return db.transaction(async (trx) => {
     const [usuarioRow] = (await trx('usuario')
@@ -147,6 +153,7 @@ export async function criar(dados: {
         telefone: dados.telefone ?? null,
         cargo: dados.cargo ?? 'barbeiro',
         especialidade: dados.especialidade ?? null,
+        categoria: dados.categoria ?? null,
       })
       .returning('*')) as Array<FuncionarioRow>;
 
@@ -158,6 +165,7 @@ export async function criar(dados: {
       telefone: funcionarioRow.telefone,
       cargo: funcionarioRow.cargo,
       especialidade: funcionarioRow.especialidade,
+      categoria: funcionarioRow.categoria,
     };
   });
 }
@@ -169,6 +177,7 @@ export async function atualizar(
     telefone?: string;
     cargo?: string;
     especialidade?: string;
+    categoria?: string;
     foto?: string;
     descricao?: string;
     email?: string;
@@ -181,6 +190,7 @@ export async function atualizar(
   if (dados.telefone !== undefined) funcionarioUpdates.telefone = dados.telefone;
   if (dados.cargo !== undefined) funcionarioUpdates.cargo = dados.cargo;
   if (dados.especialidade !== undefined) funcionarioUpdates.especialidade = dados.especialidade;
+  if (dados.categoria !== undefined) funcionarioUpdates.categoria = dados.categoria;
   if (dados.foto !== undefined) funcionarioUpdates.foto = dados.foto;
   if (dados.descricao !== undefined) funcionarioUpdates.descricao = dados.descricao;
 

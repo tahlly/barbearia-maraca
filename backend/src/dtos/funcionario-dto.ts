@@ -8,6 +8,7 @@ export interface FuncionarioRow {
   telefone: string | null;
   cargo: string;
   especialidade: string | null;
+  categoria: string | null;
   foto: string | null;
   descricao: string | null;
   ativo: boolean;
@@ -31,6 +32,7 @@ export interface FuncionarioPublicoDTO {
   nome: string;
   cargo: string;
   especialidade: string | null;
+  categoria: string | null;
   foto: string | null;
   descricao: string | null;
 }
@@ -43,6 +45,7 @@ export interface FuncionarioCompletoDTO {
   telefone: string | null;
   cargo: string;
   especialidade: string | null;
+  categoria: string | null;
   foto: string | null;
   descricao: string | null;
   ativo: boolean;
@@ -60,4 +63,5 @@ export interface FuncionarioCriadoDTO {
   telefone: string | null;
   cargo: string;
   especialidade: string | null;
+  categoria: string | null;
 }
