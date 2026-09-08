@@ -221,5 +221,5 @@ export function logout(): void {
   });
 
   sessionStorage.removeItem(CONFIG.sessionKey);
-  navigateTo("/login");
+  navigateTo("/");
 }

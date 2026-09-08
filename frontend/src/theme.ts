@@ -42,8 +42,9 @@ function saveTheme(light: boolean): void {
 
 function bindToggle(toggle: HTMLElement): () => void {
   const handleToggle = (): void => {
-    applyTheme(!isLightTheme());
-    saveTheme(!isLightTheme());
+    const nextLight = !isLightTheme();
+    applyTheme(nextLight);
+    saveTheme(nextLight);
   };
   toggle.addEventListener("click", handleToggle);
   return () => toggle.removeEventListener("click", handleToggle);

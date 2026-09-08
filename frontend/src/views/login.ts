@@ -188,7 +188,7 @@ export function renderLogin(container: HTMLElement): () => void {
   }
 
   container.innerHTML = `
-    <main class="auth auth--admin">
+    <main class="auth auth--restricted">
       <section class="auth__box" id="view-login" hidden>
         <a href="#/" class="auth__close" aria-label="Fechar e voltar ao site">
           <i class='bx bx-x'></i>
