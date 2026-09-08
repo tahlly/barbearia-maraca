@@ -1,5 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer';
-import { LOGO_EMAIL_DATA_URI } from '../utils/email-logo';
+import { LOGO_EMAIL_CID, LOGO_EMAIL_PNG_BUFFER } from '../utils/email-logo';
 
 let transporter: Transporter | null = null;
 
@@ -30,7 +30,9 @@ function escaparHtml(texto: string): string {
 }
 
 function montarHtmlRecuperacaoSenha(link: string): string {
-  const logoUrl = LOGO_EMAIL_DATA_URI;
+  // Logo como anexo inline referenciado por cid (RFC 2392): data URIs nao
+  // renderizam no Gmail (web/mobile) e o logo apareceria quebrado.
+  const logoUrl = `cid:${LOGO_EMAIL_CID}`;
   const linkSeguro = escaparHtml(link);
 
   return `<!DOCTYPE html>
@@ -168,11 +170,20 @@ export async function enviarEmailRecuperacaoSenha(
   link: string,
 ): Promise<void> {
   const from = process.env.SMTP_FROM || 'no-reply@barbeariamaraca.com';
-  await getTransporter().sendMail({
+await getTransporter().sendMail({
     from,
     to: destinatario,
     subject: 'Recuperação de senha — Barbearia Maracá',
     text: montarTextoRecuperacaoSenha(link),
     html: montarHtmlRecuperacaoSenha(link),
+    attachments: [
+      {
+        filename: 'logo-maraca.png',
+        cid: LOGO_EMAIL_CID,
+        content: LOGO_EMAIL_PNG_BUFFER,
+        contentType: 'image/png',
+        contentDisposition: 'inline',
+      },
+    ],
   });
 }
