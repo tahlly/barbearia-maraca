@@ -12,6 +12,7 @@ interface ServicoPublicoDTO {
   descricao?: string | null;
   duracao_minutos: number;
   preco: string;
+  categorias?: string[];
 }
 
 interface ServicoAdminDTO {
@@ -21,6 +22,7 @@ interface ServicoAdminDTO {
   duracao_minutos: number;
   preco: string;
   ativo: boolean;
+  categorias?: string[];
 }
 
 interface FuncionarioPublicoDTO {
@@ -30,6 +32,12 @@ interface FuncionarioPublicoDTO {
   especialidade: string | null;
   foto: string | null;
   descricao: string | null;
+  categorias?: string[];
+}
+
+interface CategoriaDTO {
+  id: string;
+  nome: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -38,6 +46,7 @@ interface FuncionarioPublicoDTO {
 
 let _servicesCache: Service[] = [];
 let _professionalsCache: Professional[] = [];
+let _categoriesCache: string[] = [];
 
 /* ------------------------------------------------------------------ */
 /*  DTO → Frontend type mappers                                        */
@@ -51,7 +60,7 @@ function mapServico(dto: ServicoPublicoDTO): Service {
     durationMin: dto.duracao_minutos,
     price: parseFloat(dto.preco),
     icon: "scissors",
-    category: "",
+    categories: dto.categorias ?? [],
     active: true,
   };
 }
@@ -64,7 +73,7 @@ function mapServicoAdmin(dto: ServicoAdminDTO): Service {
     durationMin: dto.duracao_minutos,
     price: parseFloat(dto.preco),
     icon: "scissors",
-    category: "",
+    categories: dto.categorias ?? [],
     active: dto.ativo,
   };
 }
@@ -81,7 +90,7 @@ function mapProfissional(dto: FuncionarioPublicoDTO): Professional {
         : dto.cargo === "administrador"
           ? "Administrador"
           : "Barbeiro"),
-    category: "",
+    categories: dto.categorias ?? [],
     active: true,
     photo: dto.foto ?? undefined,
     cargo: dto.cargo,
@@ -139,7 +148,7 @@ export function loadProfessionals(): Professional[] {
 /* ------------------------------------------------------------------ */
 
 export async function primeCatalog(): Promise<void> {
-  await Promise.all([fetchServices(), fetchProfessionals()]);
+  await Promise.all([fetchServices(), fetchProfessionals(), fetchCategories()]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -206,12 +215,16 @@ export async function setServicoStatus(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Categorias (não modeladas pelo backend; mantidas para o modal de   */
-/*  profissional em manage.ts)                                         */
+/*  Categorias (catálogo)                                              */
 /* ------------------------------------------------------------------ */
 
-export const DEFAULT_CATEGORIES: string[] = [];
+export async function fetchCategories(): Promise<string[]> {
+  const dtos = await httpJson<CategoriaDTO[]>("/categorias");
+  _categoriesCache = dtos.map((d) => d.nome);
+  return [..._categoriesCache];
+}
 
+/** Categorias do catálogo (cache populado pelo `primeCatalog`). */
 export function loadCategories(): string[] {
-  return [...DEFAULT_CATEGORIES];
+  return [..._categoriesCache];
 }

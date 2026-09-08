@@ -1346,7 +1346,7 @@ if (status === "cancelado") {
               <label class="field__label" for="pro-category">Categoria</label>
               <select id="pro-category">
                 <option value="">Selecione...</option>
-                ${categories.map((c) => `<option value="${escapeHtml(c)}" ${pro?.category === c ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")}
+                ${categories.map((c) => `<option value="${escapeHtml(c)}" ${pro?.categories?.includes(c) ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")}
               </select>
             </div>
           </div>

@@ -58,10 +58,11 @@ function idParam(req: Request): string {
 
 // ── Handlers ──────────────────────────────────────────────────
 
-/** GET /api/funcionarios — público; filtra ativo=true e cargo por querystring. */
+/** GET /api/funcionarios — público; filtra ativo=true, cargo e categoria por querystring. */
 export async function listarPublicos(req: Request, res: Response): Promise<void> {
   const cargoParam = typeof req.query.cargo === 'string' ? req.query.cargo : undefined;
-  const resultado = await funcionarioService.listarFuncionariosPublicos(cargoParam);
+  const categoriaParam = typeof req.query.categoria === 'string' ? req.query.categoria : undefined;
+  const resultado = await funcionarioService.listarFuncionariosPublicos(cargoParam, categoriaParam);
   res.json(resultado);
 }
 
