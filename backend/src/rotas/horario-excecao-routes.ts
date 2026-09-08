@@ -20,8 +20,8 @@ const horarioExcecaoRoutes = Router();
  *         funcionario_id: { type: string }
  *         funcionario_nome: { type: string }
  *         data: { type: string, example: '2026-09-12' }
- *         hora_inicio: { type: string, example: '09:00:00' }
- *         hora_fim: { type: string, example: '18:00:00' }
+ *         hora_inicio: { type: string, example: '09:00' }
+ *         hora_fim: { type: string, example: '18:00' }
  *         tipo:
  *           type: string
  *           enum: [bloqueio, liberacao]
@@ -34,8 +34,8 @@ const horarioExcecaoRoutes = Router();
  *       properties:
  *         funcionario_id: { type: string, format: uuid }
  *         data: { type: string, format: date, example: '2026-09-12' }
- *         hora_inicio: { type: string, example: '09:00:00' }
- *         hora_fim: { type: string, example: '18:00:00' }
+ *         hora_inicio: { type: string, example: '09:00' }
+ *         hora_fim: { type: string, example: '18:00' }
  *         tipo:
  *           type: string
  *           enum: [bloqueio, liberacao]
@@ -45,8 +45,8 @@ const horarioExcecaoRoutes = Router();
  *       minProperties: 1
  *       properties:
  *         data: { type: string, format: date, example: '2026-09-12' }
- *         hora_inicio: { type: string, example: '09:00:00' }
- *         hora_fim: { type: string, example: '18:00:00' }
+ *         hora_inicio: { type: string, example: '09:00' }
+ *         hora_fim: { type: string, example: '18:00' }
  *         tipo:
  *           type: string
  *           enum: [bloqueio, liberacao]

@@ -4,26 +4,35 @@ import * as service from '../services/horario-excecao-service';
 import type { ReqUser } from '../services/horario-excecao-service';
 import { UnauthorizedError } from '../errors/UnauthorizedError';
 import { ValidationError } from '../errors/ValidationError';
+import { DATA_ISO_REGEX, HORA_REGEX, validarDataISO } from '../utils/validadores';
 
-const DATA_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const TIPOS = ['bloqueio', 'liberacao'] as const;
+
+const DATA_MENSAGEM = 'data deve estar no formato YYYY-MM-DD';
+const DATA_REAL_MENSAGEM = 'data deve ser uma data de calendário válida';
+const HORA_MENSAGEM = 'hora deve estar no formato HH:MM';
+const TIPO_MENSAGEM = 'motivo deve ter no máximo 500 caracteres';
 
 const createSchema = z.object({
   funcionario_id: z.string().uuid('funcionario_id inválido'),
-  data: z.string().regex(DATA_REGEX, 'data deve estar no formato YYYY-MM-DD'),
-  hora_inicio: z.string().min(1, 'hora_inicio obrigatória'),
-  hora_fim: z.string().min(1, 'hora_fim obrigatória'),
+  data: z.string().regex(DATA_ISO_REGEX, DATA_MENSAGEM).refine(validarDataISO, DATA_REAL_MENSAGEM),
+  hora_inicio: z.string().regex(HORA_REGEX, HORA_MENSAGEM),
+  hora_fim: z.string().regex(HORA_REGEX, HORA_MENSAGEM),
   tipo: z.enum(TIPOS),
-  motivo: z.string().max(500, 'motivo deve ter no máximo 500 caracteres').nullable().optional(),
+  motivo: z.string().max(500, TIPO_MENSAGEM).nullable().optional(),
 });
 
 const updateSchema = z
   .object({
-    data: z.string().regex(DATA_REGEX, 'data deve estar no formato YYYY-MM-DD').optional(),
-    hora_inicio: z.string().min(1, 'hora_inicio inválida').optional(),
-    hora_fim: z.string().min(1, 'hora_fim inválida').optional(),
+    data: z
+      .string()
+      .regex(DATA_ISO_REGEX, DATA_MENSAGEM)
+      .refine(validarDataISO, DATA_REAL_MENSAGEM)
+      .optional(),
+    hora_inicio: z.string().regex(HORA_REGEX, HORA_MENSAGEM).optional(),
+    hora_fim: z.string().regex(HORA_REGEX, HORA_MENSAGEM).optional(),
     tipo: z.enum(TIPOS).optional(),
-    motivo: z.string().max(500, 'motivo deve ter no máximo 500 caracteres').nullable().optional(),
+    motivo: z.string().max(500, TIPO_MENSAGEM).nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'Nenhum campo para atualizar',
@@ -31,7 +40,11 @@ const updateSchema = z
 
 const listarQuerySchema = z.object({
   funcionario_id: z.string().uuid('funcionario_id inválido').optional(),
-  data: z.string().regex(DATA_REGEX, 'data deve estar no formato YYYY-MM-DD').optional(),
+  data: z
+    .string()
+    .regex(DATA_ISO_REGEX, DATA_MENSAGEM)
+    .refine(validarDataISO, DATA_REAL_MENSAGEM)
+    .optional(),
   tipo: z.enum(TIPOS).optional(),
 });
 
