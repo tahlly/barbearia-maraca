@@ -94,6 +94,7 @@ Regras centrais que impactam a modelagem:
 - Recepcionista não pode acessar informações financeiras e estratégicas.
 - O backend também deve validar permissões; a proteção não existe somente no frontend.
 - O repositório usa Knex para configuração, migrations, seeds e acesso ao banco.
+- A tabela `usuario` já possui `google_id` (único) e `avatar_url` (migration `20260901000009_add_google_auth.ts`) para suportar login social. Também já existe a tabela `sessao` (migration `20260904000001_add_sessao.ts`: `token_hash` único, `expira_em`, `revogada_em`, FK para `usuario` com `ON DELETE CASCADE`, check `expira_em > criada_em`) para persistir sessões de autenticação — qualquer evolução nela (ex.: índice adicional, campo de dispositivo/IP) segue sendo escopo deste agente.
 
 As entidades apresentadas na seção "Modelagem Inicial" da documentação funcional são uma proposta inicial, não um schema final automático.
 

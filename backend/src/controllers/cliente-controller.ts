@@ -10,12 +10,13 @@ import {
 import type { UsuarioAutenticado } from '../services/cliente-service';
 import { UnauthorizedError } from '../errors/UnauthorizedError';
 import { ValidationError } from '../errors/ValidationError';
+import { senhaForteSchema } from '../utils/senha';
 
 const createSchema = z.object({
   nome: z.string().trim().min(1, 'Nome é obrigatório'),
   email: z.string().trim().toLowerCase().min(1, 'Email é obrigatório').email('Email inválido'),
   telefone: z.string().trim().optional(),
-  senha: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
+  senha: senhaForteSchema,
 });
 
 const updateSchema = z.object({

@@ -23,7 +23,7 @@ interface FuncionarioDTO {
 interface CreateFuncionarioRequest {
   nome: string;
   email: string;
-  senha: string;
+  senha?: string;
   telefone?: string;
   cargo?: CargoFuncionario;
   especialidade?: string;
@@ -159,11 +159,14 @@ export async function findUsuarioByEmail(
 /**
  * Cria um novo usuário interno via `POST /funcionarios` (cria `usuario` +
  * `funcionario` atomicamente no backend).
+ *
+ * `senha` é opcional: quando omitida, o backend aplica a senha temporária
+ * padrão (`123456`) e marca o primeiro acesso como obrigatório.
  */
 export async function createUsuarioInterno(data: {
   nome: string;
   email: string;
-  senha: string;
+  senha?: string;
   role: "admin" | "profissional" | "recepcionista";
   professionalId?: string;
 }): Promise<UsuarioInterno> {
@@ -180,7 +183,7 @@ export async function createUsuarioInterno(data: {
     body: JSON.stringify({
       nome: data.nome.trim(),
       email: data.email.trim().toLowerCase(),
-      senha: data.senha,
+      ...(data.senha !== undefined && data.senha !== "" ? { senha: data.senha } : {}),
       cargo: roleToCargo(data.role),
     } satisfies CreateFuncionarioRequest),
   });

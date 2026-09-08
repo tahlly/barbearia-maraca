@@ -17,3 +17,9 @@ export interface LoginResponseDTO {
 export interface GoogleLoginRequestDTO {
   idToken: string;
 }
+
+export interface LoginLocalRequestDTO {
+  email: string;
+  senha?: string;
+  password?: string;
+}

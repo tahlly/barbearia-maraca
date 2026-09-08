@@ -1590,7 +1590,8 @@
           "senha": {
             "type": "string",
             "format": "password",
-            "minLength": 6
+            "minLength": 8,
+            "description": "Mínimo de 8 caracteres, com letra maiúscula e caractere especial"
           },
           "nome": {
             "type": "string"
@@ -1680,10 +1681,14 @@
             "type": "string",
             "format": "email"
           },
-          "senha": {
+          "senhaAtual": {
+            "type": "string"
+          },
+          "novaSenha": {
             "type": "string",
             "format": "password",
-            "minLength": 6
+            "minLength": 8,
+            "description": "Mínimo de 8 caracteres, com letra maiúscula e caractere especial"
           }
         }
       },
@@ -1729,7 +1734,8 @@
           "novaSenha": {
             "type": "string",
             "format": "password",
-            "minLength": 6
+            "minLength": 8,
+            "description": "Mínimo de 8 caracteres, com letra maiúscula e caractere especial"
           }
         }
       },
@@ -1920,7 +1926,8 @@
           "senha": {
             "type": "string",
             "format": "password",
-            "minLength": 6
+            "minLength": 8,
+            "description": "Mínimo de 8 caracteres, com letra maiúscula e caractere especial"
           }
         }
       },
@@ -2048,7 +2055,8 @@
           "senha": {
             "type": "string",
             "format": "password",
-            "minLength": 4
+            "minLength": 8,
+            "description": "Opcional; quando informada, mínimo de 8 caracteres, com letra maiúscula e caractere especial"
           },
           "telefone": {
             "type": "string"
@@ -2080,7 +2088,8 @@
           "senha": {
             "type": "string",
             "format": "password",
-            "minLength": 6
+            "minLength": 8,
+            "description": "Mínimo de 8 caracteres, com letra maiúscula e caractere especial"
           },
           "telefone": {
             "type": "string"

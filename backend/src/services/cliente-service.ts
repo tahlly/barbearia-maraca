@@ -11,6 +11,11 @@ import type { ClienteRow } from '../repositories/cliente-repository';
 import { NotFoundError } from '../errors/NotFoundError';
 import { ForbiddenError } from '../errors/ForbiddenError';
 import { ValidationError } from '../errors/ValidationError';
+import {
+  SENHA_REGEX,
+  MENSAGEM_SENHA_FRACA,
+  MENSAGEM_SENHA_MUITO_LONGA,
+} from '../utils/senha';
 import type {
   ClienteDTO,
   CreateClienteInput,
@@ -127,8 +132,11 @@ export async function criarClienteNovo(input: CreateClienteInput): Promise<Clien
   if (!input.senha || input.senha.trim().length === 0) {
     throw new ValidationError('Senha é obrigatória');
   }
-  if (input.senha.length < 6) {
-    throw new ValidationError('Senha deve ter no mínimo 6 caracteres');
+  if (input.senha.length > 64) {
+    throw new ValidationError(MENSAGEM_SENHA_MUITO_LONGA);
+  }
+  if (!SENHA_REGEX.test(input.senha)) {
+    throw new ValidationError(MENSAGEM_SENHA_FRACA);
   }
 
   if (input.telefone !== undefined) {

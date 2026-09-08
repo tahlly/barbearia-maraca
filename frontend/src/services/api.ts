@@ -70,7 +70,7 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 }
 
 /** Caminhos de autenticação: nesses casos 401 significa credenciais inválidas,
- *  não sessão expirada. */
+ *  não sessão expirada. Inclui /auth/google para o fluxo de login com Google. */
 const AUTH_PATHS = ["/auth/login", "/auth/register", "/auth/google"];
 
 /** Painel padrão por papel, usado só para redirecionar após 403. */

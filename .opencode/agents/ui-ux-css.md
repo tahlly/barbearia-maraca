@@ -98,7 +98,8 @@ Regras centrais que impactam UI/UX:
 - a Recepcionista não deve receber interface financeira;
 - o Administrador possui acesso completo, incluindo financeiro;
 - exemplos presentes nos documentos funcionais ilustram fluxo e estrutura, não layout final obrigatório;
-- o repositório ainda não contém CSS ou design system implementado;
+- o repositório já contém CSS modular em `frontend/css/` (`base`, `variables`, `components`, `landing`, `auth`, `panel`, `admin`, `account`, `manage`, `modals`) e `frontend/src/styles/main.css`; ajustes devem reutilizar e estender esses arquivos em vez de recriar um design system novo;
+- nem toda tela ou estado dos painéis recém-implementados tem cobertura visual completa; tratar lacunas pontuais como tarefa normal, não como ausência de design system;
 - a camada visual depende da estrutura funcional entregue pelo Frontend SPA.
 
 ## Fonte de verdade

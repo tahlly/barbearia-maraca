@@ -115,6 +115,7 @@ Regras centrais que orientam a revisão:
 - A proteção de acesso deve existir no backend, não apenas no frontend.
 - O projeto usa frontend em Vanilla TypeScript, backend em Node.js + TypeScript e banco SQL relacional com Knex.
 - Toda implementação relevante deve passar por revisão de QA.
+- Login local e login com Google já estão implementados, com sessão persistida em tabela (`sessao`) e middleware de autenticação/autorização (`backend/src/middlewares/autenticacao.ts`) protegendo `GET /api/auth/me` como prova de conceito; ainda não há endpoint de logout nem outras rotas privadas protegidas — verificar se esse escopo mudou na entrega em revisão.
 
 ## Fonte de verdade
 Considere como fonte de verdade, nesta ordem:

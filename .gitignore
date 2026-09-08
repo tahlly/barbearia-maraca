@@ -1,6 +1,8 @@
 node_modules/
 .env
 dist/
+.vscode/
+docker-compose.override.yml
 
 # Logs de desenvolvimento
 *.log

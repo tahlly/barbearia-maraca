@@ -251,15 +251,15 @@ export function renderProfissional(container: HTMLElement): () => void {
           <div class="form-grid">
             <div class="field">
               <label class="field__label" for="pw-current">Senha atual</label>
-              <input type="password" id="pw-current" autocomplete="current-password">
+              <input type="password" id="pw-current" autocomplete="current-password" maxlength="64">
             </div>
             <div class="field">
               <label class="field__label" for="pw-new">Nova senha</label>
-              <input type="password" id="pw-new" autocomplete="new-password">
+              <input type="password" id="pw-new" autocomplete="new-password" maxlength="64">
             </div>
             <div class="field">
               <label class="field__label" for="pw-confirm">Confirmar nova senha</label>
-              <input type="password" id="pw-confirm" autocomplete="new-password">
+              <input type="password" id="pw-confirm" autocomplete="new-password" maxlength="64">
             </div>
           </div>
 

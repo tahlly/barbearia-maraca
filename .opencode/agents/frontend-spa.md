@@ -93,7 +93,9 @@ Regras centrais que impactam o frontend:
 - Administrador possui acesso completo, incluindo financeiro;
 - controles visuais devem respeitar permissões, mas a autorização real pertence ao backend;
 - o frontend consome contratos públicos da API, não o schema relacional diretamente;
-- o esqueleto atual ainda não define roteador, build tool, componentes ou estratégia de estado.
+- o projeto já usa Vite como build tool e um roteador client-side próprio baseado em hash (`frontend/src/router.ts`), sem biblioteca de terceiros;
+- a estrutura já está organizada em `pages/`, `views/`, `features/`, `services/` e `ui/`, com painéis de Cliente, Profissional e Recepcionista/Administrador já implementados; novas telas e ajustes devem seguir essa organização existente em vez de propor uma nova;
+- o login com Google já está implementado de ponta a ponta em `frontend/src/services/googleAuth.ts` (fluxo real via Google Identity Services) e `frontend/src/views/loginCliente.ts` (botão e tratamento de erro); porém `CONFIG.useMockApi` em `frontend/src/config.ts` está fixo em `true` no código-fonte, então o fluxo real só roda se esse valor for alterado manualmente — tornar esse toggle configurável por variável de ambiente é uma pendência, não uma decisão já tomada.
 
 ## Fonte de verdade
 Considere como fonte de verdade, nesta ordem:

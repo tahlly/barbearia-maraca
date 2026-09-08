@@ -98,7 +98,11 @@ Regras centrais que impactam a API:
 - Administrador possui acesso completo, incluindo financeiro e configurações.
 - A proteção de acesso deve existir no backend, não apenas no frontend.
 - A SPA consome a API via Fetch API e depende de contratos e erros consistentes.
-- O servidor ainda está vazio; framework HTTP, autenticação e comandos de build/teste ainda podem não estar definidos.
+- O backend já usa Express como framework HTTP, com camadas separadas de controllers, services, repositories, DTOs e middlewares, e Knex/PostgreSQL como acesso a dados.
+- Ainda não existem endpoints para barbeiro, horário, agendamento e dashboard; esses domínios permanecem pendentes de implementação.
+- Comandos de `build` (`tsc`) e `dev` (`tsx src/server.ts`) já existem em `backend/package.json`; não há comando de teste configurado no projeto.
+- Autenticação já cobre login local (email/senha com bcrypt) e login social via Google (`google-auth-library`, com vínculo automático por e-mail em `auth-repository.ts`); ambos os fluxos geram um token opaco cujo hash SHA-256 é persistido na tabela `sessao` (migration `20260904000001_add_sessao.ts`), com TTL de 30 minutos e suporte a revogação (`revogarSessao`, ainda sem endpoint de logout exposto).
+- Já existe middleware de autenticação (`backend/src/middlewares/autenticacao.ts`): `autenticar` valida o header `Authorization: Bearer <token>` contra a tabela `sessao` (nega por padrão com 401 se ausente/inválido/expirado) e `autorizarPapel(...papeis)` nega por padrão com 403 fora dos papéis permitidos. Só há uma rota protegida hoje (`GET /api/auth/me`, prova de conceito); estender a outras rotas privadas por papel continua pendente.
 
 ## Fonte de verdade
 Considere como fonte de verdade, nesta ordem:

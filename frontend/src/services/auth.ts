@@ -132,7 +132,7 @@ export async function completeFirstAccess(
   try {
     await httpJson<{ ok: boolean }>("/auth/me", {
       method: "PATCH",
-      body: JSON.stringify({ senha: novaSenha }),
+      body: JSON.stringify({ novaSenha }),
     });
     persistSession({ ...session, precisaTrocarSenha: false });
     return { ok: true };
@@ -221,5 +221,5 @@ export function logout(): void {
   });
 
   sessionStorage.removeItem(CONFIG.sessionKey);
-  navigateTo("/login");
+  navigateTo("/");
 }
