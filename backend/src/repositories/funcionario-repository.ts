@@ -16,6 +16,7 @@ function toPublicoDTO(row: Pick<FuncionarioRow, 'id' | 'nome' | 'cargo' | 'espec
     especialidade: row.especialidade,
     foto: row.foto,
     descricao: row.descricao,
+    categorias: [],
   };
 }
 
@@ -33,18 +34,43 @@ function toCompletoDTO(row: FuncionarioRow, email: string): FuncionarioCompletoD
     email,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    categorias: [],
   };
+}
+
+/** Carrega o mapa funcionario_id → nomes das categorias ativas. */
+async function categoriasPorFuncionario(): Promise<Map<string, string[]>> {
+  const rows = (await db('funcionario_categoria')
+    .join('categoria', 'categoria.id', 'funcionario_categoria.categoria_id')
+    .where('categoria.ativo', true)
+    .select('funcionario_categoria.funcionario_id', 'categoria.nome')) as Array<{ funcionario_id: string; nome: string }>;
+  const mapa = new Map<string, string[]>();
+  for (const r of rows) {
+    const nomes = mapa.get(r.funcionario_id) ?? [];
+    nomes.push(r.nome);
+    mapa.set(r.funcionario_id, nomes);
+  }
+  return mapa;
 }
 
 // ── Consultas ─────────────────────────────────────────────────
 
-export async function listarPublicos(cargo?: string): Promise<FuncionarioPublicoDTO[]> {
-  let query = db('funcionario').where('ativo', true);
+export async function listarPublicos(cargo?: string, categoria?: string): Promise<FuncionarioPublicoDTO[]> {
+  let query = db('funcionario').where('funcionario.ativo', true);
   if (cargo) {
-    query = query.where('cargo', cargo);
+    query = query.where('funcionario.cargo', cargo);
   }
-  const rows = await query.select('id', 'nome', 'cargo', 'especialidade', 'foto', 'descricao');
-  return (rows as Array<Pick<FuncionarioRow, 'id' | 'nome' | 'cargo' | 'especialidade' | 'foto' | 'descricao'>>).map(toPublicoDTO);
+  if (categoria) {
+    query = query
+      .join('funcionario_categoria', 'funcionario_categoria.funcionario_id', 'funcionario.id')
+      .join('categoria', 'categoria.id', 'funcionario_categoria.categoria_id')
+      .where('categoria.nome', categoria);
+  }
+  const rows = await query.select('funcionario.id', 'funcionario.nome', 'funcionario.cargo', 'funcionario.especialidade', 'funcionario.foto', 'funcionario.descricao');
+  const mapa = await categoriasPorFuncionario();
+  return (rows as Array<Pick<FuncionarioRow, 'id' | 'nome' | 'cargo' | 'especialidade' | 'foto' | 'descricao'>>).map(
+    (row) => ({ ...toPublicoDTO(row), categorias: mapa.get(row.id) ?? [] }),
+  );
 }
 
 export async function listarTodos(): Promise<FuncionarioCompletoDTO[]> {
@@ -64,9 +90,11 @@ export async function listarTodos(): Promise<FuncionarioCompletoDTO[]> {
       'funcionario.updated_at',
       'usuario.email',
     );
-  return (rows as Array<FuncionarioRow & { email: string }>).map((r) =>
-    toCompletoDTO(r, r.email),
-  );
+  const mapa = await categoriasPorFuncionario();
+  return (rows as Array<FuncionarioRow & { email: string }>).map((r) => ({
+    ...toCompletoDTO(r, r.email),
+    categorias: mapa.get(r.id) ?? [],
+  }));
 }
 
 export async function buscarPorId(id: string): Promise<FuncionarioCompletoDTO | null> {
@@ -89,7 +117,11 @@ export async function buscarPorId(id: string): Promise<FuncionarioCompletoDTO | 
     )
     .first()) as (FuncionarioRow & { email: string }) | undefined;
 
-  return row ? toCompletoDTO(row, row.email) : null;
+  if (!row) {
+    return null;
+  }
+  const mapa = await categoriasPorFuncionario();
+  return { ...toCompletoDTO(row, row.email), categorias: mapa.get(row.id) ?? [] };
 }
 
 export async function buscarPorEmail(email: string): Promise<FuncionarioCompletoDTO | null> {
@@ -112,7 +144,11 @@ export async function buscarPorEmail(email: string): Promise<FuncionarioCompleto
     )
     .first()) as (FuncionarioRow & { email: string }) | undefined;
 
-  return row ? toCompletoDTO(row, row.email) : null;
+  if (!row) {
+    return null;
+  }
+  const mapa = await categoriasPorFuncionario();
+  return { ...toCompletoDTO(row, row.email), categorias: mapa.get(row.id) ?? [] };
 }
 
 export async function buscarPorUsuarioId(usuarioId: string): Promise<FuncionarioRow | null> {

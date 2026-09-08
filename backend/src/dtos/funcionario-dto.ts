@@ -33,6 +33,8 @@ export interface FuncionarioPublicoDTO {
   especialidade: string | null;
   foto: string | null;
   descricao: string | null;
+  /** Nomes das categorias que o profissional atende (N:N via funcionario_categoria). */
+  categorias: string[];
 }
 
 /** Dados completos do funcionário (inclui email do usuario). */
@@ -49,6 +51,8 @@ export interface FuncionarioCompletoDTO {
   email: string;
   createdAt: string;
   updatedAt: string;
+  /** Nomes das categorias que o profissional atende (N:N via funcionario_categoria). */
+  categorias: string[];
 }
 
 /** Retorno de criação de funcionário. */

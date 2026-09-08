@@ -704,6 +704,16 @@
                 "administrador"
               ]
             }
+          },
+          {
+            "in": "query",
+            "name": "categoria",
+            "required": false,
+            "description": "Filtra funcionarios que atendem a categoria (nome)",
+            "schema": {
+              "type": "string",
+              "example": "Cabelo"
+            }
           }
         ],
         "responses": {
@@ -1751,6 +1761,16 @@
           "preco": {
             "type": "string",
             "example": "50.00"
+          },
+          "categorias": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "Cabelo",
+              "Barba"
+            ]
           }
         }
       },
@@ -1777,6 +1797,16 @@
           },
           "ativo": {
             "type": "boolean"
+          },
+          "categorias": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "Cabelo",
+              "Barba"
+            ]
           }
         }
       },
@@ -1930,6 +1960,15 @@
           "descricao": {
             "type": "string",
             "nullable": true
+          },
+          "categorias": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "Cabelo"
+            ]
           }
         }
       },
@@ -1980,6 +2019,15 @@
           },
           "updatedAt": {
             "type": "string"
+          },
+          "categorias": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "Cabelo"
+            ]
           }
         }
       },
@@ -1987,8 +2035,7 @@
         "type": "object",
         "required": [
           "nome",
-          "email",
-          "senha"
+          "email"
         ],
         "properties": {
           "nome": {
@@ -2001,7 +2048,7 @@
           "senha": {
             "type": "string",
             "format": "password",
-            "minLength": 6
+            "minLength": 4
           },
           "telefone": {
             "type": "string"

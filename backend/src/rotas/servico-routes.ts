@@ -22,6 +22,10 @@ const servicoRoutes = Router();
  *         descricao: { type: string, nullable: true }
  *         duracao_minutos: { type: integer, example: 30 }
  *         preco: { type: string, example: '50.00' }
+ *         categorias:
+ *           type: array
+ *           items: { type: string }
+ *           example: [Cabelo, Barba]
  *     Servico:
  *       type: object
  *       properties:
@@ -31,6 +35,10 @@ const servicoRoutes = Router();
  *         duracao_minutos: { type: integer, example: 30 }
  *         preco: { type: string, example: '50.00' }
  *         ativo: { type: boolean }
+ *         categorias:
+ *           type: array
+ *           items: { type: string }
+ *           example: [Cabelo, Barba]
  *     CreateServicoRequest:
  *       type: object
  *       required: [nome, duracao_minutos, preco]

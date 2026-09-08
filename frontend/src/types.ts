@@ -6,7 +6,7 @@ export interface Service {
   id: string;
   name: string;
   description: string;
-  category: string;
+  categories: string[];
   durationMin: number;
   price: number;
   icon: ServiceIcon;
@@ -19,7 +19,7 @@ export interface Professional {
   id: string;
   name: string;
   role: string;
-  category: string;
+  categories: string[];
   active: boolean;
   email?: string;
   photo?: string;
