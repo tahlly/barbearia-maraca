@@ -76,6 +76,7 @@ import clienteRoutes from './rotas/cliente-routes';
 import funcionarioRoutes from './rotas/funcionario-routes';
 import agendamentoRoutes from './rotas/agendamento-routes';
 import horarioRoutes from './rotas/horario-routes';
+import categoriaRoutes from './rotas/categoria-routes';
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -128,6 +129,7 @@ app.use('/api/clientes', clienteRoutes);
 app.use('/api/funcionarios', funcionarioRoutes);
 app.use('/api/agendamentos', agendamentoRoutes);
 app.use('/api/horarios', horarioRoutes);
+app.use('/api/categorias', categoriaRoutes);
 
 // ── 404 para rotas /api não mapeadas ────────────────────────────────
 app.use('/api/{*path}', (_req: Request, _res: Response, next: NextFunction) => {

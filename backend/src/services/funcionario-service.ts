@@ -11,8 +11,8 @@ const SENHA_PADRAO = '123456';
 
 // ── Listagens ─────────────────────────────────────────────────
 
-export async function listarFuncionariosPublicos(cargo?: string): Promise<FuncionarioPublicoDTO[]> {
-  return funcionarioRepo.listarPublicos(cargo);
+export async function listarFuncionariosPublicos(cargo?: string, categoria?: string): Promise<FuncionarioPublicoDTO[]> {
+  return funcionarioRepo.listarPublicos(cargo, categoria);
 }
 
 export async function listarFuncionarios(): Promise<FuncionarioCompletoDTO[]> {

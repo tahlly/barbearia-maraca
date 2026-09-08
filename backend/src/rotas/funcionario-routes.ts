@@ -25,6 +25,10 @@ const funcionarioRoutes = Router();
  *         especialidade: { type: string, nullable: true }
  *         foto: { type: string, nullable: true }
  *         descricao: { type: string, nullable: true }
+ *         categorias:
+ *           type: array
+ *           items: { type: string }
+ *           example: [Cabelo]
  *     Funcionario:
  *       type: object
  *       properties:
@@ -42,6 +46,10 @@ const funcionarioRoutes = Router();
  *         email: { type: string }
  *         createdAt: { type: string }
  *         updatedAt: { type: string }
+ *         categorias:
+ *           type: array
+ *           items: { type: string }
+ *           example: [Cabelo]
  *     CreateFuncionarioRequest:
  *       type: object
  *       required: [nome, email]
@@ -90,6 +98,13 @@ const funcionarioRoutes = Router();
  *         schema:
  *           type: string
  *           enum: [barbeiro, recepcionista, administrador]
+ *       - in: query
+ *         name: categoria
+ *         required: false
+ *         description: Filtra funcionarios que atendem a categoria (nome)
+ *         schema:
+ *           type: string
+ *           example: Cabelo
  *     responses:
  *       '200':
  *         description: Lista de funcionarios

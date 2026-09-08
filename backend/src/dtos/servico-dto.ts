@@ -17,6 +17,8 @@ export interface ServicoDTO {
   ativo: boolean;
   created_at: Date | string;
   updated_at: Date | string;
+  /** Nomes das categorias (N:N via servico_categoria). */
+  categorias: string[];
 }
 
 export interface ServicoPublicoDTO {
@@ -25,6 +27,8 @@ export interface ServicoPublicoDTO {
   descricao: string | null;
   duracao_minutos: number;
   preco: string;
+  /** Nomes das categorias (N:N via servico_categoria). */
+  categorias: string[];
 }
 
 export interface CreateServicoInput {
