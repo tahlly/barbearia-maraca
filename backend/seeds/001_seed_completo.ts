@@ -8,6 +8,9 @@ export async function seed(knex: Knex): Promise<void> {
   await knex('agendamento').del();
   await knex('horario_excecao').del();
   await knex('horario_trabalho').del();
+  await knex('servico_categoria').del();
+  await knex('funcionario_categoria').del();
+  await knex('categoria').del();
   await knex('servico').del();
   await knex('funcionario').del();
   await knex('cliente').del();
