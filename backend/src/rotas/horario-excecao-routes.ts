@@ -110,7 +110,7 @@ const horarioExcecaoRoutes = Router();
  *       - in: path
  *         name: id
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, format: uuid }
  *     requestBody:
  *       required: true
  *       content:
@@ -124,6 +124,8 @@ const horarioExcecaoRoutes = Router();
  *             schema: { $ref: '#/components/schemas/HorarioExcecao' }
  *       '400':
  *         $ref: '#/components/responses/Erro400'
+ *       '404':
+ *         $ref: '#/components/responses/Erro404'
  *   delete:
  *     tags: [ExcecoesHorario]
  *     summary: Exclui uma excecao de horario
@@ -133,12 +135,14 @@ const horarioExcecaoRoutes = Router();
  *       - in: path
  *         name: id
  *         required: true
- *         schema: { type: string }
+ *         schema: { type: string, format: uuid }
  *     responses:
  *       '204':
  *         description: Excecao excluida
  *       '400':
  *         $ref: '#/components/responses/Erro400'
+ *       '404':
+ *         $ref: '#/components/responses/Erro404'
  */
 
 // Todas as rotas de exceções de horário exigem autenticação. Os RBACs de

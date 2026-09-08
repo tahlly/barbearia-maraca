@@ -53,6 +53,13 @@ function compararHoras(inicio: string, fim: string): number {
   const [fh, fm, fs = '00'] = fim.split(':');
   const a = Number(ih) * 3600 + Number(im) * 60 + Number(is);
   const b = Number(fh) * 3600 + Number(fm) * 60 + Number(fs);
+
+  // Defesa contra comparação com NaN (ex.: string não numérica). Sem isso,
+  // "NaN <= 0" é false e um intervalo inválido passaria silenciosamente.
+  if (Number.isNaN(a) || Number.isNaN(b)) {
+    throw new ValidationError('hora_inicio e hora_fim devem estar no formato HH:MM');
+  }
+
   return a - b;
 }
 

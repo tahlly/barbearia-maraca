@@ -11,7 +11,7 @@ const TIPOS = ['bloqueio', 'liberacao'] as const;
 const DATA_MENSAGEM = 'data deve estar no formato YYYY-MM-DD';
 const DATA_REAL_MENSAGEM = 'data deve ser uma data de calendário válida';
 const HORA_MENSAGEM = 'hora deve estar no formato HH:MM';
-const TIPO_MENSAGEM = 'motivo deve ter no máximo 500 caracteres';
+const MOTIVO_MENSAGEM = 'motivo deve ter no máximo 500 caracteres';
 
 const createSchema = z.object({
   funcionario_id: z.string().uuid('funcionario_id inválido'),
@@ -19,7 +19,7 @@ const createSchema = z.object({
   hora_inicio: z.string().regex(HORA_REGEX, HORA_MENSAGEM),
   hora_fim: z.string().regex(HORA_REGEX, HORA_MENSAGEM),
   tipo: z.enum(TIPOS),
-  motivo: z.string().max(500, TIPO_MENSAGEM).nullable().optional(),
+  motivo: z.string().max(500, MOTIVO_MENSAGEM).nullable().optional(),
 });
 
 const updateSchema = z
@@ -32,7 +32,7 @@ const updateSchema = z
     hora_inicio: z.string().regex(HORA_REGEX, HORA_MENSAGEM).optional(),
     hora_fim: z.string().regex(HORA_REGEX, HORA_MENSAGEM).optional(),
     tipo: z.enum(TIPOS).optional(),
-    motivo: z.string().max(500, TIPO_MENSAGEM).nullable().optional(),
+    motivo: z.string().max(500, MOTIVO_MENSAGEM).nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'Nenhum campo para atualizar',

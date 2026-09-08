@@ -1579,7 +1579,8 @@
             "name": "id",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1606,6 +1607,9 @@
           },
           "400": {
             "$ref": "#/components/responses/Erro400"
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404"
           }
         }
       },
@@ -1625,7 +1629,8 @@
             "name": "id",
             "required": true,
             "schema": {
-              "type": "string"
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -1635,6 +1640,9 @@
           },
           "400": {
             "$ref": "#/components/responses/Erro400"
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404"
           }
         }
       }

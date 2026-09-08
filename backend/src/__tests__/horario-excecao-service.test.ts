@@ -95,6 +95,18 @@ describe('criarExcecao', () => {
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
+  it('rejeita intervalo com hora_fim igual a hora_inicio', async () => {
+    await expect(
+      criarExcecao(usuario('admin'), {
+        funcionario_id: 'func-1',
+        data: '2026-09-12',
+        hora_inicio: '09:00',
+        hora_fim: '09:00',
+        tipo: 'bloqueio',
+      })
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
   it('lança NotFoundError quando o funcionário não existe', async () => {
     vi.mocked(buscarFuncionarioPorId).mockResolvedValue(null);
 
