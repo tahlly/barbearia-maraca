@@ -29,7 +29,7 @@ const clienteRoutes = Router();
  *         nome: { type: string }
  *         email: { type: string, format: email }
  *         telefone: { type: string }
- *         senha: { type: string, format: password, minLength: 6 }
+ *         senha: { type: string, format: password, minLength: 8, description: 'Mínimo de 8 caracteres, com letra maiúscula e caractere especial' }
  *     UpdateClienteRequest:
  *       type: object
  *       minProperties: 1

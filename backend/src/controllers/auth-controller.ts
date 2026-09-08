@@ -11,6 +11,12 @@ import {
 import { JWT_EXPIRES_IN } from '../config/jwt';
 import { parseExpiresInToMs } from '../utils/jwt-utils';
 import { ValidationError } from '../errors/ValidationError';
+import {
+  SENHA_REGEX,
+  MENSAGEM_SENHA_FRACA,
+  senhaForteSchema,
+  senhaForteOpcionalSchema,
+} from '../utils/senha';
 
 function expiresAt(): number {
   return Date.now() + parseExpiresInToMs(JWT_EXPIRES_IN);
@@ -58,8 +64,8 @@ export async function registrarUsuario(req: Request, res: Response): Promise<voi
     return;
   }
 
-  if (senha.length < 6) {
-    res.status(400).json({ erro: true, mensagem: 'Senha deve ter no minimo 6 caracteres' });
+  if (!SENHA_REGEX.test(senha)) {
+    res.status(400).json({ erro: true, mensagem: MENSAGEM_SENHA_FRACA });
     return;
   }
 
@@ -117,7 +123,7 @@ const atualizarPerfilSchema = z.object({
   nome: z.string().min(1).optional(),
   email: z.string().email().optional(),
   senhaAtual: z.string().optional(),
-  novaSenha: z.string().min(6).optional(),
+  novaSenha: senhaForteOpcionalSchema,
 }).refine((data) => data.nome !== undefined || data.email !== undefined || data.novaSenha !== undefined, {
   message: 'Pelo menos um campo deve ser fornecido',
 });
@@ -137,7 +143,7 @@ const forgotPasswordSchema = z.object({
 
 const resetPasswordSchema = z.object({
   token: z.string().min(1),
-  novaSenha: z.string().min(6),
+  novaSenha: senhaForteSchema,
 });
 
 export async function forgotPasswordHandler(req: Request, res: Response): Promise<void> {

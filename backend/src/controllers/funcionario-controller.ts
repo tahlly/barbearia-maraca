@@ -2,6 +2,10 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import * as funcionarioService from '../services/funcionario-service';
 import { ValidationError } from '../errors/ValidationError';
+import {
+  senhaForteOpcionalSchema,
+  senhaForteFuncionarioOpcionalSchema,
+} from '../utils/senha';
 
 // ── Schemas de validação (Zod) ────────────────────────────────
 
@@ -10,7 +14,7 @@ const CARGOS = ['barbeiro', 'recepcionista', 'administrador'] as const;
 const criarFuncionarioSchema = z.object({
   nome: z.string().min(1, 'Nome é obrigatório'),
   email: z.string().email('Email inválido'),
-  senha: z.string().min(4, 'Senha deve ter no mínimo 4 caracteres').max(64).optional(),
+  senha: senhaForteFuncionarioOpcionalSchema,
   telefone: z.string().optional(),
   cargo: z.enum(CARGOS).optional(),
   especialidade: z.string().max(100).optional(),
@@ -24,7 +28,7 @@ const atualizarFuncionarioSchema = z.object({
   foto: z.string().max(255).optional(),
   descricao: z.string().optional(),
   email: z.string().email('Email inválido').optional(),
-  senha: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres').optional(),
+  senha: senhaForteOpcionalSchema,
 });
 
 const alterarStatusSchema = z.object({

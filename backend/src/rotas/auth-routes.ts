@@ -48,7 +48,7 @@ const authRoutes = Router();
  *       required: [email, senha, nome]
  *       properties:
  *         email: { type: string, example: novo@email.com }
- *         senha: { type: string, format: password, minLength: 6 }
+ *         senha: { type: string, format: password, minLength: 8, description: 'Mínimo de 8 caracteres, com letra maiúscula e caractere especial' }
  *         nome: { type: string }
  *         telefone: { type: string, nullable: true }
  *     AuthRegisterResponse:
@@ -85,7 +85,7 @@ const authRoutes = Router();
  *         nome: { type: string }
  *         email: { type: string, format: email }
  *         senhaAtual: { type: string }
- *         novaSenha: { type: string, format: password, minLength: 6 }
+ *         novaSenha: { type: string, format: password, minLength: 8, description: 'Mínimo de 8 caracteres, com letra maiúscula e caractere especial' }
  *     AuthLogoutResponse:
  *       type: object
  *       properties:
@@ -104,7 +104,7 @@ const authRoutes = Router();
  *       required: [token, novaSenha]
  *       properties:
  *         token: { type: string }
- *         novaSenha: { type: string, format: password, minLength: 6 }
+ *         novaSenha: { type: string, format: password, minLength: 8, description: 'Mínimo de 8 caracteres, com letra maiúscula e caractere especial' }
  *     ResetPasswordResponse:
  *       type: object
  *       properties:

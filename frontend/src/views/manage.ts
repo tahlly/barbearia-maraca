@@ -1,6 +1,6 @@
 import { renderPanel } from "../ui/layout.js";
 import { requireRole, updateSessionUser } from "../services/auth.js";
-import { $$, $, escapeHtml, initials } from "../ui/dom.js";
+import { $, $$, clearFormErrors, escapeHtml, initials, setFieldError } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { formatCurrency, formatDateMedium } from "../ui/format.js";
 import {
@@ -31,8 +31,8 @@ import { showToast } from "../ui/toast.js";
 import { renderSettingsForm } from "../features/settingsForm.js";
 import { initBookingWizard } from "../features/bookingWizard.js";
 import { attachUppercaseMask } from "../ui/mask.js";
+import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
 import type { Service, Appointment, Professional } from "../types.js";
-import { CONFIG } from "../config.js";
 
 type ManageTab = "dashboard" | "servicos" | "profissionais" | "agendamentos" | "configuracoes";
 
@@ -1356,20 +1356,32 @@ if (status === "cancelado") {
             <span class="field__hint">${isEdit && usuario ? "Login existente. Para alterar o e-mail, use as Configurações." : "Cria o acesso de login deste profissional."}</span>
           </div>
           ${isEdit
-            ? ""
-            : `
-            <div class="field">
-              <label class="field__label" for="pro-password">Senha de acesso</label>
-              <div class="input-wrap">
-                <input type="password" id="pro-password" value="${escapeHtml(CONFIG.defaultPassword)}" maxlength="64" autocomplete="new-password">
-                <button type="button" class="input-suffix" id="toggle-pro-password" aria-label="Mostrar senha">
-                  <i class='bx bx-show'></i>
-                </button>
+            ? `
+              <div class="field">
+                <label class="field__label" for="pro-password">Nova senha</label>
+                <div class="input-wrap">
+                  <input type="password" id="pro-password" maxlength="64" autocomplete="new-password" placeholder="••••••••">
+                  <button type="button" class="input-suffix" id="toggle-pro-password" aria-label="Mostrar senha">
+                    <i class='bx bx-show'></i>
+                  </button>
+                </div>
+                <span class="field__hint">Deixe em branco para manter a senha atual.</span>
+                <span class="field__error">${SENHA_FORTE_MESSAGE}</span>
               </div>
-              <span class="field__hint">Senha temporária de acesso. O funcionário será obrigado a trocá-la no primeiro login.</span>
-              <span class="field__error">A senha deve ter pelo menos 4 caracteres.</span>
-            </div>
-          `}
+            `
+            : `
+              <div class="field">
+                <label class="field__label" for="pro-password">Senha de acesso</label>
+                <div class="input-wrap">
+                  <input type="password" id="pro-password" maxlength="64" autocomplete="new-password" placeholder="••••••••">
+                  <button type="button" class="input-suffix" id="toggle-pro-password" aria-label="Mostrar senha">
+                    <i class='bx bx-show'></i>
+                  </button>
+                </div>
+                <span class="field__hint">Deixe em branco para gerar uma senha temporária. O funcionário será obrigado a trocá-la no primeiro login.</span>
+                <span class="field__error">${SENHA_FORTE_MESSAGE}</span>
+              </div>
+            `}
           <div class="modal__footer">
             <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
             <button type="submit" class="btn btn--primary">${isEdit ? "Salvar" : "Cadastrar"}</button>
@@ -1384,10 +1396,8 @@ if (status === "cancelado") {
       window.setTimeout(() => overlay.remove(), 300);
     };
 
-    const passwordInput =
-      isEdit ? null : ($("#pro-password", overlay) as HTMLInputElement | null);
-    const toggleBtn =
-      isEdit ? null : ($("#toggle-pro-password", overlay) as HTMLButtonElement | null);
+    const passwordInput = $("#pro-password", overlay) as HTMLInputElement | null;
+    const toggleBtn = $("#toggle-pro-password", overlay) as HTMLButtonElement | null;
     if (passwordInput && toggleBtn) {
       const toggle = (): void => {
         const reveal = passwordInput.type === "password";
@@ -1401,6 +1411,7 @@ if (status === "cancelado") {
 
     const submitHandler = async (event: Event): Promise<void> => {
       event.preventDefault();
+      clearFormErrors(form);
       const name = ($("#pro-name", overlay) as HTMLInputElement).value.trim();
       const email = ($("#pro-email", overlay) as HTMLInputElement).value.trim().toLowerCase();
       const role = ($("#pro-role", overlay) as HTMLInputElement).value.trim();
@@ -1423,12 +1434,15 @@ if (status === "cancelado") {
         return;
       }
 
-if (!isEdit && passwordInput) {
-        const senha = passwordInput.value;
-        if (senha.length < 4) {
-          showToast("A senha deve ter pelo menos 4 caracteres.", "error");
-          return;
-        }
+      // Política de senha forte (issue #55): campo em branco → `senha` é
+      // omitida do payload (o backend aplica senha temporária + primeira troca
+      // obrigatória no login); campo preenchido → exige 8+, maiúscula e
+      // caractere especial, com a mesma semântica do backend.
+      const senha = passwordInput?.value ?? "";
+      const senhaInformada = senha.trim() !== "";
+      if (senhaInformada && !isSenhaForte(senha)) {
+        if (passwordInput) setFieldError(passwordInput, SENHA_FORTE_MESSAGE);
+        return;
       }
 
       const submitBtn = form.querySelector<HTMLButtonElement>("button[type=submit]");
@@ -1447,13 +1461,22 @@ if (!isEdit && passwordInput) {
             // role é o `cargo` do backend (barbeiro/recepcionista/administrador).
             const cargo: "barbeiro" | "recepcionista" | "administrador" =
               role.toLowerCase().includes("recepcion") ? "recepcionista" : "barbeiro";
-            await updateUsuarioInterno(existing.id, {
+            const dadosAtualizacao: {
+              nome: string;
+              cargo: "barbeiro" | "recepcionista" | "administrador";
+              especialidade: string;
+              senha?: string;
+            } = {
               nome: name,
               cargo,
               especialidade: role,
-            });
+            };
+            // Senha opcional no PUT: só é enviada quando o admin informa uma
+            // nova senha válida; vazio mantém a senha atual.
+            if (senhaInformada) dadosAtualizacao.senha = senha;
+            await updateUsuarioInterno(existing.id, dadosAtualizacao);
           }
-          showToast("Profissional atualizado.");
+          showToast(senhaInformada ? "Profissional atualizado. Nova senha definida." : "Profissional atualizado.");
         } catch (error) {
           showToast(errorMessage(error, "Erro ao atualizar profissional."), "error");
         } finally {
@@ -1466,14 +1489,20 @@ if (!isEdit && passwordInput) {
 
       // Novo profissional: cria funcionário via API e atualiza o cache local.
       try {
-        const senha = passwordInput?.value || CONFIG.defaultPassword;
-        await createUsuarioInterno({
+        const payload: { nome: string; email: string; role: "profissional"; senha?: string } = {
           nome: name,
           email,
-          senha,
           role: "profissional",
-        });
-        showToast(`Profissional cadastrado! Senha: ${senha}. O primeiro login obrigará a troca.`, "success");
+        };
+        // Senha opcional no POST: omitida quando em branco (backend gera a
+        // senha temporária e força a troca no primeiro acesso).
+        if (senhaInformada) payload.senha = senha;
+        await createUsuarioInterno(payload);
+        if (senhaInformada) {
+          showToast(`Profissional cadastrado! Senha de acesso: ${senha}. O primeiro login obrigará a troca.`, "success");
+        } else {
+          showToast("Profissional cadastrado! Uma senha temporária foi gerada; o primeiro login obrigará a troca.", "success");
+        }
         finish();
         await renderProfissionais();
       } catch (error) {

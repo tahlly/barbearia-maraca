@@ -48,7 +48,7 @@ const funcionarioRoutes = Router();
  *       properties:
  *         nome: { type: string }
  *         email: { type: string, format: email }
- *         senha: { type: string, format: password, minLength: 4 }
+ *         senha: { type: string, format: password, minLength: 8, description: 'Opcional; quando informada, mínimo de 8 caracteres, com letra maiúscula e caractere especial' }
  *         telefone: { type: string }
  *         cargo:
  *           type: string
@@ -60,7 +60,7 @@ const funcionarioRoutes = Router();
  *       properties:
  *         nome: { type: string }
  *         email: { type: string, format: email }
- *         senha: { type: string, format: password, minLength: 6 }
+ *         senha: { type: string, format: password, minLength: 8, description: 'Mínimo de 8 caracteres, com letra maiúscula e caractere especial' }
  *         telefone: { type: string }
  *         cargo:
  *           type: string
