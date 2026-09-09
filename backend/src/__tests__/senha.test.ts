@@ -379,7 +379,10 @@ describe('POST /api/funcionarios — criar funcionário', () => {
 
   it('rejeita senha fraca com erro de validação (→ 400) e não chama o service', async () => {
     const promise = criarFuncionarioHandler(
-      { body: { nome: 'Barbeiro Teste', email: 'barbeiro@email.com', senha: SENHA_FRACA } } as unknown as Request,
+      {
+        body: { nome: 'Barbeiro Teste', email: 'barbeiro@email.com', senha: SENHA_FRACA },
+        user: { id: 'u-admin', role: 'admin' },
+      } as unknown as Request,
       criarFakeRes() as unknown as Response,
     );
 
@@ -400,7 +403,10 @@ describe('POST /api/funcionarios — criar funcionário', () => {
     });
     const res = criarFakeRes();
     await criarFuncionarioHandler(
-      { body: { nome: 'Barbeiro Teste', email: 'barbeiro@email.com' } } as unknown as Request,
+      {
+        body: { nome: 'Barbeiro Teste', email: 'barbeiro@email.com' },
+        user: { id: 'u-admin', role: 'admin' },
+      } as unknown as Request,
       res as unknown as Response,
     );
 
@@ -420,13 +426,17 @@ describe('POST /api/funcionarios — criar funcionário', () => {
     });
     const res = criarFakeRes();
     await criarFuncionarioHandler(
-      { body: { nome: 'Barbeiro Teste', email: 'barbeiro@email.com', senha: SENHA_FORTE } } as unknown as Request,
+      {
+        body: { nome: 'Barbeiro Teste', email: 'barbeiro@email.com', senha: SENHA_FORTE },
+        user: { id: 'u-admin', role: 'admin' },
+      } as unknown as Request,
       res as unknown as Response,
     );
 
     expect(res.statusCode).toBe(201);
     expect(funcionarioService.criarFuncionario).toHaveBeenCalledWith(
       expect.objectContaining({ senha: SENHA_FORTE }),
+      { id: 'u-admin', role: 'admin' },
     );
   });
 });
@@ -438,7 +448,7 @@ describe('PUT /api/funcionarios/:id — atualizar funcionário', () => {
 
   it('rejeita senha fraca com erro de validação (→ 400) e não chama o service', async () => {
     const promise = atualizarFuncionarioHandler(
-      { params: { id: 'f1' }, body: { senha: SENHA_FRACA } } as unknown as Request,
+      { params: { id: 'f1' }, body: { senha: SENHA_FRACA }, user: { id: 'u-admin', role: 'admin' } } as unknown as Request,
       criarFakeRes() as unknown as Response,
     );
 
@@ -459,7 +469,7 @@ describe('PUT /api/funcionarios/:id — atualizar funcionário', () => {
     });
     const res = criarFakeRes();
     await atualizarFuncionarioHandler(
-      { params: { id: 'f1' }, body: { senha: SENHA_FORTE } } as unknown as Request,
+      { params: { id: 'f1' }, body: { senha: SENHA_FORTE }, user: { id: 'u-admin', role: 'admin' } } as unknown as Request,
       res as unknown as Response,
     );
 
@@ -467,6 +477,7 @@ describe('PUT /api/funcionarios/:id — atualizar funcionário', () => {
     expect(funcionarioService.atualizarFuncionario).toHaveBeenCalledWith(
       'f1',
       expect.objectContaining({ senha: SENHA_FORTE }),
+      { id: 'u-admin', role: 'admin' },
     );
   });
 });

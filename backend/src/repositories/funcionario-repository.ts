@@ -1,3 +1,4 @@
+import type { Knex } from 'knex';
 import db from '../database/connection';
 import type {
   FuncionarioRow,
@@ -165,6 +166,7 @@ export async function criar(dados: {
   telefone?: string;
   cargo?: string;
   especialidade?: string;
+  categorias?: string[];
 }): Promise<FuncionarioCriadoDTO> {
   return db.transaction(async (trx) => {
     const [usuarioRow] = (await trx('usuario')
@@ -186,6 +188,28 @@ export async function criar(dados: {
       })
       .returning('*')) as Array<FuncionarioRow>;
 
+    // ── Categorias (somente quando fornecidas) ──
+    const categoriasAtribuidas: string[] = [];
+    if (dados.categorias !== undefined) {
+      const categoriasAtivas = await trx('categoria')
+        .where('ativo', true)
+        .select('id', 'nome') as Array<{ id: string; nome: string }>;
+      const mapaNomeParaId = new Map(categoriasAtivas.map((c) => [c.nome, c.id]));
+
+      const linhasInserir: Array<{ funcionario_id: string; categoria_id: string }> = [];
+      for (const nome of dados.categorias) {
+        const catId = mapaNomeParaId.get(nome);
+        if (catId) {
+          linhasInserir.push({ funcionario_id: funcionarioRow.id, categoria_id: catId });
+          categoriasAtribuidas.push(nome);
+        }
+        // nomes inválidos/inativos são ignorados silenciosamente
+      }
+      if (linhasInserir.length > 0) {
+        await trx('funcionario_categoria').insert(linhasInserir);
+      }
+    }
+
     return {
       id: funcionarioRow.id,
       usuarioId: usuarioRow.id,
@@ -194,6 +218,7 @@ export async function criar(dados: {
       telefone: funcionarioRow.telefone,
       cargo: funcionarioRow.cargo,
       especialidade: funcionarioRow.especialidade,
+      categorias: categoriasAtribuidas,
     };
   });
 }
@@ -209,6 +234,7 @@ export async function atualizar(
     descricao?: string;
     email?: string;
     senhaHash?: string;
+    categorias?: string[];
   },
 ): Promise<FuncionarioCompletoDTO | null> {
   // Verifica se há algo para atualizar
@@ -221,25 +247,27 @@ export async function atualizar(
   if (dados.descricao !== undefined) funcionarioUpdates.descricao = dados.descricao;
 
   const hasUsuarioUpdates = dados.email !== undefined || dados.senhaHash !== undefined;
+  const hasCategorias = dados.categorias !== undefined;
 
-  if (Object.keys(funcionarioUpdates).length === 0 && !hasUsuarioUpdates) {
+  if (Object.keys(funcionarioUpdates).length === 0 && !hasUsuarioUpdates && !hasCategorias) {
     return buscarPorId(id);
   }
 
-  // Se há atualizações de usuario, usa transaction para atomicidade
-  if (hasUsuarioUpdates) {
+  const precisaTrx = hasUsuarioUpdates || hasCategorias;
+
+  if (precisaTrx) {
     await db.transaction(async (trx) => {
-      // Busca o usuario_id do funcionário
       const funcionarioRow = await trx('funcionario').where('id', id).first();
       if (!funcionarioRow) return;
 
       // Atualiza campos de usuario se fornecidos
-      const usuarioUpdates: Record<string, string> = {};
-      if (dados.email !== undefined) usuarioUpdates.email = dados.email;
-      if (dados.senhaHash !== undefined) usuarioUpdates.senha_hash = dados.senhaHash;
-
-      if (Object.keys(usuarioUpdates).length > 0) {
-        await trx('usuario').where('id', funcionarioRow.usuario_id).update(usuarioUpdates);
+      if (hasUsuarioUpdates) {
+        const usuarioUpdates: Record<string, string> = {};
+        if (dados.email !== undefined) usuarioUpdates.email = dados.email;
+        if (dados.senhaHash !== undefined) usuarioUpdates.senha_hash = dados.senhaHash;
+        if (Object.keys(usuarioUpdates).length > 0) {
+          await trx('usuario').where('id', funcionarioRow.usuario_id).update(usuarioUpdates);
+        }
       }
 
       // Atualiza campos de funcionário
@@ -247,10 +275,40 @@ export async function atualizar(
         await trx('funcionario').where('id', id).update(funcionarioUpdates);
       }
 
+      // Resolve cargo efetivo (pode ter acabado de ser atualizado)
+      const cargoEfetivo = dados.cargo ?? funcionarioRow.cargo;
+
+      // ── Categorias ──
+      if (hasCategorias) {
+        if (cargoEfetivo !== 'barbeiro') {
+          // Cargo não é barbeiro → remove qualquer associação existente
+          await trx('funcionario_categoria').where('funcionario_id', id).del();
+        } else {
+          // Limpa todas as associações e reinsere conforme lista
+          await trx('funcionario_categoria').where('funcionario_id', id).del();
+          if (dados.categorias!.length > 0) {
+            const categoriasAtivas = await trx('categoria')
+              .where('ativo', true)
+              .select('id', 'nome') as Array<{ id: string; nome: string }>;
+            const mapaNomeParaId = new Map(categoriasAtivas.map((c) => [c.nome, c.id]));
+            const linhasInserir: Array<{ funcionario_id: string; categoria_id: string }> = [];
+            for (const nome of dados.categorias!) {
+              const catId = mapaNomeParaId.get(nome);
+              if (catId) {
+                linhasInserir.push({ funcionario_id: id, categoria_id: catId });
+              }
+            }
+            if (linhasInserir.length > 0) {
+              await trx('funcionario_categoria').insert(linhasInserir);
+            }
+          }
+        }
+      }
+
       await trx('funcionario').where('id', id).update({ updated_at: trx.fn.now() });
     });
   } else if (Object.keys(funcionarioUpdates).length > 0) {
-    // Sem alterações em usuario — atualiza direto
+    // Sem alterações em usuario e sem categorias — atualiza direto
     await db('funcionario').where('id', id).update(funcionarioUpdates);
     await db('funcionario').where('id', id).update({ updated_at: db.fn.now() });
   }

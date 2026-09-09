@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import { findUsuarioByEmail } from '../repositories/auth-repository';
 import * as funcionarioRepo from '../repositories/funcionario-repository';
+import { listarCategoriasAtivas } from './categoria-service';
 import { ValidationError } from '../errors/ValidationError';
 import { NotFoundError } from '../errors/NotFoundError';
 import { ForbiddenError } from '../errors/ForbiddenError';
@@ -8,6 +9,33 @@ import type { FuncionarioPublicoDTO, FuncionarioCompletoDTO, FuncionarioCriadoDT
 
 const SALT_ROUNDS = 10;
 const SENHA_PADRAO = '123456';
+
+/**
+ * Valida a lista de categorias antes de repassar ao repositório:
+ * - cargo final ≠ barbeiro com categorias não vazia → 400 (categorias são
+ *   exclusivas de barbeiros);
+ * - nome desconhecido ou categoria inativa → 400;
+ * - lista vazia/ausente é permitida (o repositório limpa as associações).
+ */
+async function validarCategorias(
+  categorias: string[] | undefined,
+  cargoFinal: string,
+): Promise<string[] | undefined> {
+  if (categorias === undefined || categorias.length === 0) {
+    return categorias;
+  }
+  if (cargoFinal !== 'barbeiro') {
+    throw new ValidationError('Categorias só podem ser atribuídas a barbeiros');
+  }
+  const ativas = await listarCategoriasAtivas();
+  const nomesAtivos = new Set(ativas.map((categoria) => categoria.nome));
+  for (const nome of categorias) {
+    if (!nomesAtivos.has(nome)) {
+      throw new ValidationError(`Categoria desconhecida ou inativa: ${nome}`);
+    }
+  }
+  return categorias;
+}
 
 // ── Listagens ─────────────────────────────────────────────────
 
@@ -79,14 +107,28 @@ export async function buscarFuncionarioPorEmail(
 
 // ── Criação ───────────────────────────────────────────────────
 
-export async function criarFuncionario(dados: {
-  nome: string;
-  email: string;
-  senha?: string;
-  telefone?: string;
-  cargo?: string;
-  especialidade?: string;
-}): Promise<FuncionarioCriadoDTO> {
+export async function criarFuncionario(
+  dados: {
+    nome: string;
+    email: string;
+    senha?: string;
+    telefone?: string;
+    cargo?: string;
+    especialidade?: string;
+    categorias?: string[];
+  },
+  solicitante: { id: string; role: string },
+): Promise<FuncionarioCriadoDTO> {
+  // RBAC: recepcionista só cria barbeiro; demais papéis negados por padrão.
+  if (solicitante.role !== 'admin') {
+    const cargoFinal = dados.cargo ?? 'barbeiro';
+    if (solicitante.role !== 'recepcionista' || cargoFinal !== 'barbeiro') {
+      throw new ForbiddenError('Acesso negado');
+    }
+  }
+
+  const categorias = await validarCategorias(dados.categorias, dados.cargo ?? 'barbeiro');
+
   // Validação de email único (regra de negócio)
   const existente = await findUsuarioByEmail(dados.email);
   if (existente) {
@@ -105,6 +147,7 @@ export async function criarFuncionario(dados: {
     telefone: dados.telefone,
     cargo: dados.cargo,
     especialidade: dados.especialidade,
+    categorias,
   });
 }
 
@@ -121,17 +164,49 @@ export async function atualizarFuncionario(
     descricao?: string;
     email?: string;
     senha?: string;
+    categorias?: string[];
   },
+  solicitante?: { id: string; role: string },
 ): Promise<FuncionarioCompletoDTO> {
+  // ── RBAC ────────────────────────────────────────────────────
+  if (solicitante && solicitante.role !== 'admin') {
+    const atual = await funcionarioRepo.buscarPorId(id);
+    if (!atual) {
+      throw new NotFoundError('Funcionário não encontrado');
+    }
+
+    if (solicitante.role === 'recepcionista') {
+      // Recepcionista só pode atualizar barbeiros
+      if (atual.cargo !== 'barbeiro') {
+        throw new ForbiddenError('Recepcionista não pode alterar funcionários com cargo diferente de barbeiro');
+      }
+      // Cargo final permanece barbeiro (não pode mudar cargo)
+      const cargoFinal = dados.cargo ?? atual.cargo;
+      if (cargoFinal !== 'barbeiro') {
+        throw new ForbiddenError('Recepcionista não pode alterar cargo para diferente de barbeiro');
+      }
+    } else {
+      // Qualquer outro papel (ex.: barbeiro, cliente) — negar por padrão
+      throw new ForbiddenError('Acesso negado');
+    }
+  }
+
+  // ── Busca atual para validações ─────────────────────────────
+  const atual = await funcionarioRepo.buscarPorId(id);
+  if (!atual) {
+    throw new NotFoundError('Funcionário não encontrado');
+  }
+
+  const cargoFinal = dados.cargo ?? atual.cargo;
+
+  // ── Categorias ──────────────────────────────────────────────
+  const categorias = await validarCategorias(dados.categorias, cargoFinal);
+
   // Se email foi fornecido, verificar se já está em uso por outro usuário
   if (dados.email) {
     const existente = await findUsuarioByEmail(dados.email);
-    if (existente) {
-      // Busca o funcionário atual para saber seu usuarioId
-      const atual = await funcionarioRepo.buscarPorId(id);
-      if (atual && atual.usuarioId !== existente.id) {
-        throw new ValidationError('Email já cadastrado por outro usuário');
-      }
+    if (existente && atual.usuarioId !== existente.id) {
+      throw new ValidationError('Email já cadastrado por outro usuário');
     }
   }
 
@@ -142,6 +217,7 @@ export async function atualizarFuncionario(
 
   const atualizado = await funcionarioRepo.atualizar(id, {
     ...dados,
+    categorias,
     senhaHash,
   });
   if (!atualizado) {
@@ -152,7 +228,28 @@ export async function atualizarFuncionario(
 
 // ── Alternância de status ─────────────────────────────────────
 
-export async function alternarStatusFuncionario(id: string, ativo: boolean): Promise<boolean> {
+export async function alternarStatusFuncionario(
+  id: string,
+  ativo: boolean,
+  solicitante?: { id: string; role: string },
+): Promise<boolean> {
+  // ── RBAC ────────────────────────────────────────────────────
+  if (solicitante && solicitante.role !== 'admin') {
+    if (solicitante.role === 'recepcionista') {
+      // Busca o funcionário para verificar o cargo
+      const atual = await funcionarioRepo.buscarPorId(id);
+      if (!atual) {
+        throw new NotFoundError('Funcionário não encontrado');
+      }
+      if (atual.cargo !== 'barbeiro') {
+        throw new ForbiddenError('Recepcionista não pode alterar status de funcionários com cargo diferente de barbeiro');
+      }
+    } else {
+      // Qualquer outro papel — negar por padrão
+      throw new ForbiddenError('Acesso negado');
+    }
+  }
+
   const alterado = await funcionarioRepo.trocarStatus(id, ativo);
   if (!alterado) {
     throw new NotFoundError('Funcionário não encontrado');
