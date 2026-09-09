@@ -60,6 +60,9 @@ body.light-theme {
   --color-surface-raised: #e8e8e8;
   --color-border: #d4d4d8;
 
+  --color-gold: #8a6d1d;
+  --color-gold-strong: #7c6a15;
+
   --color-text: #18181b;
   --color-text-secondary: #52525b;
   --color-text-muted: #71717a;

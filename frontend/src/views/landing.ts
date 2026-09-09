@@ -136,7 +136,14 @@ export function renderLanding(container: HTMLElement): () => void {
               <span class="contact__icon" aria-hidden="true"><i class='bx bx-map'></i></span>
               <div>
                 <h3>Endereço</h3>
-                <p>Rua fictícia Maracá, 123 — Montese<br>Belém — PA, 66.010-000</p>
+                <p>R. Francisco Real, 763 - Lj "C - Padre Miguel<br>Rio de Janeiro — RJ, 21810-041</p>
+              </div>
+            </div>
+            <div class="contact__item">
+              <span class="contact__icon" aria-hidden="true"><i class='bx bx-phone'></i></span>
+              <div>
+                <h3>Telefone</h3>
+                <p><a href="tel:+5521966420270">(21) 96642-0270</a></p>
               </div>
             </div>
             <div class="contact__item">
@@ -148,11 +155,17 @@ export function renderLanding(container: HTMLElement): () => void {
             </div>
             <div class="contact__socials">
               <a href="https://www.instagram.com/barbeariamaraca/" target="_blank" rel="noopener noreferrer" class="social-btn" aria-label="Instagram da Barbearia Maracá"><i class='bx bxl-instagram'></i></a>
-              <a href="https://wa.me/5591999999999" target="_blank" rel="noopener noreferrer" class="social-btn" aria-label="WhatsApp da Barbearia Maracá"><i class='bx bxl-whatsapp'></i></a>
+              <a href="https://wa.me/5521966420270" target="_blank" rel="noopener noreferrer" class="social-btn" aria-label="WhatsApp da Barbearia Maracá"><i class='bx bxl-whatsapp'></i></a>
             </div>
           </div>
           <div class="map-image">
-            <img src="assets/images/maps.jpg" alt="Mapa de localização da Barbearia Maracá" loading="lazy">
+            <iframe
+              src="https://www.google.com/maps?q=R.%20Francisco%20Real%2C%20763%20-%20Padre%20Miguel%2C%20Rio%20de%20Janeiro%20-%20RJ%2C%2021810-041&output=embed"
+              title="Mapa de localização da Barbearia Maracá"
+              loading="lazy"
+              referrerpolicy="no-referrer-when-downgrade"
+              allowfullscreen
+            ></iframe>
           </div>
         </div>
       </div>
