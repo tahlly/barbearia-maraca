@@ -101,24 +101,27 @@ frontend/
 - **Validação client-side** nos formulários (nome, telefone, e-mail, senha).
 - **CSS3 nativo** com variáveis, BEM e animações; responsivo desktop/mobile.
 
-## Credencial demo (ambiente mock)
+## Credenciais de demonstração
+
+Usuários criados pelo seed do backend / cadastrados no banco (senha padrão `senha123`):
 
 ```
 # Área do Cliente
-e-mail: cliente@maraca.com
-senha:  cliente123
+e-mail: maria@email.com            senha: senha123     → Cliente (Maria Oliveira)
+e-mail: pedro@email.com            senha: senha123     → Cliente (Pedro Santos)
 
 # Área Administrativa (redireciona por papel)
-e-mail: super@maraca.com         senha: maraca123     → Superusuário
-e-mail: admin@maraca.com        senha: maraca123     → Administrador
-e-mail: recepcao@maraca.com     senha: 123456        → Recepcionista
-e-mail: profissional@maraca.com senha: 123456        → Profissional
+e-mail: carlos@barbeariamaraca.com.br  senha: senha123  → Administrador (Carlos Silva)
+e-mail: ana@barbeariamaraca.com.br     senha: senha123  → Recepcionista (Ana Souza)
+e-mail: joao@barbeariamaraca.com.br    senha: senha123  → Profissional / Barbeiro (João Pedro)
+e-mail: lucas@barbeariamaraca.com.br   senha: senha123  → Profissional / Barbeiro (Lucas Mendes)
 ```
 
+A área do cliente (`#/login-cliente`) inclui **Login com Google**. O login
+administrativo (`#/login`) usa apenas e-mail e senha.
+
 Novos profissionais cadastrados no painel do administrador recebem a **senha
-padrão `123456`** (o usuário deve alterá-la em Configurações). Se o checkbox
-"É recepcionista" for marcado, o usuário é direcionado para a tela da
-Recepcionista ao entrar; caso contrário, para a tela do Profissional.
+padrão `123456`** (o usuário deve alterá-la em Configurações).
 
 ## Contrato esperado do back-end
 

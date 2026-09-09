@@ -178,6 +178,7 @@ export async function atualizarFuncionario(
     telefone?: string;
     cargo?: string;
     especialidade?: string;
+    categoria?: string;
     foto?: string;
     descricao?: string;
     email?: string;

@@ -10,6 +10,7 @@ interface ServicoPublicoDTO {
   id: string;
   nome: string;
   descricao?: string | null;
+  categoria?: string | null;
   duracao_minutos: number;
   preco: string;
   categorias?: string[];
@@ -19,6 +20,7 @@ interface ServicoAdminDTO {
   id: string;
   nome: string;
   descricao: string | null;
+  categoria?: string | null;
   duracao_minutos: number;
   preco: string;
   ativo: boolean;
@@ -30,6 +32,7 @@ interface FuncionarioPublicoDTO {
   nome: string;
   cargo: CargoFuncionario;
   especialidade: string | null;
+  categoria?: string | null;
   foto: string | null;
   descricao: string | null;
   categorias?: string[];
@@ -158,6 +161,7 @@ export async function primeCatalog(): Promise<void> {
 export async function createServico(data: {
   name: string;
   description: string;
+  category: string;
   durationMin: number;
   price: number;
 }): Promise<Service> {
@@ -166,6 +170,7 @@ export async function createServico(data: {
     body: JSON.stringify({
       nome: data.name,
       descricao: data.description || null,
+      categoria: data.category || null,
       duracao_minutos: data.durationMin,
       preco: data.price,
     }),
@@ -179,6 +184,7 @@ export async function updateServico(
   data: {
     name: string;
     description: string;
+    category: string;
     durationMin: number;
     price: number;
   },
@@ -190,6 +196,7 @@ export async function updateServico(
       body: JSON.stringify({
         nome: data.name,
         descricao: data.description || null,
+        categoria: data.category || null,
         duracao_minutos: data.durationMin,
         preco: data.price,
       }),

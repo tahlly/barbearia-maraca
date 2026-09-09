@@ -10,7 +10,7 @@ SPA full-stack para gestão de uma barbearia — agendamentos online, operação
 - [Arquitetura do projeto](#arquitetura-do-projeto)
 - [Estrutura de pastas](#estrutura-de-pastas)
 - [Como iniciar o projeto](#como-iniciar-o-projeto)
-- [Usuários de teste (seed)](#usuários-de-teste-seed)
+- [Usuários do sistema (seed)](#usuários-do-sistema-seed)
 - [Comandos disponíveis](#comandos-úteis)
 - [Regras de domínio e autorização](#regras-de-domínio-e-autorização)
 - [Contratos compartilhados](#contratos-compartilhados)
@@ -269,18 +269,18 @@ Invoke-WebRequest http://localhost:3000/api/health
 
 ---
 
-## <a name="usuários-de-teste-seed"></a>Usuários de teste (seed)
+## <a name="usuários-do-sistema-seed"></a>Usuários do sistema (seed)
 
-Todos os usuários usam a senha **`senha123`**:
+Usuários criados pelo seed do backend / cadastrados no banco (senha padrão **`senha123`**):
 
-| Papel | E-mail |
-|-------|--------|
-| **Administrador** | `carlos@barbeariamaraca.com.br` |
-| **Recepcionista** | `ana@barbeariamaraca.com.br` |
-| **Barbeiro** | `joao@barbeariamaraca.com.br` |
-| **Barbeiro** | `lucas@barbeariamaraca.com.br` |
-| **Cliente** | `maria@email.com` |
-| **Cliente** | `pedro@email.com` |
+| Papel | Nome | E-mail |
+|-------|------|--------|
+| **Administrador** | Carlos Silva | `carlos@barbeariamaraca.com.br` |
+| **Recepcionista** | Ana Souza | `ana@barbeariamaraca.com.br` |
+| **Barbeiro** | João Pedro | `joao@barbeariamaraca.com.br` |
+| **Barbeiro** | Lucas Mendes | `lucas@barbeariamaraca.com.br` |
+| **Cliente** | Maria Oliveira | `maria@email.com` |
+| **Cliente** | Pedro Santos | `pedro@email.com` |
 
 ---
 

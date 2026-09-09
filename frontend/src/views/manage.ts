@@ -810,14 +810,18 @@ if (status === "cancelado") {
 
   // ------------------------------------------------------- Agenda config modal
   async function openScheduleModal(): Promise<void> {
-    // Em modo API, horários são por funcionário; resolve o perfil do usuário logado.
-    const usuario = await findUsuarioByEmail(session.userEmail);
-    const professionalId = usuario?.professionalId ?? null;
-    if (!professionalId) {
-      showToast("Não foi possível identificar seu perfil de funcionário.", "error");
+    // A agenda é por barbeiro. Admin e recepção escolhem o barbeiro no seletor;
+    // se o próprio usuário é barbeiro (ex.: admin que também atende), abre o dele.
+    const barbeiros = prosCache.filter((p) => p.cargo === "barbeiro" && p.active);
+    if (barbeiros.length === 0) {
+      showToast("Nenhum barbeiro cadastrado com agenda.", "error");
       return;
     }
-    const config = await loadSchedule(professionalId);
+    const usuario = await findUsuarioByEmail(session.userEmail);
+    const ownProId = usuario?.professionalId ?? null;
+    const isOwnBarbeiro = ownProId ? barbeiros.some((b) => b.id === ownProId) : false;
+    let professionalId = isOwnBarbeiro ? String(ownProId) : barbeiros[0].id;
+    let config = await loadSchedule(professionalId);
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.setAttribute("aria-hidden", "true");
@@ -829,55 +833,19 @@ if (status === "cancelado") {
         </div>
         <div class="modal__body">
           <form id="schedule-form" novalidate>
-            <h4 class="manage-form-title">Horário padrão da semana</h4>
-            <div class="schedule-days">
-              ${DEFAULT_DAYS.map((day, index) => {
-                const dayCfg = config.weekly[day] ?? { open: false, start: "09:00", end: "19:00" };
-                return `
-                  <div class="schedule-day">
-                    <label class="check-line schedule-day__check">
-                      <input type="checkbox" data-day-toggle="${day}" ${dayCfg.open ? "checked" : ""}>
-                      <span>${WEEKDAY_LABEL[index] ?? day}</span>
-                    </label>
-                    <div class="schedule-day__times">
-                      <input type="time" data-day-start="${day}" value="${dayCfg.start}" ${dayCfg.open ? "" : "disabled"}>
-                      <span class="schedule-day__sep">até</span>
-                      <input type="time" data-day-end="${day}" value="${dayCfg.end}" ${dayCfg.open ? "" : "disabled"}>
-                    </div>
-                  </div>`;
-              }).join("")}
-            </div>
-
-            <h4 class="manage-form-title">Dias indisponíveis</h4>
-            <div class="schedule-row">
-              <input type="date" data-blocked-date>
-              <button type="button" class="btn btn--primary" data-add-blocked>${icon("plus", 14)} Bloquear data</button>
-            </div>
-            <ul class="schedule-list" data-blocked-list>
-              ${config.blockedDates
-                .map(
-                  (d) =>
-                    `<li><span>${escapeHtml(formatDateMedium(d))}</span><button type="button" class="btn btn--sm btn--ghost" data-remove-blocked="${escapeHtml(d)}" aria-label="Remover">${icon("x", 14)}</button></li>`,
-                )
-                .join("")}
-            </ul>
-
-            <h4 class="manage-form-title">Abertura excepcional</h4>
-            <div class="schedule-row schedule-row--grid">
-              <input type="date" data-ex-date>
-              <input type="time" data-ex-start placeholder="Início">
-              <input type="time" data-ex-end placeholder="Fim">
-              <button type="button" class="btn btn--primary" data-add-exception>${icon("plus", 14)} Adicionar</button>
-            </div>
-            <ul class="schedule-list" data-exception-list>
-              ${config.exceptions
-                .map(
-                  (e) =>
-                    `<li><span>${escapeHtml(formatDateMedium(e.dateIso))} · ${e.start}–${e.end}</span><button type="button" class="btn btn--sm btn--ghost" data-remove-exception="${escapeHtml(e.dateIso)}" aria-label="Remover">${icon("x", 14)}</button></li>`,
-                )
-                .join("")}
-            </ul>
-
+            ${barbeiros.length > 1 ? `
+              <div class="field">
+                <label class="field__label" for="schedule-pro">Profissional</label>
+                <select id="schedule-pro">
+                  ${barbeiros
+                    .map(
+                      (b) =>
+                        `<option value="${escapeHtml(b.id)}" ${b.id === professionalId ? "selected" : ""}>${escapeHtml(b.name)}</option>`,
+                    )
+                    .join("")}
+                </select>
+              </div>` : ""}
+            <div data-schedule-body></div>
             <div class="modal__footer">
               <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
               <button type="submit" class="btn btn--primary">Salvar configuração</button>
@@ -892,93 +860,136 @@ if (status === "cancelado") {
       window.setTimeout(() => overlay.remove(), 300);
     };
 
-    $$("[data-day-toggle]", overlay).forEach((cb) => {
-      const day = Number(cb.getAttribute("data-day-toggle"));
-      cb.addEventListener("change", (event) => {
-        const checked = (event.target as HTMLInputElement).checked;
-        const start = overlay.querySelector<HTMLInputElement>(`[data-day-start="${day}"]`)!;
-        const end = overlay.querySelector<HTMLInputElement>(`[data-day-end="${day}"]`)!;
-        start.disabled = !checked;
-        end.disabled = !checked;
+    const renderBody = (): void => {
+      const body = overlay.querySelector<HTMLElement>("[data-schedule-body]")!;
+      body.innerHTML = `
+        <h4 class="manage-form-title">Horário padrão da semana</h4>
+        <div class="schedule-days">
+          ${DEFAULT_DAYS.map((day, index) => {
+            const dayCfg = config.weekly[day] ?? { open: false, start: "09:00", end: "19:00" };
+            return `
+              <div class="schedule-day">
+                <label class="check-line schedule-day__check">
+                  <input type="checkbox" data-day-toggle="${day}" ${dayCfg.open ? "checked" : ""}>
+                  <span>${WEEKDAY_LABEL[index] ?? day}</span>
+                </label>
+                <div class="schedule-day__times">
+                  <input type="time" data-day-start="${day}" value="${dayCfg.start}" ${dayCfg.open ? "" : "disabled"}>
+                  <span class="schedule-day__sep">até</span>
+                  <input type="time" data-day-end="${day}" value="${dayCfg.end}" ${dayCfg.open ? "" : "disabled"}>
+                </div>
+              </div>`;
+          }).join("")}
+        </div>
+
+        <h4 class="manage-form-title">Dias indisponíveis</h4>
+        <div class="schedule-row">
+          <input type="date" data-blocked-date>
+          <button type="button" class="btn btn--primary" data-add-blocked>${icon("plus", 14)} Bloquear data</button>
+        </div>
+        <ul class="schedule-list" data-blocked-list>
+          ${config.blockedDates
+            .map(
+              (d) =>
+                `<li><span>${escapeHtml(formatDateMedium(d))}</span><button type="button" class="btn btn--sm btn--ghost" data-remove-blocked="${escapeHtml(d)}" aria-label="Remover">${icon("x", 14)}</button></li>`,
+            )
+            .join("")}
+        </ul>
+
+        <h4 class="manage-form-title">Abertura excepcional</h4>
+        <div class="schedule-row schedule-row--grid">
+          <input type="date" data-ex-date>
+          <input type="time" data-ex-start placeholder="Início">
+          <input type="time" data-ex-end placeholder="Fim">
+          <button type="button" class="btn btn--primary" data-add-exception>${icon("plus", 14)} Adicionar</button>
+        </div>
+        <ul class="schedule-list" data-exception-list>
+          ${config.exceptions
+            .map(
+              (e) =>
+                `<li><span>${escapeHtml(formatDateMedium(e.dateIso))} · ${e.start}–${e.end}</span><button type="button" class="btn btn--sm btn--ghost" data-remove-exception="${escapeHtml(e.dateIso)}" aria-label="Remover">${icon("x", 14)}</button></li>`,
+            )
+            .join("")}
+        </ul>
+      `;
+    };
+
+    const updateBlockedDates = (blocked: string[]): void => {
+      config = { ...config, blockedDates: blocked };
+      void saveSchedule(config, professionalId)
+        .then(() => {
+          showToast("Agenda atualizada.");
+          renderBody();
+        })
+        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível salvar a agenda."), "error"));
+    };
+
+    const updateExceptions = (exceptions: ScheduleConfig["exceptions"]): void => {
+      config = { ...config, exceptions };
+      void saveSchedule(config, professionalId)
+        .then(() => {
+          showToast("Agenda atualizada.");
+          renderBody();
+        })
+        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível salvar a agenda."), "error"));
+    };
+
+    const wireBody = (): void => {
+      $$("[data-day-toggle]", overlay).forEach((cb) => {
+        const day = Number(cb.getAttribute("data-day-toggle"));
+        cb.addEventListener("change", (event) => {
+          const checked = (event.target as HTMLInputElement).checked;
+          const start = overlay.querySelector<HTMLInputElement>(`[data-day-start="${day}"]`)!;
+          const end = overlay.querySelector<HTMLInputElement>(`[data-day-end="${day}"]`)!;
+          start.disabled = !checked;
+          end.disabled = !checked;
+        });
       });
-    });
 
-    overlay.querySelector("[data-add-blocked]")!.addEventListener("click", () => {
-      const input = overlay.querySelector<HTMLInputElement>("[data-blocked-date]")!;
-      if (!input.value) return;
-      const dateIso = input.value;
-      let blocked = config.blockedDates;
-      if (!blocked.includes(dateIso)) {
-        blocked = [...blocked, dateIso];
-        const newConfig: ScheduleConfig = { ...config, blockedDates: blocked };
-        void saveSchedule(newConfig, professionalId)
-          .then(() => {
-            showToast("Data bloqueada.");
-          })
-          .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível bloquear a data."), "error"));
-        (overlay.querySelector("[data-blocked-list]") as HTMLUListElement).insertAdjacentHTML(
-          "beforeend",
-          `<li><span>${escapeHtml(formatDateMedium(dateIso))}</span><button type="button" class="btn btn--sm btn--ghost" data-remove-blocked="${escapeHtml(dateIso)}" aria-label="Remover">${icon("x", 14)}</button></li>`,
-        );
-      }
-      input.value = "";
-    });
+      overlay.querySelector("[data-add-blocked]")!.addEventListener("click", () => {
+        const input = overlay.querySelector<HTMLInputElement>("[data-blocked-date]")!;
+        if (!input.value) return;
+        const dateIso = input.value;
+        if (!config.blockedDates.includes(dateIso)) {
+          updateBlockedDates([...config.blockedDates, dateIso]);
+        }
+        input.value = "";
+      });
 
-    overlay.querySelector("[data-add-exception]")!.addEventListener("click", () => {
-      const dateIso = (overlay.querySelector<HTMLInputElement>("[data-ex-date]")!).value;
-      const start = (overlay.querySelector<HTMLInputElement>("[data-ex-start]")!).value;
-      const end = (overlay.querySelector<HTMLInputElement>("[data-ex-end]")!).value;
-      if (!dateIso || !start || !end) {
-        showToast("Preencha data, início e fim.", "error");
-        return;
-      }
-      let exceptions = config.exceptions.filter((e) => e.dateIso !== dateIso);
-      exceptions = [...exceptions, { dateIso, start, end }];
-      void saveSchedule({ ...config, exceptions }, professionalId)
-        .then(() => {
-          showToast("Abertura excepcional adicionada.");
-        })
-        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível adicionar a abertura excepcional."), "error"));
-      (overlay.querySelector("[data-exception-list]") as HTMLUListElement).insertAdjacentHTML(
-        "beforeend",
-        `<li><span>${escapeHtml(formatDateMedium(dateIso))} · ${start}–${end}</span><button type="button" class="btn btn--sm btn--ghost" data-remove-exception="${escapeHtml(dateIso)}" aria-label="Remover">${icon("x", 14)}</button></li>`,
-      );
-      (overlay.querySelector<HTMLInputElement>("[data-ex-date]")!).value = "";
-      (overlay.querySelector<HTMLInputElement>("[data-ex-start]")!).value = "";
-      (overlay.querySelector<HTMLInputElement>("[data-ex-end]")!).value = "";
-    });
+      overlay.querySelector("[data-add-exception]")!.addEventListener("click", () => {
+        const dateIso = (overlay.querySelector<HTMLInputElement>("[data-ex-date]")!).value;
+        const start = (overlay.querySelector<HTMLInputElement>("[data-ex-start]")!).value;
+        const end = (overlay.querySelector<HTMLInputElement>("[data-ex-end]")!).value;
+        if (!dateIso || !start || !end) {
+          showToast("Preencha data, início e fim.", "error");
+          return;
+        }
+        updateExceptions([
+          ...config.exceptions.filter((e) => e.dateIso !== dateIso),
+          { dateIso, start, end },
+        ]);
+        (overlay.querySelector<HTMLInputElement>("[data-ex-date]")!).value = "";
+        (overlay.querySelector<HTMLInputElement>("[data-ex-start]")!).value = "";
+        (overlay.querySelector<HTMLInputElement>("[data-ex-end]")!).value = "";
+      });
 
-    overlay.querySelector("[data-blocked-list]")!.addEventListener("click", (event) => {
-      const btn = (event.target as HTMLElement).closest("[data-remove-blocked]") as HTMLElement | null;
-      if (!btn) return;
-      const dateIso = btn.getAttribute("data-remove-blocked")!;
-      const newConfig: ScheduleConfig = {
-        ...config,
-        blockedDates: config.blockedDates.filter((d) => d !== dateIso),
-      };
-      void saveSchedule(newConfig, professionalId)
-        .then(() => {
-          btn.closest("li")?.remove();
-          showToast("Data desbloqueada.");
-        })
-        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível desbloquear a data."), "error"));
-    });
+      overlay.querySelector("[data-blocked-list]")!.addEventListener("click", (event) => {
+        const btn = (event.target as HTMLElement).closest("[data-remove-blocked]") as HTMLElement | null;
+        if (!btn) return;
+        const dateIso = btn.getAttribute("data-remove-blocked")!;
+        updateBlockedDates(config.blockedDates.filter((d) => d !== dateIso));
+      });
 
-    overlay.querySelector("[data-exception-list]")!.addEventListener("click", (event) => {
-      const btn = (event.target as HTMLElement).closest("[data-remove-exception]") as HTMLElement | null;
-      if (!btn) return;
-      const dateIso = btn.getAttribute("data-remove-exception")!;
-      const newConfig: ScheduleConfig = {
-        ...config,
-        exceptions: config.exceptions.filter((e) => e.dateIso !== dateIso),
-      };
-      void saveSchedule(newConfig, professionalId)
-        .then(() => {
-          btn.closest("li")?.remove();
-          showToast("Exceção removida.");
-        })
-        .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível remover a exceção."), "error"));
-    });
+      overlay.querySelector("[data-exception-list]")!.addEventListener("click", (event) => {
+        const btn = (event.target as HTMLElement).closest("[data-remove-exception]") as HTMLElement | null;
+        if (!btn) return;
+        const dateIso = btn.getAttribute("data-remove-exception")!;
+        updateExceptions(config.exceptions.filter((e) => e.dateIso !== dateIso));
+      });
+    };
+
+    renderBody();
+    wireBody();
 
     overlay.querySelector<HTMLFormElement>("#schedule-form")!.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -991,12 +1002,21 @@ if (status === "cancelado") {
           end: (overlay.querySelector<HTMLInputElement>(`[data-day-end="${day}"]`)!).value,
         };
       }
-      void saveSchedule({ ...config, weekly }, professionalId)
+      config = { ...config, weekly };
+      void saveSchedule(config, professionalId)
         .then(() => {
           showToast("Agenda configurada.");
           finish();
         })
         .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível salvar a agenda."), "error"));
+    });
+
+    overlay.querySelector<HTMLSelectElement>("#schedule-pro")?.addEventListener("change", async (event) => {
+      const nextId = (event.target as HTMLSelectElement).value;
+      professionalId = nextId;
+      config = await loadSchedule(professionalId);
+      renderBody();
+      wireBody();
     });
 
     overlay.querySelectorAll("[data-close]").forEach((el) => el.addEventListener("click", finish));
@@ -1052,11 +1072,9 @@ if (status === "cancelado") {
   // --------------------------------------------------------------- Serviços
   function renderServicos(): void {
     refreshCaches();
-    const actionsHeader = isAdmin ? `<th>Ações</th>` : "";
+    const actionsHeader = `<th>Ações</th>`;
     const actionsCell = (id: string): string =>
-      isAdmin
-        ? `<td><span class="cell-actions"><button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-service="${escapeHtml(id)}">Editar</button><button type="button" class="btn btn--sm btn--danger-outline" data-delete-service="${escapeHtml(id)}">Excluir</button></span></td>`
-        : "";
+      `<td><span class="cell-actions"><button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-service="${escapeHtml(id)}">Editar</button><button type="button" class="btn btn--sm btn--danger-outline" data-delete-service="${escapeHtml(id)}">Excluir</button></span></td>`;
 
     content.innerHTML = `
       <div class="panel__section manage-head">
@@ -1064,16 +1082,16 @@ if (status === "cancelado") {
           <h3 class="panel__section-title">Serviços</h3>
           <p class="manage-head__sub">Gerencie os serviços oferecidos pelo salão</p>
         </div>
-        ${isAdmin ? `
         <div class="toolbar">
           <button type="button" class="btn btn--primary" data-new-service>${icon("plus", 16)} Novo serviço</button>
-        </div>` : ""}
+        </div>
       </div>
       <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
               <th>Nome do Serviço</th>
+              <th>Categoria</th>
               <th>Duração</th>
               <th>Preço</th>
               ${actionsHeader}
@@ -1085,6 +1103,7 @@ if (status === "cancelado") {
                 (s) => `
                   <tr>
                     <td><strong>${escapeHtml(s.name)}</strong></td>
+                    <td>${s.category ? escapeHtml(s.category) : '<span class="text-muted">—</span>'}</td>
                     <td>${s.durationMin} min</td>
                     <td>${formatCurrency(s.price)}</td>
                     ${actionsCell(s.id)}
@@ -1127,7 +1146,6 @@ if (status === "cancelado") {
   }
 
   async function handleDeleteService(service: Service): Promise<void> {
-    if (!isAdmin) return; // Recepcionista não altera serviços (PRD).
     const confirmed = await confirmDialog({
       title: "Excluir serviço",
       message: `Excluir o serviço "${service.name}"? Esta ação não pode ser desfeita.`,
@@ -1145,8 +1163,8 @@ if (status === "cancelado") {
   }
 
   function openServiceModal(service: Service | null): void {
-    if (!isAdmin) return; // Recepcionista não altera serviços (PRD).
     const isEdit = Boolean(service);
+    const categories = loadCategories();
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.setAttribute("aria-hidden", "true");
@@ -1165,6 +1183,22 @@ if (status === "cancelado") {
           <div class="field">
             <label class="field__label" for="svc-desc">Descrição</label>
             <textarea id="svc-desc" rows="3" maxlength="200" placeholder="Descreva o serviço (opcional)">${escapeHtml(service?.description ?? "")}</textarea>
+          </div>
+          <div class="field">
+            <label class="field__label" for="svc-category">Categoria</label>
+            <div class="input-wrap">
+              <select id="svc-category">
+                <option value="">Selecione...</option>
+                ${categories.map((c) => {
+                  const u = c.toUpperCase();
+                  const sel = service?.category?.toUpperCase() === u ? "selected" : "";
+                  return `<option value="${escapeHtml(u)}" ${sel}>${escapeHtml(u)}</option>`;
+                }).join("")}
+                <option value="__new__">+ Adicionar nova categoria...</option>
+              </select>
+              <button type="button" class="input-suffix" id="svc-category-new" aria-label="Adicionar nova categoria" title="Adicionar nova categoria"><i class="bx bx-plus"></i></button>
+            </div>
+            <span class="field__hint">Escolha uma categoria existente ou adicione uma nova.</span>
           </div>
           <div class="form-grid">
             <div class="field">
@@ -1187,6 +1221,45 @@ if (status === "cancelado") {
     const nameInput = overlay.querySelector<HTMLInputElement>("#svc-name")!;
     attachUppercaseMask(nameInput);
 
+    const categorySelect = overlay.querySelector<HTMLSelectElement>("#svc-category");
+    const addCategoryBtn = overlay.querySelector<HTMLButtonElement>("#svc-category-new");
+
+    // Adiciona uma nova categoria ao select (ou seleciona a existente),
+    // sempre normalizada em MAIÚSCULAS e com busca case-insensitive.
+    const addNewCategory = (): void => {
+      if (!categorySelect) return;
+      const nova = window.prompt("Nova categoria:", "");
+      const label = nova?.trim().toUpperCase();
+      if (!label || label.length < 2) {
+        showToast("Informe um nome válido para a nova categoria.", "error");
+        return;
+      }
+      const exists = Array.from(categorySelect.options).some(
+        (o) => o.value !== "__new__" && o.value.toLocaleUpperCase("pt-BR") === label.toLocaleUpperCase("pt-BR"),
+      );
+      if (exists) {
+        categorySelect.value = label;
+        return;
+      }
+      const option = document.createElement("option");
+      option.value = label;
+      option.textContent = label;
+      categorySelect.insertBefore(option, categorySelect.querySelector('option[value="__new__"]'));
+      categorySelect.value = label;
+    };
+
+    addCategoryBtn?.addEventListener("click", addNewCategory);
+
+    // Selecionar a opção "+ Adicionar nova categoria..." abre o mesmo fluxo;
+    // o select volta para a seleção atual (ou vazia) depois do prompt.
+    categorySelect?.addEventListener("change", () => {
+      if (categorySelect.value !== "__new__") return;
+      addNewCategory();
+      if (categorySelect.value === "__new__") {
+        categorySelect.value = service?.category?.toUpperCase() ?? "";
+      }
+    });
+
     const form = overlay.querySelector<HTMLFormElement>("#svc-form")!;
     const finish = (): void => {
       closeModal(overlay);
@@ -1197,6 +1270,7 @@ if (status === "cancelado") {
       event.preventDefault();
       const name = nameInput.value.trim().toUpperCase();
       const description = (overlay.querySelector<HTMLTextAreaElement>("#svc-desc")?.value ?? "").trim();
+      const category = (overlay.querySelector<HTMLSelectElement>("#svc-category")?.value ?? "").trim().toUpperCase();
       const duration = Number((overlay.querySelector<HTMLInputElement>("#svc-duration")!).value);
       const price = Number((overlay.querySelector<HTMLInputElement>("#svc-price")!).value);
       if (name.length < 3) {
@@ -1218,10 +1292,10 @@ if (status === "cancelado") {
       }
       try {
         if (isEdit && service) {
-          await updateServico(service.id, { name, description, durationMin: duration, price });
+          await updateServico(service.id, { name, description, category, durationMin: duration, price });
           showToast("Serviço atualizado.");
         } else {
-          await createServico({ name, description, durationMin: duration, price });
+          await createServico({ name, description, category, durationMin: duration, price });
           showToast("Serviço criado!");
         }
         finish();

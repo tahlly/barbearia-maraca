@@ -134,6 +134,8 @@ Não adote sem aprovação explícita:
   - **aprovado**
   - **proposta**
   - **pendência**
+- **Guias pessoais de trabalho na raiz do repositório** (`HISTORICO-FRONT-END.md`, `DOCUMENTACAO.md`, `GUIA-ESTUDO-FRONTEND.md`) são de uso local exclusivo do Rai: **nunca** commitá-los, incluí-los em PR, push ou indexá-los (estão registrados em `.git/info/exclude`). Devem ser lidos no início de cada sessão para retomada de contexto.
+- **Comandos destrutivos só com confirmação humana explícita**: `git clean -fd`, `git stash -u` / `git stash drop`, `git reset --hard`, `git checkout -- <caminho>` / `git restore --stage ::all`, `rm` de arquivos não rastreados e `git push --force` são proibidos sem aprovação prévia do responsável humano. Em caso de dúvida, bloqueie e pergunte.
 
 ## Regras de colaboração
 

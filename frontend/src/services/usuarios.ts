@@ -12,6 +12,7 @@ interface FuncionarioDTO {
   telefone: string | null;
   cargo: CargoFuncionario;
   especialidade: string | null;
+  categoria: string | null;
   foto: string | null;
   descricao: string | null;
   ativo: boolean;
@@ -36,6 +37,7 @@ interface UpdateFuncionarioRequest {
   telefone?: string;
   cargo?: CargoFuncionario;
   especialidade?: string;
+  categoria?: string;
   foto?: string;
   descricao?: string;
   email?: string;
@@ -52,6 +54,7 @@ export interface UsuarioInterno {
   senha: string;
   role: "admin" | "profissional" | "recepcionista";
   professionalId?: string;
+  categoria?: string;
   createdAt: string;
   categorias?: string[];
 }
@@ -102,6 +105,7 @@ function funcionarioToUsuario(f: FuncionarioDTO): UsuarioInterno {
     senha: "",
     role: cargoToRole(f.cargo),
     professionalId: f.id,
+    categoria: f.categoria ?? "",
     createdAt: f.createdAt,
     categorias: f.categorias ?? [],
   };
@@ -185,6 +189,7 @@ export async function createUsuarioInterno(data: {
     telefone: string | null;
     cargo: string;
     especialidade: string | null;
+    categoria: string | null;
   }>("/funcionarios", {
     method: "POST",
     body: JSON.stringify({
@@ -236,6 +241,10 @@ export async function updateUsuarioInterno(
   const payload: UpdateFuncionarioRequest = {};
   if (data.nome !== undefined) payload.nome = data.nome.trim();
   if (data.especialidade !== undefined) payload.especialidade = data.especialidade;
+  if (data.categoria !== undefined) {
+    const categoria = data.categoria.trim();
+    if (categoria.length > 0) payload.categoria = categoria;
+  }
   if (data.cargo !== undefined) payload.cargo = data.cargo;
   if (data.email !== undefined) payload.email = data.email.trim();
   if (data.senha !== undefined && data.senha !== "") payload.senha = data.senha;

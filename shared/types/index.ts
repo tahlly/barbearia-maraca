@@ -126,6 +126,7 @@ export interface FuncionarioPublicoDTO {
   nome: string;
   cargo: CargoFuncionario;
   especialidade: string | null;
+  categoria: string | null;
   foto: string | null;
   descricao: string | null;
   /** Nomes das categorias que o profissional atende. */
@@ -140,6 +141,7 @@ export interface FuncionarioDTO {
   telefone: string | null;
   cargo: CargoFuncionario;
   especialidade: string | null;
+  categoria: string | null;
   foto: string | null;
   descricao: string | null;
   ativo: boolean;
@@ -168,6 +170,7 @@ export interface UpdateFuncionarioRequest {
   telefone?: string;
   cargo?: CargoFuncionario;
   especialidade?: string;
+  categoria?: string;
   foto?: string;
   descricao?: string;
   /** undefined → não mexer; [] → limpar; [nome, ...] → reescrever. */
@@ -187,6 +190,7 @@ export interface ServicoDTO {
   id: string;
   nome: string;
   descricao?: string | null;
+  categoria?: string | null;
   duracao_minutos: number;
   preco: string;
   ativo: boolean;
@@ -196,6 +200,7 @@ export interface ServicoPublicoDTO {
   id: string;
   nome: string;
   descricao?: string | null;
+  categoria?: string | null;
   duracao_minutos: number;
   preco: string;
 }
@@ -203,6 +208,7 @@ export interface ServicoPublicoDTO {
 export interface CreateServicoRequest {
   nome: string;
   descricao?: string | null;
+  categoria?: string | null;
   duracao_minutos: number;
   preco: string | number;
 }
@@ -210,6 +216,7 @@ export interface CreateServicoRequest {
 export interface UpdateServicoRequest {
   nome?: string;
   descricao?: string | null;
+  categoria?: string | null;
   duracao_minutos?: number;
   preco?: string | number;
 }

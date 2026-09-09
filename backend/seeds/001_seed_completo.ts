@@ -49,6 +49,7 @@ export async function seed(knex: Knex): Promise<void> {
         telefone: '(11) 99999-3333',
         cargo: 'barbeiro',
         especialidade: 'Degradê',
+        categoria: 'cabelo',
         ativo: true,
       },
       {
@@ -57,6 +58,7 @@ export async function seed(knex: Knex): Promise<void> {
         telefone: '(11) 99999-4444',
         cargo: 'barbeiro',
         especialidade: 'Barba',
+        categoria: 'barba',
         ativo: true,
       },
     ])
@@ -104,6 +106,7 @@ export async function seed(knex: Knex): Promise<void> {
     {
       nome: 'Corte',
       descricao: 'Corte de cabelo masculino',
+      categoria: 'cabelo',
       duracao_minutos: 30,
       preco: 45.00,
       ativo: true,
@@ -111,6 +114,7 @@ export async function seed(knex: Knex): Promise<void> {
     {
       nome: 'Barba',
       descricao: 'Barba feita com navalha e toalha quente',
+      categoria: 'barba',
       duracao_minutos: 20,
       preco: 35.00,
       ativo: true,
@@ -118,6 +122,7 @@ export async function seed(knex: Knex): Promise<void> {
     {
       nome: 'Corte + Barba',
       descricao: 'Combo de corte de cabelo e barba',
+      categoria: 'cabelo',
       duracao_minutos: 45,
       preco: 70.00,
       ativo: true,
