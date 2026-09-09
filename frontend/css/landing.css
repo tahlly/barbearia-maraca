@@ -849,7 +849,7 @@ body.light-theme .hero__tag {
 }
 
 body.light-theme .hero__subtitle {
-  color: var(--color-text-secondary);
+  color: var(--color-text);
 }
 
 body.light-theme .hero__btn--secondary {
