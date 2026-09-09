@@ -23,6 +23,7 @@ import {
   deleteUsuarioInterno,
   findUsuarioByEmail,
   findByProfessionalId,
+  listUsuariosInternos,
   updateUsuarioInterno,
 } from "../services/usuarios.js";
 import { DEFAULT_DAYS, loadSchedule, saveSchedule, type ScheduleConfig } from "../services/schedule.js";
@@ -32,7 +33,7 @@ import { renderSettingsForm } from "../features/settingsForm.js";
 import { initBookingWizard } from "../features/bookingWizard.js";
 import { attachUppercaseMask } from "../ui/mask.js";
 import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
-import type { Service, Appointment, Professional } from "../types.js";
+import type { Service, Appointment, Professional, UserRole } from "../types.js";
 
 type ManageTab = "dashboard" | "servicos" | "profissionais" | "agendamentos" | "configuracoes";
 
@@ -85,6 +86,24 @@ function statusBadge(status: Appointment["status"]): string {
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
+}
+
+/**
+ * Indica se os botões de gestão ("Editar" / "Excluir") devem ser renderizados
+ * para o card de um profissional, conforme a regra de visibilidade aprovada:
+ * - Recepcionista: somente cards de barbeiros (`cargo === "barbeiro"`).
+ * - Admin: todos os cards, exceto o card do próprio usuário logado (evita
+ *   auto-edição/auto-exclusão) — quando o self não é identificável, não oculta
+ *   nenhum card, pois o backend impede a auto-gestão.
+ * - Qualquer outro papel não recebe os botões (a tela já é restrita por guard).
+ */
+function canManageProfessional(
+  pro: Professional,
+  role: UserRole,
+  selfProfessionalId?: string,
+): boolean {
+  if (role === "admin") return pro.id !== selfProfessionalId;
+  return role === "recepcionista" && pro.cargo === "barbeiro";
 }
 
 let servicesCache: Service[] = [];
@@ -1234,6 +1253,22 @@ if (status === "cancelado") {
       if (a.status === "cancelado" || !a.data.startsWith(monthStart)) continue;
       counts.set(a.funcionarioId, (counts.get(a.funcionarioId) ?? 0) + 1);
     }
+    // Identifica o professionalId do admin logado para ocultar o botão
+    // "Excluir" apenas no próprio card. O catálogo público não expõe email;
+    // o endpoint autenticado (admin/recepcionista) fornece email + professionalId.
+    // Se a chamada falhar ou o self não for encontrado, não oculta nenhum card
+    // (o backend impede auto-exclusão) e não exibe erro ao usuário.
+    let selfProfessionalId: string | undefined;
+    if (session.role === "admin") {
+      try {
+        const usuarios = await listUsuariosInternos();
+        const email = session.userEmail.trim().toLowerCase();
+        const self = usuarios.find((u) => u.email.trim().toLowerCase() === email);
+        selfProfessionalId = self?.professionalId;
+      } catch {
+        selfProfessionalId = undefined;
+      }
+    }
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -1260,8 +1295,10 @@ if (status === "cancelado") {
                 </div>
                 <div class="pro-card__metric">${icon("calendar", 16)} <span>Agendamentos este mês: <strong>${counts.get(p.id) ?? 0}</strong></span></div>
                 <div class="pro-card__actions">
-                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-pro="${escapeHtml(p.id)}">Editar</button>
-                  <button type="button" class="btn btn--sm btn--danger-outline" data-del-pro="${escapeHtml(p.id)}">Excluir</button>
+                  ${canManageProfessional(p, session.role, selfProfessionalId)
+                    ? `<button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-pro="${escapeHtml(p.id)}">Editar</button>
+                       <button type="button" class="btn btn--sm btn--danger-outline" data-del-pro="${escapeHtml(p.id)}">Excluir</button>`
+                    : ""}
                 </div>
               </div>`,
           )

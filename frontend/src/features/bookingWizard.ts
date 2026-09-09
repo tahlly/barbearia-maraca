@@ -71,6 +71,10 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     }
   };
 
+  // Guard de sequência: evita que duas renderizações concorrentes de horários
+  // (ex.: trocar profissional e mudar data em paralelo) montem a grade duas vezes.
+  let slotsRenderSeq = 0;
+
   // Recepcionista e admin operam em MODO OPERADOR: o primeiro passo identifica
   // o cliente (buscar existente ou cadastrar novo) e o agendamento é criado em
   // nome desse cliente. Cliente autenticado usa o fluxo padrão (token).
@@ -308,10 +312,11 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   }
 
   async function renderSlots(): Promise<void> {
-    clearElement(slotsBox);
-    slotsHint.hidden = true;
-    slotsBox.hidden = false;
+    const renderSeq = ++slotsRenderSeq;
     if (!state.dateIso || !state.professionalId) {
+      clearElement(slotsBox);
+      slotsHint.hidden = true;
+      slotsBox.hidden = false;
       const message = !state.dateIso
         ? "Escolha uma data para ver os horários disponíveis."
         : "Escolha um profissional para ver os horários disponíveis.";
@@ -325,6 +330,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     try {
       slots = await slotsForDate(state.dateIso, state.professionalId);
     } catch (error) {
+      if (renderSeq !== slotsRenderSeq) return;
       const message =
         error instanceof Error && error.message.trim() !== ""
           ? error.message
@@ -333,9 +339,15 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       return;
     }
     if (slots.length === 0) {
+      if (renderSeq !== slotsRenderSeq) return;
       showSlotsHint("A barbearia está fechada nesta data. Escolha outra.", "error");
       return;
     }
+
+    if (renderSeq !== slotsRenderSeq) return;
+    clearElement(slotsBox);
+    slotsHint.hidden = true;
+    slotsBox.hidden = false;
 
     const now = new Date();
     const isToday = state.dateIso === toIsoDate(now);
