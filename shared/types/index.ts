@@ -128,6 +128,8 @@ export interface FuncionarioPublicoDTO {
   especialidade: string | null;
   foto: string | null;
   descricao: string | null;
+  /** Nomes das categorias que o profissional atende. */
+  categorias: string[];
 }
 
 /** Dados completos do funcionário (admin/recep/próprio barbeiro). */
@@ -144,6 +146,8 @@ export interface FuncionarioDTO {
   email: string;
   createdAt: string;
   updatedAt: string;
+  /** Nomes das categorias que o profissional atende. */
+  categorias: string[];
 }
 
 /** Body de criação de funcionário. */
@@ -154,6 +158,8 @@ export interface CreateFuncionarioRequest {
   telefone?: string;
   cargo?: CargoFuncionario;
   especialidade?: string;
+  /** undefined → não mexer; [] → limpar; [nome, ...] → reescrever. */
+  categorias?: string[];
 }
 
 /** Body de atualização de funcionário. */
@@ -164,6 +170,8 @@ export interface UpdateFuncionarioRequest {
   especialidade?: string;
   foto?: string;
   descricao?: string;
+  /** undefined → não mexer; [] → limpar; [nome, ...] → reescrever. */
+  categorias?: string[];
 }
 
 /** Body de alternância de status (ativo/inativo). */

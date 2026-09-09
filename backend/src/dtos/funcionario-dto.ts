@@ -64,4 +64,6 @@ export interface FuncionarioCriadoDTO {
   telefone: string | null;
   cargo: string;
   especialidade: string | null;
+  /** Nomes das categorias atribuídas na criação. */
+  categorias: string[];
 }

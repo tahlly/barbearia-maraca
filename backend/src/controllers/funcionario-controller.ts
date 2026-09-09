@@ -18,6 +18,7 @@ const criarFuncionarioSchema = z.object({
   telefone: z.string().optional(),
   cargo: z.enum(CARGOS).optional(),
   especialidade: z.string().max(100).optional(),
+  categorias: z.array(z.string().trim().min(1)).max(20).optional(),
 });
 
 const atualizarFuncionarioSchema = z.object({
@@ -29,6 +30,7 @@ const atualizarFuncionarioSchema = z.object({
   descricao: z.string().optional(),
   email: z.string().email('Email inválido').optional(),
   senha: senhaForteOpcionalSchema,
+  categorias: z.array(z.string().trim().min(1)).max(20).optional(),
 });
 
 const alterarStatusSchema = z.object({
@@ -101,7 +103,7 @@ export async function buscarPorEmail(req: Request, res: Response): Promise<void>
 /** POST /api/funcionarios — recepcionista/admin. */
 export async function criar(req: Request, res: Response): Promise<void> {
   const dados = criarFuncionarioSchema.parse(req.body);
-  const resultado = await funcionarioService.criarFuncionario(dados);
+  const resultado = await funcionarioService.criarFuncionario(dados, req.user?.id, req.user?.role);
   res.status(201).json(resultado);
 }
 

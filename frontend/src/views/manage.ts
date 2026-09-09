@@ -33,7 +33,7 @@ import { renderSettingsForm } from "../features/settingsForm.js";
 import { initBookingWizard } from "../features/bookingWizard.js";
 import { attachUppercaseMask } from "../ui/mask.js";
 import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
-import type { Service, Appointment, Professional, UserRole } from "../types.js";
+import type { CargoFuncionario, Service, Appointment, Professional, UserRole } from "../types.js";
 
 type ManageTab = "dashboard" | "servicos" | "profissionais" | "agendamentos" | "configuracoes";
 
@@ -124,6 +124,17 @@ function professionalName(id: string): string {
 
 function serviceTotal(serviceId: string): number {
   return servicesCache.find((s) => s.id === serviceId)?.price ?? 0;
+}
+
+/**
+ * Infere o cargo de um funcionário a partir do rótulo visual (`role`).
+ * Usado como fallback quando `Professional.cargo` não está disponível.
+ */
+function inferCargo(role: string): CargoFuncionario {
+  const lower = role.toLowerCase();
+  if (lower.includes("recepcion")) return "recepcionista";
+  if (lower.includes("admin")) return "administrador";
+  return "barbeiro";
 }
 
 export function renderManage(container: HTMLElement): () => void {
@@ -1269,6 +1280,50 @@ if (status === "cancelado") {
         selfProfessionalId = undefined;
       }
     }
+
+    // RBAC-F5/F6: filter visible professionals based on role
+    const visiblePros = prosCache.filter((p) => {
+      const cargo = p.cargo ?? inferCargo(p.role);
+      return isAdmin || cargo === "barbeiro";
+    });
+
+    // Pre-compute card HTML for each visible professional
+    const prosHtml = visiblePros.map((p) => {
+      const cargo = p.cargo ?? inferCargo(p.role);
+      const canOperate = isAdmin || cargo === "barbeiro";
+
+      const avatarHtml = p.photoUrl
+        ? `<span class="avatar avatar--photo" style="background-image:url('${escapeHtml(p.photoUrl)}')"></span>`
+        : `<span class="avatar">${initials(p.name)}</span>`;
+
+      const actionsHtml = canOperate
+        ? `<div class="pro-card__actions">
+            ${
+              canManageProfessional(p, session.role, selfProfessionalId)
+                ? `<button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-pro="${escapeHtml(p.id)}">Editar</button>
+                   <button type="button" class="btn btn--sm btn--danger-outline" data-del-pro="${escapeHtml(p.id)}">Excluir</button>`
+                : ""
+            }
+          </div>`
+        : "";
+
+      return `<div class="pro-card">
+        <div class="pro-card__head">
+          ${avatarHtml}
+          <div class="pro-card__meta">
+            <strong>${escapeHtml(p.name)}</strong>
+            <span class="pro-card__role">${escapeHtml(p.role)}</span>
+          </div>
+        </div>
+        <div class="pro-card__metric">${icon("calendar", 16)} <span>Agendamentos este mês: <strong>${counts.get(p.id) ?? 0}</strong></span></div>
+        ${actionsHtml}
+      </div>`;
+    }).join("");
+
+    const emptyState = visiblePros.length === 0
+      ? `<p class="panel__empty">Nenhum profissional cadastrado.</p>`
+      : "";
+
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -1280,30 +1335,8 @@ if (status === "cancelado") {
         </div>
       </div>
       <div class="pro-grid" id="manage-pros-list">
-        ${prosCache
-          .map(
-            (p) => `
-              <div class="pro-card">
-                <div class="pro-card__head">
-                  ${p.photoUrl
-                    ? `<span class="avatar avatar--photo" style="background-image:url('${p.photoUrl}')"></span>`
-                    : `<span class="avatar">${initials(p.name)}</span>`}
-                  <div class="pro-card__meta">
-                    <strong>${escapeHtml(p.name)}</strong>
-                    <span class="pro-card__role">${escapeHtml(p.role)}</span>
-                  </div>
-                </div>
-                <div class="pro-card__metric">${icon("calendar", 16)} <span>Agendamentos este mês: <strong>${counts.get(p.id) ?? 0}</strong></span></div>
-                <div class="pro-card__actions">
-                  ${canManageProfessional(p, session.role, selfProfessionalId)
-                    ? `<button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-pro="${escapeHtml(p.id)}">Editar</button>
-                       <button type="button" class="btn btn--sm btn--danger-outline" data-del-pro="${escapeHtml(p.id)}">Excluir</button>`
-                    : ""}
-                </div>
-              </div>`,
-          )
-          .join("")}
-        ${prosCache.length === 0 ? `<p class="panel__empty">Nenhum profissional cadastrado.</p>` : ""}
+        ${prosHtml}
+        ${emptyState}
       </div>
     `;
 
@@ -1359,6 +1392,27 @@ if (status === "cancelado") {
     const isEdit = Boolean(pro);
     const categories = loadCategories();
     const usuario = pro ? await findByProfessionalId(pro.id) : null;
+
+    // RBAC-F1/F2: seleção de cargo restrita. Admin escolhe entre os 3 cargos;
+    // recepcionista só pode cadastrar barbeiros.
+    const cargoAtual: CargoFuncionario = pro
+      ? (pro.cargo ?? inferCargo(pro.role))
+      : "barbeiro";
+
+    const roleOptions = isAdmin
+      ? `
+        <option value="barbeiro" ${cargoAtual === "barbeiro" ? "selected" : ""}>Barbeiro</option>
+        <option value="recepcionista" ${cargoAtual === "recepcionista" ? "selected" : ""}>Recepcionista</option>
+        <option value="administrador" ${cargoAtual === "administrador" ? "selected" : ""}>Administrador</option>`
+      : `<option value="barbeiro" selected>Barbeiro</option>`;
+
+    // RBAC-F3: categorias visíveis somente para barbeiro.
+    const showCategories = cargoAtual === "barbeiro";
+    const editCatSet = new Set(usuario?.categorias ?? []);
+    const categoriaOptions = categories
+      .map((c) => `<option value="${escapeHtml(c)}" ${editCatSet.has(c) ? "selected" : ""}>${escapeHtml(c)}</option>`)
+      .join("");
+
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.setAttribute("aria-hidden", "true");
@@ -1377,15 +1431,20 @@ if (status === "cancelado") {
           <div class="form-grid">
             <div class="field">
               <label class="field__label" for="pro-role">Cargo / Função *</label>
-              <input type="text" id="pro-role" value="${escapeHtml(pro?.role ?? "")}" maxlength="40" placeholder="Ex.: Barbeiro">
-            </div>
-            <div class="field">
-              <label class="field__label" for="pro-category">Categoria</label>
-              <select id="pro-category">
-                <option value="">Selecione...</option>
-                ${categories.map((c) => `<option value="${escapeHtml(c)}" ${pro?.categories?.includes(c) ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")}
+              <select id="pro-role">
+                ${roleOptions}
               </select>
             </div>
+            <div class="field">
+              <label class="field__label" for="pro-especialidade">Especialidade</label>
+              <input type="text" id="pro-especialidade" value="" maxlength="40" placeholder="Ex.: Corte e barba">
+            </div>
+          </div>
+          <div class="field" id="pro-categorias-wrap" ${showCategories ? "" : "hidden"}>
+            <label class="field__label" for="pro-categorias">Categorias</label>
+            <select id="pro-categorias" multiple size="3">
+              ${categoriaOptions}
+            </select>
           </div>
           <div class="field">
             <label class="field__label" for="pro-email">Email (login) *</label>
@@ -1446,19 +1505,35 @@ if (status === "cancelado") {
       toggleBtn.addEventListener("click", toggle);
     }
 
+    // RBAC-F3: mostra/oculta o campo de categorias conforme o cargo selecionado.
+    if (isAdmin) {
+      const roleSelect = overlay.querySelector<HTMLSelectElement>("#pro-role");
+      const categoriasWrap = overlay.querySelector<HTMLElement>("#pro-categorias-wrap");
+      if (roleSelect && categoriasWrap) {
+        roleSelect.addEventListener("change", () => {
+          categoriasWrap.hidden = roleSelect.value !== "barbeiro";
+        });
+      }
+    }
+
     const submitHandler = async (event: Event): Promise<void> => {
       event.preventDefault();
       clearFormErrors(form);
       const name = ($("#pro-name", overlay) as HTMLInputElement).value.trim();
       const email = ($("#pro-email", overlay) as HTMLInputElement).value.trim().toLowerCase();
-      const role = ($("#pro-role", overlay) as HTMLInputElement).value.trim();
+      const role = ($("#pro-role", overlay) as HTMLSelectElement).value as CargoFuncionario;
+      const especialidade = ($("#pro-especialidade", overlay) as HTMLInputElement).value.trim();
+      const categoriasSelect = overlay.querySelector<HTMLSelectElement>("#pro-categorias");
+      const categorias = categoriasSelect
+        ? Array.from(categoriasSelect.selectedOptions).map((o) => o.value)
+        : [];
 
       if (name.length < 3) {
         showToast("Informe o nome.", "error");
         return;
       }
-      if (role.length === 0) {
-        showToast("Informe o cargo/função.", "error");
+      if (!isAdmin && role !== "barbeiro") {
+        showToast("Você não tem permissão para selecionar outro cargo.", "error");
         return;
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
@@ -1494,23 +1569,19 @@ if (status === "cancelado") {
         try {
           const existing = await findByProfessionalId(pro.id);
           if (existing) {
-            // PUT /funcionarios aceita nome, cargo, especialidade, email e senha.
-            // role é o `cargo` do backend (barbeiro/recepcionista/administrador).
-            const cargo: "barbeiro" | "recepcionista" | "administrador" =
-              role.toLowerCase().includes("recepcion") ? "recepcionista" : "barbeiro";
             const dadosAtualizacao: {
               nome: string;
-              cargo: "barbeiro" | "recepcionista" | "administrador";
-              especialidade: string;
+              cargo: CargoFuncionario;
+              especialidade?: string;
               senha?: string;
+              categorias?: string[];
             } = {
               nome: name,
-              cargo,
-              especialidade: role,
+              cargo: role,
             };
-            // Senha opcional no PUT: só é enviada quando o admin informa uma
-            // nova senha válida; vazio mantém a senha atual.
+            if (especialidade) dadosAtualizacao.especialidade = especialidade;
             if (senhaInformada) dadosAtualizacao.senha = senha;
+            dadosAtualizacao.categorias = role === "barbeiro" ? categorias : [];
             await updateUsuarioInterno(existing.id, dadosAtualizacao);
           }
           showToast(senhaInformada ? "Profissional atualizado. Nova senha definida." : "Profissional atualizado.");
@@ -1525,14 +1596,23 @@ if (status === "cancelado") {
       }
 
       // Novo profissional: cria funcionário via API e atualiza o cache local.
+      const frontendRole: "admin" | "profissional" | "recepcionista" =
+        role === "barbeiro" ? "profissional" : role === "recepcionista" ? "recepcionista" : "admin";
       try {
-        const payload: { nome: string; email: string; role: "profissional"; senha?: string } = {
+        const payload: {
+          nome: string;
+          email: string;
+          role: "admin" | "profissional" | "recepcionista";
+          especialidade?: string;
+          categorias?: string[];
+          senha?: string;
+        } = {
           nome: name,
           email,
-          role: "profissional",
+          role: frontendRole,
         };
-        // Senha opcional no POST: omitida quando em branco (backend gera a
-        // senha temporária e força a troca no primeiro acesso).
+        if (especialidade) payload.especialidade = especialidade;
+        if (role === "barbeiro" && categorias.length > 0) payload.categorias = categorias;
         if (senhaInformada) payload.senha = senha;
         await createUsuarioInterno(payload);
         if (senhaInformada) {

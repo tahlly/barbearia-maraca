@@ -15,7 +15,7 @@ export function initNavbar(): () => void {
   const closeMenu = (): void => {
     nav.classList.remove("is-open");
     toggle.classList.remove("is-open");
-    backdrop.classList.remove("is-visible");
+    backdrop!.classList.remove("is-visible");
     toggle.setAttribute("aria-expanded", "false");
     document.body.classList.remove("has-nav-open");
   };
@@ -23,7 +23,7 @@ export function initNavbar(): () => void {
   const handleToggle = (): void => {
     const isOpen = nav.classList.toggle("is-open");
     toggle.classList.toggle("is-open", isOpen);
-    backdrop.classList.toggle("is-visible", isOpen);
+    backdrop!.classList.toggle("is-visible", isOpen);
     toggle.setAttribute("aria-expanded", String(isOpen));
     document.body.classList.toggle("has-nav-open", isOpen);
   };
@@ -46,9 +46,9 @@ export function initNavbar(): () => void {
 
   return () => {
     toggle.removeEventListener("click", handleToggle);
-    backdrop.removeEventListener("click", closeMenu);
+    backdrop!.removeEventListener("click", closeMenu);
     window.removeEventListener("resize", handleResize);
     linkCleanups.forEach((fn) => fn());
-    backdrop.remove();
+    backdrop!.remove();
   };
 }

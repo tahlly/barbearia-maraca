@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import { findUsuarioByEmail } from '../repositories/auth-repository';
 import * as funcionarioRepo from '../repositories/funcionario-repository';
+import { listarCategoriasAtivas } from './categoria-service';
 import { ValidationError } from '../errors/ValidationError';
 import { NotFoundError } from '../errors/NotFoundError';
 import { ForbiddenError } from '../errors/ForbiddenError';
@@ -8,6 +9,33 @@ import type { FuncionarioPublicoDTO, FuncionarioCompletoDTO, FuncionarioCriadoDT
 
 const SALT_ROUNDS = 10;
 const SENHA_PADRAO = '123456';
+
+/**
+ * Valida a lista de categorias antes de repassar ao repositório:
+ * - cargo final ≠ barbeiro com categorias não vazia → 400 (categorias são
+ *   exclusivas de barbeiros);
+ * - nome desconhecido ou categoria inativa → 400;
+ * - lista vazia/ausente é permitida (o repositório limpa as associações).
+ */
+async function validarCategorias(
+  categorias: string[] | undefined,
+  cargoFinal: string,
+): Promise<string[] | undefined> {
+  if (categorias === undefined || categorias.length === 0) {
+    return categorias;
+  }
+  if (cargoFinal !== 'barbeiro') {
+    throw new ValidationError('Categorias só podem ser atribuídas a barbeiros');
+  }
+  const ativas = await listarCategoriasAtivas();
+  const nomesAtivos = new Set(ativas.map((categoria) => categoria.nome));
+  for (const nome of categorias) {
+    if (!nomesAtivos.has(nome)) {
+      throw new ValidationError(`Categoria desconhecida ou inativa: ${nome}`);
+    }
+  }
+  return categorias;
+}
 
 // ── Listagens ─────────────────────────────────────────────────
 
@@ -79,14 +107,29 @@ export async function buscarFuncionarioPorEmail(
 
 // ── Criação ───────────────────────────────────────────────────
 
-export async function criarFuncionario(dados: {
-  nome: string;
-  email: string;
-  senha?: string;
-  telefone?: string;
-  cargo?: string;
-  especialidade?: string;
-}): Promise<FuncionarioCriadoDTO> {
+export async function criarFuncionario(
+  dados: {
+    nome: string;
+    email: string;
+    senha?: string;
+    telefone?: string;
+    cargo?: string;
+    especialidade?: string;
+    categorias?: string[];
+  },
+  requestingUserId?: string,
+  requestingRole?: string,
+): Promise<FuncionarioCriadoDTO> {
+  // RBAC: recepcionista só cria barbeiro; demais papéis negados por padrão.
+  if (requestingRole !== 'admin') {
+    const cargoFinal = dados.cargo ?? 'barbeiro';
+    if (requestingRole !== 'recepcionista' || cargoFinal !== 'barbeiro') {
+      throw new ForbiddenError('Acesso negado');
+    }
+  }
+
+  const categorias = await validarCategorias(dados.categorias, dados.cargo ?? 'barbeiro');
+
   // Validação de email único (regra de negócio)
   const existente = await findUsuarioByEmail(dados.email);
   if (existente) {
@@ -105,6 +148,7 @@ export async function criarFuncionario(dados: {
     telefone: dados.telefone,
     cargo: dados.cargo,
     especialidade: dados.especialidade,
+    categorias,
   });
 }
 
@@ -121,13 +165,17 @@ export async function atualizarFuncionario(
     descricao?: string;
     email?: string;
     senha?: string;
+    categorias?: string[];
   },
   requestingUserId?: string,
   requestingRole?: string,
 ): Promise<FuncionarioCompletoDTO> {
-  // Regra hierárquica de edição (espelha a regra de alternância de status):
+  // ── RBAC ────────────────────────────────────────────────────
+  // Regra hierárquica de edição (consolidação mainline + card):
   // - ninguém edita o próprio cadastro pela tela de gestão;
-  // - recepcionista só gerencia (edita) funcionários com cargo `barbeiro`.
+  // - recepcionista só gerencia (edita) funcionários com cargo `barbeiro`;
+  // - recepcionista não pode mudar cargo para diferente de barbeiro;
+  // - deny-by-default: roles fora de admin/recepcionista negados.
   const alvo = await funcionarioRepo.buscarPorId(id);
   if (!alvo) {
     throw new NotFoundError('Funcionário não encontrado');
@@ -138,6 +186,16 @@ export async function atualizarFuncionario(
   if (requestingRole === 'recepcionista' && alvo.cargo !== 'barbeiro') {
     throw new ForbiddenError('Acesso negado');
   }
+  const cargoFinal = dados.cargo ?? alvo.cargo;
+  if (requestingRole === 'recepcionista' && cargoFinal !== 'barbeiro') {
+    throw new ForbiddenError('Recepcionista não pode alterar cargo para diferente de barbeiro');
+  }
+  if (requestingRole !== 'admin' && requestingRole !== 'recepcionista') {
+    throw new ForbiddenError('Acesso negado');
+  }
+
+  // ── Categorias ──────────────────────────────────────────────
+  const categorias = await validarCategorias(dados.categorias, cargoFinal);
 
   // Se email foi fornecido, verificar se já está em uso por outro usuário
   if (dados.email) {
@@ -154,6 +212,7 @@ export async function atualizarFuncionario(
 
   const atualizado = await funcionarioRepo.atualizar(id, {
     ...dados,
+    categorias,
     senhaHash,
   });
   if (!atualizado) {
@@ -171,7 +230,9 @@ export async function atualizarFuncionario(
  * - nenhum papel pode alterar o próprio status (auto-desativação/auto-ativação);
  * - `admin` pode alterar o status de qualquer cargo, exceto o próprio;
  * - `recepcionista` pode alterar o status somente de funcionários com
- *   `cargo === 'barbeiro'`.
+ *   `cargo === 'barbeiro'`;
+ * - deny-by-default: roles fora de admin/recepcionista (incluindo uso interno
+ *   sem papel informado) são negados.
  */
 export async function alternarStatusFuncionario(
   id: string,
@@ -191,6 +252,11 @@ export async function alternarStatusFuncionario(
 
   // Recepcionista só gerencia barbeiros; admin segue liberado.
   if (requestingRole === 'recepcionista' && alvo.cargo !== 'barbeiro') {
+    throw new ForbiddenError('Acesso negado');
+  }
+
+  // Deny-by-default: apenas admin/recepcionista gerem status.
+  if (requestingRole !== 'admin' && requestingRole !== 'recepcionista') {
     throw new ForbiddenError('Acesso negado');
   }
 

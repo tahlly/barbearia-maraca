@@ -18,6 +18,7 @@ interface FuncionarioDTO {
   email: string;
   createdAt: string;
   updatedAt: string;
+  categorias?: string[];
 }
 
 interface CreateFuncionarioRequest {
@@ -27,6 +28,7 @@ interface CreateFuncionarioRequest {
   telefone?: string;
   cargo?: CargoFuncionario;
   especialidade?: string;
+  categorias?: string[];
 }
 
 interface UpdateFuncionarioRequest {
@@ -38,6 +40,7 @@ interface UpdateFuncionarioRequest {
   descricao?: string;
   email?: string;
   senha?: string;
+  categorias?: string[];
 }
 
 // ── Tipo público (mantido para compatibilidade com views) ───────────────
@@ -50,6 +53,7 @@ export interface UsuarioInterno {
   role: "admin" | "profissional" | "recepcionista";
   professionalId?: string;
   createdAt: string;
+  categorias?: string[];
 }
 
 // ── Helpers de mapeamento API ───────────────────────────────────────────
@@ -99,6 +103,7 @@ function funcionarioToUsuario(f: FuncionarioDTO): UsuarioInterno {
     role: cargoToRole(f.cargo),
     professionalId: f.id,
     createdAt: f.createdAt,
+    categorias: f.categorias ?? [],
   };
 }
 
@@ -169,6 +174,8 @@ export async function createUsuarioInterno(data: {
   senha?: string;
   role: "admin" | "profissional" | "recepcionista";
   professionalId?: string;
+  especialidade?: string;
+  categorias?: string[];
 }): Promise<UsuarioInterno> {
   const response = await httpJson<{
     id: string;
@@ -185,6 +192,10 @@ export async function createUsuarioInterno(data: {
       email: data.email.trim().toLowerCase(),
       ...(data.senha !== undefined && data.senha !== "" ? { senha: data.senha } : {}),
       cargo: roleToCargo(data.role),
+      ...(data.especialidade !== undefined && data.especialidade.trim() !== ""
+        ? { especialidade: data.especialidade.trim() }
+        : {}),
+      ...(data.categorias !== undefined ? { categorias: data.categorias } : {}),
     } satisfies CreateFuncionarioRequest),
   });
 
@@ -209,7 +220,14 @@ export async function createUsuarioInterno(data: {
  */
 export async function updateUsuarioInterno(
   id: string,
-  data: { nome?: string; email?: string; senha?: string; especialidade?: string; cargo?: CargoFuncionario },
+  data: {
+    nome?: string;
+    email?: string;
+    senha?: string;
+    especialidade?: string;
+    cargo?: CargoFuncionario;
+    categorias?: string[];
+  },
 ): Promise<UsuarioInterno | null> {
   const usuarios = await fetchAllFromApi();
   const usuario = usuarios.find((u) => u.id === id);
@@ -221,6 +239,7 @@ export async function updateUsuarioInterno(
   if (data.cargo !== undefined) payload.cargo = data.cargo;
   if (data.email !== undefined) payload.email = data.email.trim();
   if (data.senha !== undefined && data.senha !== "") payload.senha = data.senha;
+  if (data.categorias !== undefined) payload.categorias = data.categorias;
 
   const updated = await httpJson<FuncionarioDTO>(
     `/funcionarios/${encodeURIComponent(usuario.professionalId)}`,
