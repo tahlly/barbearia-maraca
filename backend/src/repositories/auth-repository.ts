@@ -90,9 +90,9 @@ export async function obterClienteNome(usuarioId: string): Promise<string | null
   return row?.nome ?? null;
 }
 
-export async function obterFuncionarioNome(usuarioId: string): Promise<{ nome: string; cargo: string } | null> {
+export async function obterFuncionarioNome(usuarioId: string): Promise<{ nome: string; cargo: string; ativo: boolean } | null> {
   const row = await db('funcionario').where('usuario_id', usuarioId).first();
-  return row ? { nome: row.nome, cargo: row.cargo } : null;
+  return row ? { nome: row.nome, cargo: row.cargo, ativo: row.ativo } : null;
 }
 
 export async function findUsuarioById(id: string): Promise<UsuarioRow | undefined> {

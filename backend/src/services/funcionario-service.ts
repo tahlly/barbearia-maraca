@@ -122,16 +122,28 @@ export async function atualizarFuncionario(
     email?: string;
     senha?: string;
   },
+  requestingUserId?: string,
+  requestingRole?: string,
 ): Promise<FuncionarioCompletoDTO> {
+  // Regra hierárquica de edição (espelha a regra de alternância de status):
+  // - ninguém edita o próprio cadastro pela tela de gestão;
+  // - recepcionista só gerencia (edita) funcionários com cargo `barbeiro`.
+  const alvo = await funcionarioRepo.buscarPorId(id);
+  if (!alvo) {
+    throw new NotFoundError('Funcionário não encontrado');
+  }
+  if (requestingUserId && requestingUserId === alvo.usuarioId) {
+    throw new ForbiddenError('Não é possível editar o próprio cadastro nesta tela');
+  }
+  if (requestingRole === 'recepcionista' && alvo.cargo !== 'barbeiro') {
+    throw new ForbiddenError('Acesso negado');
+  }
+
   // Se email foi fornecido, verificar se já está em uso por outro usuário
   if (dados.email) {
     const existente = await findUsuarioByEmail(dados.email);
-    if (existente) {
-      // Busca o funcionário atual para saber seu usuarioId
-      const atual = await funcionarioRepo.buscarPorId(id);
-      if (atual && atual.usuarioId !== existente.id) {
-        throw new ValidationError('Email já cadastrado por outro usuário');
-      }
+    if (existente && alvo.usuarioId !== existente.id) {
+      throw new ValidationError('Email já cadastrado por outro usuário');
     }
   }
 
@@ -152,7 +164,36 @@ export async function atualizarFuncionario(
 
 // ── Alternância de status ─────────────────────────────────────
 
-export async function alternarStatusFuncionario(id: string, ativo: boolean): Promise<boolean> {
+/**
+ * Alterna o status ativo/inativo de um funcionário.
+ *
+ * Regras hierárquicas:
+ * - nenhum papel pode alterar o próprio status (auto-desativação/auto-ativação);
+ * - `admin` pode alterar o status de qualquer cargo, exceto o próprio;
+ * - `recepcionista` pode alterar o status somente de funcionários com
+ *   `cargo === 'barbeiro'`.
+ */
+export async function alternarStatusFuncionario(
+  id: string,
+  ativo: boolean,
+  requestingUserId?: string,
+  requestingRole?: string,
+): Promise<boolean> {
+  const alvo = await funcionarioRepo.buscarPorId(id);
+  if (!alvo) {
+    throw new NotFoundError('Funcionário não encontrado');
+  }
+
+  // Ninguém pode alterar o próprio status.
+  if (requestingUserId === alvo.usuarioId) {
+    throw new ForbiddenError('Não é possível alterar o próprio status');
+  }
+
+  // Recepcionista só gerencia barbeiros; admin segue liberado.
+  if (requestingRole === 'recepcionista' && alvo.cargo !== 'barbeiro') {
+    throw new ForbiddenError('Acesso negado');
+  }
+
   const alterado = await funcionarioRepo.trocarStatus(id, ativo);
   if (!alterado) {
     throw new NotFoundError('Funcionário não encontrado');

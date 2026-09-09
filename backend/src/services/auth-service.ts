@@ -101,16 +101,24 @@ function gerarTokenJWT(usuario: UsuarioRow, role: string): string {
 
 async function resolveNomeECargo(
   usuario: UsuarioRow,
-): Promise<{ nome: string | null; cargo: string | null }> {
+): Promise<{ nome: string | null; cargo: string | null; ativo: boolean | null }> {
   if (usuario.tipo === 'cliente') {
     const nome = await obterClienteNome(usuario.id);
-    return { nome, cargo: null };
+    return { nome, cargo: null, ativo: null };
   }
   const funcionario = await obterFuncionarioNome(usuario.id);
   return {
     nome: funcionario?.nome ?? null,
     cargo: usuario.tipo === 'funcionario' ? (funcionario?.cargo ?? null) : null,
+    ativo: usuario.tipo === 'funcionario' ? (funcionario?.ativo ?? null) : null,
   };
+}
+
+/** Bloqueia funcionários inativados no login e na autenticação social. */
+function garantirFuncionarioAtivo(ativo: boolean | null): void {
+  if (ativo === false) {
+    throw new ForbiddenError('Conta desativada. Contate o administrador.');
+  }
 }
 
 export async function autenticarComGoogle(idToken: string): Promise<LoginResponseDTO> {
@@ -134,7 +142,10 @@ export async function autenticarComGoogle(idToken: string): Promise<LoginRespons
     }
   }
 
-  const { nome, cargo } = await resolveNomeECargo(usuario);
+  const { nome, cargo, ativo } = await resolveNomeECargo(usuario);
+  if (usuario.tipo === 'funcionario') {
+    garantirFuncionarioAtivo(ativo);
+  }
   const role = mapearTipoParaRole(usuario.tipo, cargo);
 
   return {
@@ -264,7 +275,10 @@ export async function login(data: {
     throw new UnauthorizedError('Credenciais inválidas');
   }
 
-  const { nome, cargo } = await resolveNomeECargo(usuario);
+  const { nome, cargo, ativo } = await resolveNomeECargo(usuario);
+  if (usuario.tipo === 'funcionario') {
+    garantirFuncionarioAtivo(ativo);
+  }
   const role = mapearTipoParaRole(usuario.tipo, cargo);
 
   return {
