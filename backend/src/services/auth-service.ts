@@ -114,9 +114,15 @@ async function resolveNomeECargo(
   };
 }
 
-/** Bloqueia funcionários inativados no login e na autenticação social. */
+/**
+ * Bloqueia funcionários inativados no login e na autenticação social.
+ *
+ * Trata como inativo qualquer estado diferente de `ativo === true`, incluindo
+ * `null`/linha ausente na tabela `funcionario` (conta inconsistente) — evita
+ * que uma exclusão/inconsistência permita login residual.
+ */
 function garantirFuncionarioAtivo(ativo: boolean | null): void {
-  if (ativo === false) {
+  if (ativo !== true) {
     throw new ForbiddenError('Conta desativada. Contate o administrador.');
   }
 }

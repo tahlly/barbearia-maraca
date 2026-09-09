@@ -178,4 +178,31 @@ describe('login — funcionário desativado (fix)', () => {
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(obterFuncionarioNomeMock).not.toHaveBeenCalled();
   });
+
+  it('funcionário sem linha em funcionario (linha ausente) → ForbiddenError sem token', async () => {
+    findUsuarioByEmailMock.mockResolvedValue({
+      ...BASE_USUARIO,
+      senha_hash: 'hash:123456',
+      primeiro_acesso: false,
+    });
+    obterFuncionarioNomeMock.mockResolvedValue(null);
+
+    await expect(
+      login({ email: 'barbeiro@email.com', senha: 'hash:123456' }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(obterFuncionarioNomeMock).toHaveBeenCalled();
+  });
+
+  it('funcionário com ativo null/ausente (conta inconsistente) → ForbiddenError sem token', async () => {
+    findUsuarioByEmailMock.mockResolvedValue({
+      ...BASE_USUARIO,
+      senha_hash: 'hash:123456',
+      primeiro_acesso: false,
+    });
+    obterFuncionarioNomeMock.mockResolvedValue({ nome: 'Barbeiro A', cargo: 'barbeiro', ativo: null });
+
+    await expect(
+      login({ email: 'barbeiro@email.com', senha: 'hash:123456' }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
 });

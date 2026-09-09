@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { verifyToken, type JwtPayload } from '../config/jwt';
 import { UnauthorizedError } from '../errors/UnauthorizedError';
 import { buscarPorUsuarioId } from '../repositories/funcionario-repository';
+import { mapearTipoParaRole } from '../services/auth-service';
 
 export function extractBearerToken(req: Request): string | null {
   const header = req.headers.authorization;
@@ -49,6 +50,10 @@ export async function authenticate(
         next(new UnauthorizedError('Conta desativada'));
         return;
       }
+      // Revalida o papel atual no banco a cada requisição: não confia no `role`
+      // gravado no token (um admin rebaixado perde a prerrogativa imediatamente,
+      // sem esperar expiração/relogin).
+      req.user.role = mapearTipoParaRole(payload.tipo, funcionario.cargo);
     } catch (error) {
       next(error as Error);
       return;
