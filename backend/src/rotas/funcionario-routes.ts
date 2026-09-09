@@ -22,6 +22,9 @@ const funcionarioRoutes = Router();
  *       properties:
  *         id: { type: string }
  *         nome: { type: string }
+ *         cargo:
+ *           type: string
+ *           enum: [barbeiro, recepcionista, administrador]
  *         especialidade: { type: string, nullable: true }
  *         foto: { type: string, nullable: true }
  *         descricao: { type: string, nullable: true }
