@@ -1,6 +1,6 @@
 import { CONFIG } from "../config.js";
 import type { Appointment, BookingDraft, Professional } from "../types.js";
-import { fetchBarbeiros, loadProfessionals, loadServices } from "../services/catalog.js";
+import { fetchBarbeiros, fetchServices, loadProfessionals, loadServices } from "../services/catalog.js";
 import { createAppointment, reschedule } from "../services/booking.js";
 import { buscarClientes, criarCliente } from "../services/clientes.js";
 import { getSession } from "../services/auth.js";
@@ -62,7 +62,12 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   // O cache global (`loadProfessionals`) permanece completo para o painel
   // admin/recepção e para minhaConta; o wizard passa a depender desta lista.
   const refreshCatalog = async (): Promise<void> => {
-    catalogServices = loadServices();
+    try {
+      catalogServices = await fetchServices();
+    } catch {
+      // Fallback: usa o cache global já populado (pelo prime), se houver.
+      catalogServices = loadServices();
+    }
     try {
       catalogProfessionals = await fetchBarbeiros();
     } catch {
