@@ -107,6 +107,15 @@ export async function buscarFuncionarioPorEmail(
 
 // ── Criação ───────────────────────────────────────────────────
 
+/**
+ * Cria um funcionário (rotas de gestão — recepcionista/admin).
+ *
+ * `requestingUserId`/`requestingRole` são os dados do usuário autenticado e
+ * são OBRIGATÓRIOS nas rotas de gestão: a exigência de presença (card A2)
+ * impede chamadas acidentais que omitam o contexto de quem executa a operação.
+ * Regra hierárquica aplicada: recepcionista só cria funcionários com cargo
+ * `barbeiro`; demais papéis negados por padrão.
+ */
 export async function criarFuncionario(
   dados: {
     nome: string;
@@ -117,8 +126,8 @@ export async function criarFuncionario(
     especialidade?: string;
     categorias?: string[];
   },
-  requestingUserId?: string,
-  requestingRole?: string,
+  requestingUserId: string,
+  requestingRole: string,
 ): Promise<FuncionarioCriadoDTO> {
   // RBAC: recepcionista só cria barbeiro; demais papéis negados por padrão.
   if (requestingRole !== 'admin') {
@@ -154,6 +163,14 @@ export async function criarFuncionario(
 
 // ── Atualização ───────────────────────────────────────────────
 
+/**
+ * Atualiza um funcionário (rotas de gestão — recepcionista/admin).
+ *
+ * `requestingUserId`/`requestingRole` são os dados do usuário autenticado e
+ * são OBRIGATÓRIOS nas rotas de gestão. O comportamento de permissão foi
+ * preservado: ninguém edita o próprio cadastro pela tela de gestão e
+ * recepcionista só gerencia funcionários com cargo `barbeiro`.
+ */
 export async function atualizarFuncionario(
   id: string,
   dados: {
@@ -167,8 +184,8 @@ export async function atualizarFuncionario(
     senha?: string;
     categorias?: string[];
   },
-  requestingUserId?: string,
-  requestingRole?: string,
+  requestingUserId: string,
+  requestingRole: string,
 ): Promise<FuncionarioCompletoDTO> {
   // ── RBAC ────────────────────────────────────────────────────
   // Regra hierárquica de edição (consolidação mainline + card):
@@ -180,7 +197,7 @@ export async function atualizarFuncionario(
   if (!alvo) {
     throw new NotFoundError('Funcionário não encontrado');
   }
-  if (requestingUserId && requestingUserId === alvo.usuarioId) {
+  if (requestingUserId === alvo.usuarioId) {
     throw new ForbiddenError('Não é possível editar o próprio cadastro nesta tela');
   }
   if (requestingRole === 'recepcionista' && alvo.cargo !== 'barbeiro') {
@@ -224,7 +241,11 @@ export async function atualizarFuncionario(
 // ── Alternância de status ─────────────────────────────────────
 
 /**
- * Alterna o status ativo/inativo de um funcionário.
+ * Alterna o status ativo/inativo de um funcionário (rotas de gestão —
+ * recepcionista/admin).
+ *
+ * `requestingUserId`/`requestingRole` são os dados do usuário autenticado e
+ * são OBRIGATÓRIOS nas rotas de gestão.
  *
  * Regras hierárquicas:
  * - nenhum papel pode alterar o próprio status (auto-desativação/auto-ativação);
@@ -237,8 +258,8 @@ export async function atualizarFuncionario(
 export async function alternarStatusFuncionario(
   id: string,
   ativo: boolean,
-  requestingUserId?: string,
-  requestingRole?: string,
+  requestingUserId: string,
+  requestingRole: string,
 ): Promise<boolean> {
   const alvo = await funcionarioRepo.buscarPorId(id);
   if (!alvo) {
