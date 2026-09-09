@@ -20,6 +20,10 @@ const criarSchema = z.object({
   // Permite que recepcionista/admin criem agendamento em nome de um cliente.
   // A service valida a obrigatoriedade conforme o papel do solicitante.
   cliente_id: z.string().uuid('cliente_id deve ser um UUID').optional(),
+  // Offset do navegador em minutos (ex.: -180 para UTC-3); usado na checagem
+  // de "horário passado" para não rejeitar horários ainda futuros no fuso do
+  // cliente quando o servidor roda em UTC.
+  timezone_offset_minutes: z.number().int().min(-840).max(840).nullable().optional(),
 });
 
 const listarSchema = z.object({

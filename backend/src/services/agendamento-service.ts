@@ -46,14 +46,27 @@ function toDTO(row: AgendamentoRow): AgendamentoDTO {
   };
 }
 
-function validarDataHora(data: string, hora: string): void {
+function validarDataHora(
+  data: string,
+  hora: string,
+  timezoneOffsetMinutes?: number | null,
+): void {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
     throw new ValidationError('Data inválida');
   }
   if (!/^\d{2}:\d{2}$/.test(hora)) {
     throw new ValidationError('Hora inválida');
   }
-  const date = new Date(`${data}T${hora}:00`);
+  // Interpreta data+hora no fuso do cliente (offset em minutos enviado pelo
+  // navegador). Quando ausente, usa o fuso local do processo (Docker = UTC).
+  // Sem isso, o agendamento "19:00 no horário do cliente" seria comparado como
+  // 19:00 UTC e rejeitado indevidamente quando o cliente está em UTC-3.
+  const offsetMin = timezoneOffsetMinutes ?? 0;
+  const offsetSign = offsetMin >= 0 ? '+' : '-';
+  const absOffset = Math.abs(offsetMin);
+  const offsetHH = String(Math.floor(absOffset / 60)).padStart(2, '0');
+  const offsetMM = String(absOffset % 60).padStart(2, '0');
+  const date = new Date(`${data}T${hora}:00${offsetSign}${offsetHH}:${offsetMM}`);
   if (Number.isNaN(date.getTime())) {
     throw new ValidationError('Data ou hora inválida');
   }
@@ -119,7 +132,7 @@ export async function criarAgendamento(
     throw new NotFoundError('Serviço não encontrado ou inativo');
   }
 
-  validarDataHora(dados.data, dados.hora);
+  validarDataHora(dados.data, dados.hora, dados.timezone_offset_minutes);
 
   try {
     const row = await criar({
