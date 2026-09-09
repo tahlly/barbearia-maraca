@@ -37,6 +37,9 @@ export interface JwtPayload {
   id: string;
   tipo: string;
   role: string;
+  /** Token version — compara com usuario.token_version no banco. Tokens
+   *  anteriores à migração não possuem `ver`; são tratados como 0. */
+  ver: number;
 }
 
 export function signToken(payload: JwtPayload): string {
@@ -51,11 +54,15 @@ function isJwtPayload(value: unknown): value is JwtPayload {
     return false;
   }
   const record = value as Record<string, unknown>;
+  // `ver` é opcional para tolerar tokens emitidos antes da migração
+  // (tratados como versão 0 no middleware authenticate).
+  const verOk = record.ver === undefined || typeof record.ver === 'number';
   return (
     typeof record.sub === 'string' &&
     typeof record.id === 'string' &&
     typeof record.tipo === 'string' &&
-    typeof record.role === 'string'
+    typeof record.role === 'string' &&
+    verOk
   );
 }
 

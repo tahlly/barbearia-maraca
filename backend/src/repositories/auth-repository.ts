@@ -10,6 +10,14 @@ export interface UsuarioRow {
   reset_token_hash: string | null;
   reset_token_expires_at: Date | null;
   primeiro_acesso: boolean;
+  token_version: number;
+}
+
+/** Dados de sessão suficientes para validar o token JWT (Item 1). */
+export interface DadosSessaoUsuario {
+  id: string;
+  tipo: string;
+  token_version: number;
 }
 
 export async function findUsuarioByEmail(email: string): Promise<UsuarioRow | null> {
@@ -98,6 +106,26 @@ export async function obterFuncionarioNome(usuarioId: string): Promise<{ nome: s
 export async function findUsuarioById(id: string): Promise<UsuarioRow | undefined> {
   const row = await db('usuario').where('id', id).first();
   return row as UsuarioRow | undefined;
+}
+
+/**
+ * Busca apenas os dados necessários para validar uma sessão (Item 1):
+ * identidade, tipo e versão de token. É o ponto central da revogação de
+ * tokens por troca de senha / término / revogação de sessão.
+ */
+export async function findUsuarioPorId(id: string): Promise<DadosSessaoUsuario | null> {
+  const row = await db('usuario')
+    .where('id', id)
+    .select('id', 'tipo', 'token_version')
+    .first();
+  return (row as DadosSessaoUsuario) ?? null;
+}
+
+/** Invalida as sessões existentes de um usuário (Item 1: token_version++). */
+export async function incrementarTokenVersion(usuarioId: string): Promise<void> {
+  await db('usuario')
+    .where('id', usuarioId)
+    .increment('token_version', 1);
 }
 
 export async function atualizarUsuario(

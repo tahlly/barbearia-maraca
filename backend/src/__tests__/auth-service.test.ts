@@ -9,13 +9,15 @@ const obterFuncionarioNomeMock = vi.fn();
 
 let ultimoUpdateUsuario: Record<string, unknown> | undefined;
 
+const usuarioQueryMock = {
+  update: (obj: Record<string, unknown>) => {
+    ultimoUpdateUsuario = obj;
+    return Promise.resolve(1);
+  },
+  increment: vi.fn(async () => 1),
+};
 const usuarioTableMock = {
-  where: vi.fn(() => ({
-    update: (obj: Record<string, unknown>) => {
-      ultimoUpdateUsuario = obj;
-      return Promise.resolve(1);
-    },
-  })),
+  where: vi.fn(() => usuarioQueryMock),
 };
 const clienteTableMock = {
   where: vi.fn(() => ({ update: vi.fn(async () => 1) })),
@@ -75,6 +77,7 @@ const BASE_USUARIO: UsuarioRow = {
   reset_token_hash: null,
   reset_token_expires_at: null,
   primeiro_acesso: true,
+  token_version: 0,
 };
 
 describe('atualizarPerfil — primeiro acesso (P4)', () => {
