@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import * as funcionarioService from '../services/funcionario-service';
 import { ValidationError } from '../errors/ValidationError';
+import { ForbiddenError } from '../errors/ForbiddenError';
 import {
   senhaForteOpcionalSchema,
   senhaForteFuncionarioOpcionalSchema,
@@ -58,6 +59,20 @@ function idParam(req: Request): string {
 
 // ── Handlers ──────────────────────────────────────────────────
 
+/**
+ * Garante e retorna o usuário autenticado nas rotas de gestão.
+ * O middleware `authorize` compõe `authenticate`, mas o contrato das operações
+ * de gestão exige solicitante obrigatório (card A2) — falha explícita se ausente.
+ */
+function usuarioSolicitante(req: Request): { id: string; role: string } {
+  const id = req.user?.id;
+  const role = req.user?.role;
+  if (typeof id !== 'string' || typeof role !== 'string') {
+    throw new ForbiddenError('Usuário não autenticado');
+  }
+  return { id, role };
+}
+
 /** GET /api/funcionarios — público; filtra ativo=true, cargo e categoria por querystring. */
 export async function listarPublicos(req: Request, res: Response): Promise<void> {
   const cargoParam = typeof req.query.cargo === 'string' ? req.query.cargo : undefined;
@@ -101,18 +116,20 @@ export async function buscarPorEmail(req: Request, res: Response): Promise<void>
 /** POST /api/funcionarios — recepcionista/admin. */
 export async function criar(req: Request, res: Response): Promise<void> {
   const dados = criarFuncionarioSchema.parse(req.body);
-  const resultado = await funcionarioService.criarFuncionario(dados);
+  const solicitante = usuarioSolicitante(req);
+  const resultado = await funcionarioService.criarFuncionario(dados, solicitante.id, solicitante.role);
   res.status(201).json(resultado);
 }
 
 /** PUT /api/funcionarios/:id — recepcionista/admin; regra hierárquica no service. */
 export async function atualizar(req: Request, res: Response): Promise<void> {
   const dados = atualizarFuncionarioSchema.parse(req.body);
+  const solicitante = usuarioSolicitante(req);
   const resultado = await funcionarioService.atualizarFuncionario(
     idParam(req),
     dados,
-    req.user?.id,
-    req.user?.role,
+    solicitante.id,
+    solicitante.role,
   );
   res.json(resultado);
 }
@@ -120,11 +137,12 @@ export async function atualizar(req: Request, res: Response): Promise<void> {
 /** PATCH /api/funcionarios/:id/status — recepcionista/admin. */
 export async function alterarStatus(req: Request, res: Response): Promise<void> {
   const dados = alterarStatusSchema.parse(req.body);
+  const solicitante = usuarioSolicitante(req);
   await funcionarioService.alternarStatusFuncionario(
     idParam(req),
     dados.ativo,
-    req.user?.id,
-    req.user?.role,
+    solicitante.id,
+    solicitante.role,
   );
   res.json({ mensagem: 'Status atualizado', ativo: dados.ativo });
 }

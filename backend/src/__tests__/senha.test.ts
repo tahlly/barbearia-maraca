@@ -400,7 +400,10 @@ describe('POST /api/funcionarios — criar funcionário', () => {
     });
     const res = criarFakeRes();
     await criarFuncionarioHandler(
-      { body: { nome: 'Barbeiro Teste', email: 'barbeiro@email.com' } } as unknown as Request,
+      {
+        body: { nome: 'Barbeiro Teste', email: 'barbeiro@email.com' },
+        user: { id: 'u-admin', role: 'admin' },
+      } as unknown as Request,
       res as unknown as Response,
     );
 
@@ -420,13 +423,18 @@ describe('POST /api/funcionarios — criar funcionário', () => {
     });
     const res = criarFakeRes();
     await criarFuncionarioHandler(
-      { body: { nome: 'Barbeiro Teste', email: 'barbeiro@email.com', senha: SENHA_FORTE } } as unknown as Request,
+      {
+        body: { nome: 'Barbeiro Teste', email: 'barbeiro@email.com', senha: SENHA_FORTE },
+        user: { id: 'u-admin', role: 'admin' },
+      } as unknown as Request,
       res as unknown as Response,
     );
 
     expect(res.statusCode).toBe(201);
     expect(funcionarioService.criarFuncionario).toHaveBeenCalledWith(
       expect.objectContaining({ senha: SENHA_FORTE }),
+      'u-admin',
+      'admin',
     );
   });
 });

@@ -79,14 +79,28 @@ export async function buscarFuncionarioPorEmail(
 
 // ── Criação ───────────────────────────────────────────────────
 
-export async function criarFuncionario(dados: {
-  nome: string;
-  email: string;
-  senha?: string;
-  telefone?: string;
-  cargo?: string;
-  especialidade?: string;
-}): Promise<FuncionarioCriadoDTO> {
+/**
+ * Cria um funcionário (rotas de gestão — recepcionista/admin).
+ *
+ * `requestingUserId`/`requestingRole` são os dados do usuário autenticado e
+ * são OBRIGATÓRIOS nas rotas de gestão. Nesta base o create não possui política
+ * hierárquica própria: a exigência de presença do solicitante (card A2) impede
+ * chamadas acidentais que omitam o contexto de quem executa a operação.
+ * O consumo desses dados pela regra hierárquica de criação é tratado em camada
+ * própria/PR futuro.
+ */
+export async function criarFuncionario(
+  dados: {
+    nome: string;
+    email: string;
+    senha?: string;
+    telefone?: string;
+    cargo?: string;
+    especialidade?: string;
+  },
+  requestingUserId: string,
+  requestingRole: string,
+): Promise<FuncionarioCriadoDTO> {
   // Validação de email único (regra de negócio)
   const existente = await findUsuarioByEmail(dados.email);
   if (existente) {
@@ -110,6 +124,14 @@ export async function criarFuncionario(dados: {
 
 // ── Atualização ───────────────────────────────────────────────
 
+/**
+ * Atualiza um funcionário (rotas de gestão — recepcionista/admin).
+ *
+ * `requestingUserId`/`requestingRole` são os dados do usuário autenticado e
+ * são OBRIGATÓRIOS nas rotas de gestão. O comportamento de permissão foi
+ * preservado: ninguém edita o próprio cadastro pela tela de gestão e
+ * recepcionista só gerencia funcionários com cargo `barbeiro`.
+ */
 export async function atualizarFuncionario(
   id: string,
   dados: {
@@ -122,8 +144,8 @@ export async function atualizarFuncionario(
     email?: string;
     senha?: string;
   },
-  requestingUserId?: string,
-  requestingRole?: string,
+  requestingUserId: string,
+  requestingRole: string,
 ): Promise<FuncionarioCompletoDTO> {
   // Regra hierárquica de edição (espelha a regra de alternância de status):
   // - ninguém edita o próprio cadastro pela tela de gestão;
@@ -132,7 +154,7 @@ export async function atualizarFuncionario(
   if (!alvo) {
     throw new NotFoundError('Funcionário não encontrado');
   }
-  if (requestingUserId && requestingUserId === alvo.usuarioId) {
+  if (requestingUserId === alvo.usuarioId) {
     throw new ForbiddenError('Não é possível editar o próprio cadastro nesta tela');
   }
   if (requestingRole === 'recepcionista' && alvo.cargo !== 'barbeiro') {
@@ -165,7 +187,11 @@ export async function atualizarFuncionario(
 // ── Alternância de status ─────────────────────────────────────
 
 /**
- * Alterna o status ativo/inativo de um funcionário.
+ * Alterna o status ativo/inativo de um funcionário (rotas de gestão —
+ * recepcionista/admin).
+ *
+ * `requestingUserId`/`requestingRole` são os dados do usuário autenticado e
+ * são OBRIGATÓRIOS nas rotas de gestão.
  *
  * Regras hierárquicas:
  * - nenhum papel pode alterar o próprio status (auto-desativação/auto-ativação);
@@ -176,8 +202,8 @@ export async function atualizarFuncionario(
 export async function alternarStatusFuncionario(
   id: string,
   ativo: boolean,
-  requestingUserId?: string,
-  requestingRole?: string,
+  requestingUserId: string,
+  requestingRole: string,
 ): Promise<boolean> {
   const alvo = await funcionarioRepo.buscarPorId(id);
   if (!alvo) {
