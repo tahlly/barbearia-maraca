@@ -71,6 +71,18 @@ export interface UsuarioPermissaoContext {
   role: string;
 }
 
+/** Monta o mapa de permissões efetivas: override no banco > matriz por papel. */
+function montarPermissoes(
+  mapa: Map<string, boolean>,
+  role: string,
+): Record<ChavePermissao, boolean> {
+  const permissoes = {} as Record<ChavePermissao, boolean>;
+  for (const chave of CHAVES_PERMISSOES) {
+    permissoes[chave] = mapa.has(chave) ? (mapa.get(chave) as boolean) : PERMISSOES_DEFAULT[role][chave];
+  }
+  return permissoes;
+}
+
 /** Avalia a permissão efetiva de um usuário: override no banco > matriz por papel. */
 export async function temPermissao(
   usuario: UsuarioPermissaoContext | undefined,
@@ -134,18 +146,27 @@ export async function listarUsuariosComPermissoes(): Promise<UsuarioComPermissoe
   return usuarios.map((usuario) => {
     const role = mapearTipoParaRole('funcionario', usuario.cargo);
     const mapa = agrupadas.get(usuario.usuario_id) ?? new Map<string, boolean>();
-    const permissoes = {} as Record<ChavePermissao, boolean>;
-    for (const chave of CHAVES_PERMISSOES) {
-      permissoes[chave] = mapa.has(chave) ? (mapa.get(chave) as boolean) : PERMISSOES_DEFAULT[role][chave];
-    }
     return {
       usuarioId: usuario.usuario_id,
       email: usuario.email,
       nome: usuario.nome,
       cargo: usuario.cargo,
-      permissoes,
+      permissoes: montarPermissoes(mapa, role),
     };
   });
+}
+
+/**
+ * Permissões efetivas de um usuário autenticado (override no banco > matriz
+ * por papel). Usado pelos controllers de login para expor o RBAC ao frontend.
+ */
+export async function obterPermissoesEfetivasUsuario(
+  usuario: UsuarioPermissaoContext,
+): Promise<Record<ChavePermissao, boolean>> {
+  const linhas = await listarPermissoesPorUsuarios([usuario.id]);
+  const mapa = new Map(linhas.map((linha) => [linha.permissao, linha.concedida]));
+  const role = PERMISSOES_DEFAULT[usuario.role] ? usuario.role : 'cliente';
+  return montarPermissoes(mapa, role);
 }
 
 /** Detentores efetivos de uma chave: admins (matriz) + concessões explícitas true. */

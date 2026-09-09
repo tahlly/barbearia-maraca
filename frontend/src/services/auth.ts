@@ -72,7 +72,7 @@ export async function updateSessionUser(data: {
  */
 export async function loginInterno(email: string, password: string): Promise<LoginResult> {
   try {
-    const data = await httpJson<{ token: string; userName: string; userEmail: string; expiresAt?: number; role: UserRole; precisaTrocarSenha?: boolean }>(
+    const data = await httpJson<{ token: string; userName: string; userEmail: string; expiresAt?: number; role: UserRole; precisaTrocarSenha?: boolean; permissoes?: Record<string, boolean> }>(
       "/auth/login",
       { method: "POST", body: JSON.stringify({ email: normalize(email), password }) },
     );
@@ -83,6 +83,7 @@ export async function loginInterno(email: string, password: string): Promise<Log
       expiresAt: data.expiresAt ?? Date.now() + CONFIG.sessionTtlMs,
       role: data.role,
       precisaTrocarSenha: data.precisaTrocarSenha ?? false,
+      permissoes: data.permissoes,
     });
     return { ok: true, role: data.role, precisaTrocarSenha: data.precisaTrocarSenha ?? false };
   } catch (error) {
@@ -98,7 +99,7 @@ export async function loginInterno(email: string, password: string): Promise<Log
  */
 export async function loginCliente(email: string, password: string): Promise<LoginResult> {
   try {
-    const data = await httpJson<{ token: string; userName: string; userEmail: string; expiresAt?: number; role: UserRole; precisaTrocarSenha?: boolean }>(
+    const data = await httpJson<{ token: string; userName: string; userEmail: string; expiresAt?: number; role: UserRole; precisaTrocarSenha?: boolean; permissoes?: Record<string, boolean> }>(
       "/auth/login",
       { method: "POST", body: JSON.stringify({ email: normalize(email), password }) },
     );
@@ -109,6 +110,7 @@ export async function loginCliente(email: string, password: string): Promise<Log
       expiresAt: data.expiresAt ?? Date.now() + CONFIG.sessionTtlMs,
       role: data.role,
       precisaTrocarSenha: data.precisaTrocarSenha ?? false,
+      permissoes: data.permissoes,
     });
     return { ok: true, role: data.role, precisaTrocarSenha: data.precisaTrocarSenha ?? false };
   } catch (error) {

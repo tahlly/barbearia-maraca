@@ -78,8 +78,12 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   // Recepcionista e admin operam em MODO OPERADOR: o primeiro passo identifica
   // o cliente (buscar existente ou cadastrar novo) e o agendamento é criado em
   // nome desse cliente. Cliente autenticado usa o fluxo padrão (token).
-  const sessionRole = getSession()?.role;
-  const operatorMode = sessionRole === "recepcionista" || sessionRole === "admin";
+  //
+  // O wizard é um singleton inicializado uma única vez na SPA (a landing o
+  // inicializa sem sessão), portanto o modo operador NÃO pode ser travado na
+  // primeira inicialização: ele é recalculado da sessão atual a cada abertura
+  // via applyOperatorMode().
+  let operatorMode = false;
 
   const overlay = $("#booking-modal")!;
   const form = $<HTMLFormElement>("#booking-form")!;
@@ -110,14 +114,32 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
 
   const clientStepItem = stepsItems.find((el) => el.dataset.stepName === "cliente");
   const clientPanel = panels.find((el) => el.dataset.stepName === "cliente");
-  if (clientStepItem) clientStepItem.hidden = !operatorMode;
-  if (clientPanel) clientPanel.hidden = !operatorMode;
 
-  // Passos visíveis (ordem real do wizard para o papel atual).
-  const steps = stepsItems.filter((el) => !el.hidden);
-  const stepPanels = panels.filter((el) => !el.hidden);
-  const stepNames = stepPanels.map((el) => el.dataset.stepName as StepName);
-  const TOTAL_STEPS = stepPanels.length;
+  // Passos visíveis (ordem real do wizard para o papel atual). São rederivados
+  // a cada abertura porque o modo operador pode mudar entre sessões.
+  let steps: HTMLElement[] = [];
+  let stepPanels: HTMLElement[] = [];
+  let stepNames: StepName[] = [];
+  let TOTAL_STEPS = 0;
+
+  /**
+   * Recalcula o MODO OPERADOR a partir da sessão ATUAL e re-deriva os passos
+   * visíveis. O wizard é singleton inicializado uma única vez na SPA (a landing
+   * o inicializa sem sessão), então travar `operatorMode` na primeira chamada
+   * esconderia o passo Cliente da recepcionista/admin ou o mostraria a um
+   * cliente após logout de staff. Chamado na inicialização e a cada abertura.
+   */
+  function applyOperatorMode(): void {
+    const role = getSession()?.role;
+    operatorMode = role === "recepcionista" || role === "admin";
+    if (clientStepItem) clientStepItem.hidden = !operatorMode;
+    if (clientPanel) clientPanel.hidden = !operatorMode;
+    steps = stepsItems.filter((el) => !el.hidden);
+    stepPanels = panels.filter((el) => !el.hidden);
+    stepNames = stepPanels.map((el) => el.dataset.stepName as StepName);
+    TOTAL_STEPS = stepPanels.length;
+  }
+  applyOperatorMode();
   const positionOf = (name: StepName): number => {
     const index = stepNames.indexOf(name);
     return index >= 0 ? index : 0;
@@ -594,41 +616,43 @@ onBookingCreatedRef?.();
     validateStep(positionOf("cliente"), false);
   }
 
-  if (operatorMode) {
-    $<HTMLButtonElement>("[data-client-search]", form)!.addEventListener("click", () => {
+  // Listeners do passo Cliente são anexados SEMPRE. Como o wizard é singleton
+  // inicializado sem sessão, um guard fixo na primeira inicialização impediria a
+  // recepcionista/admin de usar o passo Cliente depois. O painel simplesmente
+  // fica oculto fora do modo operador (recalibrado em cada abertura).
+  $<HTMLButtonElement>("[data-client-search]", form)!.addEventListener("click", () => {
+    void runClientSearch();
+  });
+  clientSearchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
       void runClientSearch();
-    });
-    clientSearchInput.addEventListener("keydown", (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        void runClientSearch();
-      }
-    });
-    clientResultsBox.addEventListener("click", (event) => {
-      const target = event.target as HTMLElement;
-      const pick = target.closest("[data-pick-client]");
-      if (pick) {
-        const id = pick.getAttribute("data-pick-client")!;
-        const cliente = state.clientResults.find((c) => c.id === id);
-        if (cliente) setCliente(cliente);
-        return;
-      }
-      if (target.closest("[data-clear-client]")) {
-        clearCliente();
-      }
-    });
-    clientCreateToggle.addEventListener("click", () => {
-      clientCreateToggle.hidden = true;
-      clientCreateForm.hidden = false;
-    });
-    clientCreateCancel.addEventListener("click", () => {
-      clientCreateForm.hidden = true;
-      clientCreateToggle.hidden = false;
-    });
-    clientCreateSubmit.addEventListener("click", () => {
-      void createNewClient();
-    });
-  }
+    }
+  });
+  clientResultsBox.addEventListener("click", (event) => {
+    const target = event.target as HTMLElement;
+    const pick = target.closest("[data-pick-client]");
+    if (pick) {
+      const id = pick.getAttribute("data-pick-client")!;
+      const cliente = state.clientResults.find((c) => c.id === id);
+      if (cliente) setCliente(cliente);
+      return;
+    }
+    if (target.closest("[data-clear-client]")) {
+      clearCliente();
+    }
+  });
+  clientCreateToggle.addEventListener("click", () => {
+    clientCreateToggle.hidden = true;
+    clientCreateForm.hidden = false;
+  });
+  clientCreateCancel.addEventListener("click", () => {
+    clientCreateForm.hidden = true;
+    clientCreateToggle.hidden = false;
+  });
+  clientCreateSubmit.addEventListener("click", () => {
+    void createNewClient();
+  });
 
   async function runClientSearch(): Promise<void> {
     const term = clientSearchInput.value.trim();
@@ -716,6 +740,7 @@ onBookingCreatedRef?.();
 
   async function openNew(preselectServiceId?: string): Promise<void> {
     await refreshCatalog();
+    applyOperatorMode();
     await resetWizard();
     if (preselectServiceId) {
       state.serviceId = preselectServiceId;
@@ -730,6 +755,7 @@ onBookingCreatedRef?.();
 
   async function openForReschedule(appointment: Appointment): Promise<void> {
     await refreshCatalog();
+    applyOperatorMode();
     await resetWizard();
     // Em modo operador o reagendamento também pertence a um cliente; o id já
     // vem no agendamento (não passa pelo passo Cliente).

@@ -73,6 +73,8 @@ export interface Session {
   expiresAt: number;
   role: UserRole;
   precisaTrocarSenha?: boolean;
+  /** Permissões efetivas do usuário logado (RBAC granular, Item 1). */
+  permissoes?: Record<string, boolean>;
 }
 
 export interface Cliente {

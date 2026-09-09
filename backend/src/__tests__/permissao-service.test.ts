@@ -8,6 +8,7 @@ import {
   atualizarPermissao,
   obterDetentoresEfetivos,
   listarUsuariosComPermissoes,
+  obterPermissoesEfetivasUsuario,
 } from '../services/permissao-service';
 
 // ── Mocks ─────────────────────────────────────────────────────
@@ -225,5 +226,38 @@ describe('listarUsuariosComPermissoes — permissões efetivas', () => {
     expect(recep?.permissoes['editar_servicos_categorias']).toBe(true);
     expect(recep?.permissoes['criar_admin']).toBe(false);
     expect(recep?.permissoes['gerenciar_permissoes']).toBe(false);
+  });
+});
+
+describe('obterPermissoesEfetivasUsuario — permissões do usuário logado', () => {
+  it('aplica a matriz default quando não há override (recepcionista)', async () => {
+    listarPermissoesPorUsuariosMock.mockResolvedValue([]);
+
+    const permissoes = await obterPermissoesEfetivasUsuario(usuario('u1', 'recepcionista'));
+
+    expect(permissoes['editar_servicos_categorias']).toBe(true);
+    expect(permissoes['excluir_desativar_funcionario']).toBe(true);
+    expect(permissoes['ver_financeiro']).toBe(false);
+    expect(permissoes['gerenciar_permissoes']).toBe(false);
+  });
+
+  it('override no banco vence a matriz', async () => {
+    listarPermissoesPorUsuariosMock.mockResolvedValue([
+      { usuario_id: 'u1', permissao: 'ver_financeiro', concedida: true },
+    ]);
+
+    const permissoes = await obterPermissoesEfetivasUsuario(usuario('u1', 'recepcionista'));
+
+    expect(permissoes['ver_financeiro']).toBe(true);
+    expect(permissoes['editar_servicos_categorias']).toBe(true);
+  });
+
+  it('papel desconhecido cai na matriz de cliente (tudo negado)', async () => {
+    listarPermissoesPorUsuariosMock.mockResolvedValue([]);
+
+    const permissoes = await obterPermissoesEfetivasUsuario(usuario('u1', 'desconhecido'));
+
+    expect(permissoes['ver_financeiro']).toBe(false);
+    expect(permissoes['editar_servicos_categorias']).toBe(false);
   });
 });

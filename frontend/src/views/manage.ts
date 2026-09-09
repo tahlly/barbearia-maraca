@@ -140,6 +140,7 @@ function inferCargo(role: string): CargoFuncionario {
 export function renderManage(container: HTMLElement): () => void {
   const session = requireRole(["admin", "recepcionista"]);
   const isAdmin = session.role === "admin";
+  const canManageServices = isAdmin || session.permissoes?.editar_servicos_categorias === true;
   refreshCaches();
 
   const base = isAdmin ? "/admin" : "/recepcionista";
@@ -1052,9 +1053,9 @@ if (status === "cancelado") {
   // --------------------------------------------------------------- Serviços
   function renderServicos(): void {
     refreshCaches();
-    const actionsHeader = isAdmin ? `<th>Ações</th>` : "";
+    const actionsHeader = canManageServices ? `<th>Ações</th>` : "";
     const actionsCell = (id: string): string =>
-      isAdmin
+      canManageServices
         ? `<td><span class="cell-actions"><button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-service="${escapeHtml(id)}">Editar</button><button type="button" class="btn btn--sm btn--danger-outline" data-delete-service="${escapeHtml(id)}">Excluir</button></span></td>`
         : "";
 
@@ -1064,7 +1065,7 @@ if (status === "cancelado") {
           <h3 class="panel__section-title">Serviços</h3>
           <p class="manage-head__sub">Gerencie os serviços oferecidos pelo salão</p>
         </div>
-        ${isAdmin ? `
+        ${canManageServices ? `
         <div class="toolbar">
           <button type="button" class="btn btn--primary" data-new-service>${icon("plus", 16)} Novo serviço</button>
         </div>` : ""}
@@ -1127,7 +1128,7 @@ if (status === "cancelado") {
   }
 
   async function handleDeleteService(service: Service): Promise<void> {
-    if (!isAdmin) return; // Recepcionista não altera serviços (PRD).
+    if (!canManageServices) return; // Exige permissão editar_servicos_categorias.
     const confirmed = await confirmDialog({
       title: "Excluir serviço",
       message: `Excluir o serviço "${service.name}"? Esta ação não pode ser desfeita.`,
@@ -1145,7 +1146,7 @@ if (status === "cancelado") {
   }
 
   function openServiceModal(service: Service | null): void {
-    if (!isAdmin) return; // Recepcionista não altera serviços (PRD).
+    if (!canManageServices) return; // Exige permissão editar_servicos_categorias.
     const isEdit = Boolean(service);
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";

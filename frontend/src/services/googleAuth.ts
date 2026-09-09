@@ -185,6 +185,7 @@ export async function loginWithGoogle(
       userEmail: string;
       expiresAt?: number;
       role: UserRole;
+      permissoes?: Record<string, boolean>;
     }>("/auth/google", {
       method: "POST",
       body: JSON.stringify({ idToken: googleToken }),
@@ -195,6 +196,7 @@ export async function loginWithGoogle(
       userEmail: data.userEmail,
       expiresAt: data.expiresAt ?? Date.now() + CONFIG.sessionTtlMs,
       role: data.role,
+      permissoes: data.permissoes,
     };
     sessionStorage.setItem(CONFIG.sessionKey, JSON.stringify(session));
     return { ok: true, session, avatarUrl: googleProfile.avatarUrl };
