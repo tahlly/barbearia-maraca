@@ -154,6 +154,74 @@ export async function atualizarStatus(id: string, status: AgendamentoStatus): Pr
  * específica, excluindo agendamentos cancelados. Usado pelo endpoint de
  * disponibilidade para remover slots já reservados.
  */
+export interface FaturamentoResumoRow {
+  quantidade: number;
+  valorTotal: string;
+  porServico: Array<{
+    servicoId: string;
+    servicoNome: string;
+    quantidade: number;
+    valorTotal: string;
+  }>;
+}
+
+interface FaturamentoTotalRow {
+  quantidade: string | number;
+}
+
+interface FaturamentoSomaRow {
+  valorTotal: string | number | null;
+}
+
+interface FaturamentoPorServicoRow {
+  servicoId: string;
+  servicoNome: string;
+  quantidade: string | number;
+  valorTotal: string | number | null;
+}
+
+/**
+ * Resume o faturamento de agendamentos `concluido` em um período,
+ * somando o preço do serviço do agendamento. Se `funcionarioId` for
+ * informado, restringe ao barbeiro (usca do dashboard do profissional).
+ */
+export async function resumirFaturamento(opcoes: {
+  funcionarioId?: string;
+  inicio: string;
+  fim: string;
+}): Promise<FaturamentoResumoRow> {
+  const query = db('agendamento as a')
+    .join('servico as s', 's.id', 'a.servico_id')
+    .where('a.status', 'concluido')
+    .whereBetween('a.data', [opcoes.inicio, opcoes.fim]);
+
+  if (opcoes.funcionarioId) {
+    query.where('a.funcionario_id', opcoes.funcionarioId);
+  }
+
+  const totalRow = await query.clone().count({ quantidade: '*' }).first<FaturamentoTotalRow>();
+  const somaRow = await query.clone().sum({ valorTotal: 's.preco' }).first<FaturamentoSomaRow>();
+
+  const porServicoRows = await query
+    .clone()
+    .select('a.servico_id as servicoId', 's.nome as servicoNome')
+    .count({ quantidade: '*' })
+    .sum({ valorTotal: 's.preco' })
+    .groupBy('a.servico_id', 's.nome')
+    .orderBy('valorTotal', 'desc') as unknown as FaturamentoPorServicoRow[];
+
+  return {
+    quantidade: Number(totalRow?.quantidade ?? 0),
+    valorTotal: String(somaRow?.valorTotal ?? 0),
+    porServico: porServicoRows.map((r) => ({
+      servicoId: r.servicoId,
+      servicoNome: r.servicoNome,
+      quantidade: Number(r.quantidade),
+      valorTotal: String(r.valorTotal ?? 0),
+    })),
+  };
+}
+
 export async function buscarHorariosOcupados(
   funcionarioId: string,
   data: string,

@@ -2,8 +2,8 @@ import { renderPanel } from "../ui/layout.js";
 import { requireRole, updateSessionUser } from "../services/auth.js";
 import { $, escapeHtml, initials } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
-import { formatDateMedium } from "../ui/format.js";
-import { listAppointments } from "../services/booking.js";
+import { formatDateMedium, formatCurrency } from "../ui/format.js";
+import { listAppointments, getRevenueSummary, type RevenueSummary } from "../services/booking.js";
 import { showToast } from "../ui/toast.js";
 import type { Appointment } from "../types.js";
 
@@ -33,6 +33,7 @@ export function renderProfissional(container: HTMLElement): () => void {
     roleLabel: "Profissional",
     links: [
       { href: "#/profissional", label: "Agendamentos", icon: "calendar" },
+      { href: "#/profissional/faturamento", label: "Faturamento", icon: "dollar" },
       { href: "#/profissional/configuracoes", label: "Configurações", icon: "cog" },
       { href: "#/", label: "Voltar ao site", icon: "arrow-left" },
     ],
@@ -40,12 +41,13 @@ export function renderProfissional(container: HTMLElement): () => void {
 
   const cleanups: Array<() => void> = [];
 
-  type ManageTab = "agendamentos" | "configuracoes";
+  type ManageTab = "agendamentos" | "faturamento" | "configuracoes";
 
   const base = "/profissional";
 
   function handleTab(tab: ManageTab): void {
     if (tab === "agendamentos") renderAgendamentos();
+    else if (tab === "faturamento") renderFaturamento();
     else renderConfiguracoes();
   }
 
@@ -225,6 +227,139 @@ export function renderProfissional(container: HTMLElement): () => void {
     `;
   }
 
+  // ------------------------------------------------------------ Faturamento
+  function renderFaturamento(): void {
+    const currentYear = new Date().getFullYear();
+    const defaultStart = `${currentYear}-01-01`;
+    const defaultEnd = `${currentYear}-12-31`;
+
+    content.innerHTML = `
+      <div class="panel__section manage-head">
+        <div class="manage-head__titles">
+          <h3 class="panel__section-title">FATURAMENTO</h3>
+          <p class="manage-head__sub">Quanto você faturou no período (considera apenas atendimentos concluídos)</p>
+        </div>
+      </div>
+
+      <div class="panel__section adv-filter">
+        <div class="adv-filter__title">CONSULTAR FATURAMENTO</div>
+        <div class="adv-filter__row">
+          <div class="field adv-filter__field">
+            <span class="adv-filter__date">
+              ${icon("calendar", 16)}
+              <input type="date" data-inicio aria-label="Data inicial">
+            </span>
+          </div>
+          <div class="field adv-filter__field">
+            <span class="adv-filter__date">
+              ${icon("calendar", 16)}
+              <input type="date" data-fim aria-label="Data final">
+            </span>
+          </div>
+          <div class="adv-filter__actions">
+            <button type="button" class="btn adv-filter__consult" data-consult>Consultar</button>
+            <button type="button" class="btn adv-filter__clear" data-clear-filter>Limpar Filtro</button>
+          </div>
+        </div>
+      </div>
+
+      <div data-faturamento-content>
+        <p class="panel__empty">Carregando faturamento...</p>
+      </div>
+    `;
+
+    const inicio = $<HTMLInputElement>("[data-inicio]", content);
+    const fim = $<HTMLInputElement>("[data-fim]", content);
+    if (inicio) inicio.value = defaultStart;
+    if (fim) fim.value = defaultEnd;
+
+    function buildServices(resume: RevenueSummary): string {
+      if (resume.porServico.length === 0) {
+        return `<p class="panel__empty">Nenhum atendimento concluído nesse período.</p>`;
+      }
+      return `
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Serviço</th>
+                <th>Quantidade</th>
+                <th>Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${resume.porServico
+                .map(
+                  (s) => `
+                    <tr>
+                      <td><strong>${escapeHtml(s.servicoNome)}</strong></td>
+                      <td>${s.quantidade}×</td>
+                      <td>${formatCurrency(Number(s.valorTotal))}</td>
+                    </tr>`,
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function buildSummary(resume: RevenueSummary): string {
+      return `
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-card__label">${icon("dollar", 16)} Faturado no período</span>
+            <span class="kpi-card__value kpi-card__value--gold">${formatCurrency(Number(resume.valorTotal))}</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-card__label">${icon("check-circle", 16)} Atendimentos concluídos</span>
+            <span class="kpi-card__value kpi-card__value--success">${resume.quantidade}</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-card__label">${icon("scissors", 16)} Ticket médio</span>
+            <span class="kpi-card__value">${formatCurrency(Number(resume.ticketMedio))}</span>
+          </div>
+        </div>
+        <div class="panel__section">
+          <h3 class="panel__section-title">ATENDIMENTOS POR SERVIÇO</h3>
+          ${buildServices(resume)}
+        </div>
+      `;
+    }
+
+    async function load(): Promise<void> {
+      const box = $("[data-faturamento-content]", content);
+      if (!box) return;
+      box.innerHTML = `<p class="panel__empty">Carregando faturamento...</p>`;
+      try {
+        const resume = await getRevenueSummary(inicio?.value, fim?.value);
+        box.innerHTML = buildSummary(resume);
+      } catch (error) {
+        box.innerHTML = `<p class="panel__empty" role="alert">${escapeHtml(
+          error instanceof Error ? error.message : "Não foi possível carregar o faturamento.",
+        )}</p>`;
+      }
+    }
+
+    const onConsult = (): void => {
+      void load();
+    };
+    const onClear = (): void => {
+      if (inicio) inicio.value = defaultStart;
+      if (fim) fim.value = defaultEnd;
+      void load();
+    };
+
+    $<HTMLButtonElement>("[data-consult]", content)?.addEventListener("click", onConsult);
+    $<HTMLButtonElement>("[data-clear-filter]", content)?.addEventListener("click", onClear);
+    cleanups.push(() => $<HTMLButtonElement>("[data-consult]", content)?.removeEventListener("click", onConsult));
+    cleanups.push(() =>
+      $<HTMLButtonElement>("[data-clear-filter]", content)?.removeEventListener("click", onClear),
+    );
+
+    void load();
+  }
+
   // ----------------------------------------------------------- Configurações
   function renderConfiguracoes(): void {
     content.innerHTML = `
@@ -399,6 +534,7 @@ export function renderProfissional(container: HTMLElement): () => void {
   const linkHandler = (): void => {
     const path = window.location.hash.slice(1);
     if (path === `${base}/configuracoes`) handleTab("configuracoes");
+    else if (path === `${base}/faturamento`) handleTab("faturamento");
     else handleTab("agendamentos");
   };
 

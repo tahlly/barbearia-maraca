@@ -9,6 +9,7 @@ import {
   confirmarHandler,
   concluirHandler,
   reverterHandler,
+  faturamentoHandler,
 } from '../controllers/agendamento-controller';
 
 const agendamentoRoutes = Router();
@@ -194,10 +195,58 @@ const agendamentoRoutes = Router();
  *         $ref: '#/components/responses/Erro400'
  *       '403':
  *         $ref: '#/components/responses/Erro403'
+ *
+ * /api/agendamentos/faturamento:
+ *   get:
+ *     tags: [Agendamentos]
+ *     summary: Resumo de faturamento em um periodo (agendamentos concluidos). Profissional ve sua propria agenda; admin ve todos; recepcionista/cliente nao acessam.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: inicio
+ *         required: false
+ *         schema: { type: string, format: date }
+ *         description: Data inicial do periodo (YYYY-MM-DD); se ausente, primeiro dia do ano corrente.
+ *       - in: query
+ *         name: fim
+ *         required: false
+ *         schema: { type: string, format: date }
+ *         description: Data final do periodo (YYYY-MM-DD); se ausente, ultimo dia do ano corrente.
+ *     responses:
+ *       '200':
+ *         description: Resumo do faturamento
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 inicio: { type: string, format: date }
+ *                 fim: { type: string, format: date }
+ *                 valorTotal: { type: string, example: '180.00' }
+ *                 quantidade: { type: integer, example: 12 }
+ *                 ticketMedio: { type: string, example: '15.00' }
+ *                 porServico:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       servicoId: { type: string, format: uuid }
+ *                       servicoNome: { type: string }
+ *                       quantidade: { type: integer }
+ *                       valorTotal: { type: string, example: '90.00' }
+ *       '403':
+ *         $ref: '#/components/responses/Erro403'
  */
 
 agendamentoRoutes.post('/', authenticate, criarHandler);
 agendamentoRoutes.get('/', authenticate, listarHandler);
+/* `/faturamento` precisa vir antes de `/:id` para não ser capturado como uuid. */
+agendamentoRoutes.get(
+  '/faturamento',
+  authorize('profissional', 'admin'),
+  faturamentoHandler,
+);
 agendamentoRoutes.get('/:id', authenticate, obterHandler);
 agendamentoRoutes.patch('/:id/cancelar', authenticate, cancelarHandler);
 agendamentoRoutes.patch(
