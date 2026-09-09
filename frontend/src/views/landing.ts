@@ -1,48 +1,67 @@
 import { $, clearElement, escapeHtml } from "../ui/dom.js";
 import { initBookingWizard, type BookingWizardHandle } from "../features/bookingWizard.js";
-import { loadServices } from "../services/catalog.js";
+import { loadServices, fetchServices } from "../services/catalog.js";
 import { getSession } from "../services/auth.js";
 import { navigateTo } from "../router.js";
 import { formatCurrency } from "../ui/format.js";
 
-function renderServicesSection(wizard: BookingWizardHandle): void {
+async function renderServicesSection(wizard: BookingWizardHandle): Promise<void> {
   const grid = $("#services-grid");
   if (!grid) return;
   clearElement(grid);
 
-  const services = loadServices().filter((s) => s.active);
-  if (services.length === 0) {
-    grid.innerHTML = `<p class="options-empty">Nossos serviços estão sendo atualizados. Entre em contato para agendar.</p>`;
-    return;
-  }
+  // O cache é populado pelo primeCatalog() no boot (fire-and-forget). Se a
+  // landing renderizou antes de o fetch terminar, o cache ainda está vazio;
+  // registra a grid e re-renderiza quando a resposta chegar.
+  const render = (): void => {
+    const services = loadServices().filter((s) => s.active);
+    if (services.length === 0) {
+      grid.innerHTML = `<p class="options-empty">Nossos serviços estão sendo atualizados. Entre em contato para agendar.</p>`;
+      return;
+    }
 
-  for (const service of services) {
-    const card = document.createElement("article");
-    card.className = "service-card";
-    card.innerHTML = `
-      <div class="service-card__head">
-        <h3 class="service-card__name">${escapeHtml(service.name)}</h3>
-        <span class="service-card__duration"><i class='bx bx-time-five'></i>${service.durationMin} min</span>
-      </div>
-      <p class="service-card__desc">${escapeHtml(service.description)}</p>
-      <div class="service-card__footer">
-        <div class="service-card__price-block">
-          <span class="service-card__price-label">Preço</span>
-          <strong class="service-card__price">${formatCurrency(service.price)}</strong>
+    for (const service of services) {
+      const card = document.createElement("article");
+      card.className = "service-card";
+      card.innerHTML = `
+        <div class="service-card__head">
+          <h3 class="service-card__name">${escapeHtml(service.name)}</h3>
+          <span class="service-card__duration"><i class='bx bx-time-five'></i>${service.durationMin} min</span>
         </div>
-        <button type="button" class="btn btn--primary btn--sm" data-service-id="${escapeHtml(service.id)}">Agendar</button>
-      </div>`;
-    const btn = card.querySelector<HTMLButtonElement>("button[data-service-id]")!;
-    const handler = (): void => {
-      const session = getSession();
-      if (!session) {
-        navigateTo("/login-cliente");
-        return;
-      }
-      void wizard.openNew(service.id);
-    };
-    btn.addEventListener("click", handler);
-    grid.appendChild(card);
+        <p class="service-card__desc">${escapeHtml(service.description)}</p>
+        <div class="service-card__footer">
+          <div class="service-card__price-block">
+            <span class="service-card__price-label">Preço</span>
+            <strong class="service-card__price">${formatCurrency(service.price)}</strong>
+          </div>
+          <button type="button" class="btn btn--primary btn--sm" data-service-id="${escapeHtml(service.id)}">Agendar</button>
+        </div>`;
+      const btn = card.querySelector<HTMLButtonElement>("button[data-service-id]")!;
+      const handler = (): void => {
+        const session = getSession();
+        if (!session) {
+          navigateTo("/login-cliente");
+          return;
+        }
+        void wizard.openNew(service.id);
+      };
+      btn.addEventListener("click", handler);
+      grid.appendChild(card);
+    }
+  };
+
+  render();
+
+  // Garante dados: se o cache ainda estiver vazio nesta primeira renderização,
+  // dispara o fetch dos serviços (idempotente) e re-renderiza a grid.
+  if (loadServices().filter((s) => s.active).length === 0) {
+    try {
+      await fetchServices();
+      clearElement(grid);
+      render();
+    } catch {
+      /* mantém a mensagem de estado atual */
+    }
   }
 }
 
@@ -160,7 +179,7 @@ export function renderLanding(container: HTMLElement): () => void {
   `;
 
   const wizard = initBookingWizard();
-  renderServicesSection(wizard);
+  void renderServicesSection(wizard);
 
   const yearEl = $("#footer-year");
   if (yearEl) yearEl.textContent = String(new Date().getFullYear());
