@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UnauthorizedError } from '../errors/UnauthorizedError';
+import { ForbiddenError } from '../errors/ForbiddenError';
 
 // Mock da camada de persistência para isolar o service de regras de negócio.
 const findUsuarioByIdMock = vi.fn();
 const findUsuarioByEmailMock = vi.fn();
+const obterFuncionarioNomeMock = vi.fn();
 
 let ultimoUpdateUsuario: Record<string, unknown> | undefined;
 
@@ -47,7 +49,7 @@ vi.mock('../repositories/auth-repository', () => ({
   criarCliente: vi.fn(),
   criarClienteCompleto: vi.fn(),
   obterClienteNome: vi.fn(),
-  obterFuncionarioNome: vi.fn(),
+  obterFuncionarioNome: (...args: unknown[]) => obterFuncionarioNomeMock(...args),
   salvarTokenResetSenha: vi.fn(),
   findUsuarioByResetTokenHash: vi.fn(),
 }));
@@ -60,7 +62,7 @@ vi.mock('bcrypt', () => ({
   },
 }));
 
-import { atualizarPerfil } from '../services/auth-service';
+import { atualizarPerfil, login } from '../services/auth-service';
 import type { UsuarioRow } from '../repositories/auth-repository';
 
 const BASE_USUARIO: UsuarioRow = {
@@ -131,5 +133,49 @@ describe('atualizarPerfil — primeiro acesso (P4)', () => {
     await expect(
       atualizarPerfil('u1', { email: 'novo@email.com' }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+});
+
+describe('login — funcionário desativado (fix)', () => {
+  beforeEach(() => {
+    findUsuarioByEmailMock.mockReset();
+    obterFuncionarioNomeMock.mockReset();
+  });
+
+  it('funcionário ativo → login gera token e role profissional', async () => {
+    findUsuarioByEmailMock.mockResolvedValue({
+      ...BASE_USUARIO,
+      senha_hash: 'hash:123456',
+      primeiro_acesso: false,
+    });
+    obterFuncionarioNomeMock.mockResolvedValue({ nome: 'Barbeiro A', cargo: 'barbeiro', ativo: true });
+
+    const resultado = await login({ email: 'barbeiro@email.com', senha: 'hash:123456' });
+
+    expect(resultado.token).toBeTruthy();
+    expect(resultado.role).toBe('profissional');
+    expect(resultado.user.cargo).toBe('barbeiro');
+  });
+
+  it('funcionário inativo → ForbiddenError sem gerar token', async () => {
+    findUsuarioByEmailMock.mockResolvedValue({
+      ...BASE_USUARIO,
+      senha_hash: 'hash:123456',
+      primeiro_acesso: false,
+    });
+    obterFuncionarioNomeMock.mockResolvedValue({ nome: 'Barbeiro A', cargo: 'barbeiro', ativo: false });
+
+    await expect(
+      login({ email: 'barbeiro@email.com', senha: 'hash:123456' }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('funcionário inexistente/inválido → UnauthorizedError sem consultar nome/cargo', async () => {
+    findUsuarioByEmailMock.mockResolvedValue(null);
+
+    await expect(
+      login({ email: 'sumido@email.com', senha: 'hash:123456' }),
+    ).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(obterFuncionarioNomeMock).not.toHaveBeenCalled();
   });
 });

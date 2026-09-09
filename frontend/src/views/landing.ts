@@ -47,6 +47,12 @@ function renderServicesSection(wizard: BookingWizardHandle): void {
 }
 
 export function renderLanding(container: HTMLElement): () => void {
+  // Embed oficial do Google Maps (sem API key). Substitui o embed de terceiros
+  // que injetava um link oculto de spam no rodapé do mapa.
+  const mapaEmbed = `https://www.google.com/maps?q=${encodeURIComponent(
+    "R. Francisco Real, 763 - Bangu, Rio de Janeiro - RJ",
+  )}&output=embed&hl=pt-BR`;
+
   container.innerHTML = `
     <section class="hero" id="inicio">
       <picture>
@@ -160,11 +166,12 @@ export function renderLanding(container: HTMLElement): () => void {
           </div>
           <div class="map-image">
             <iframe
-              src="https://www.google.com/maps?q=R.%20Francisco%20Real%2C%20763%20-%20Padre%20Miguel%2C%20Rio%20de%20Janeiro%20-%20RJ%2C%2021810-041&output=embed"
+              src="${mapaEmbed}"
               title="Mapa de localização da Barbearia Maracá"
               loading="lazy"
               referrerpolicy="no-referrer-when-downgrade"
               allowfullscreen
+              style="border:0;width:100%;height:350px;display:block;"
             ></iframe>
           </div>
         </div>
