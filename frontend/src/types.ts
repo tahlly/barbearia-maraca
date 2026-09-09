@@ -56,13 +56,15 @@ export interface Appointment {
  * do cliente).
  */
 export interface BookingDraft {
-  funcionario_id: string;
-  servico_id: string;
-  data: string;
-  hora: string;
-  observacao?: string | null;
-  clienteId?: string;
-}
+    funcionario_id: string;
+    servico_id: string;
+    data: string;
+    hora: string;
+    observacao?: string | null;
+    clienteId?: string;
+    /** Offset do navegador em minutos relativos a UTC (ex.: -180 para UTC-3). */
+    timezoneOffsetMinutes?: number;
+  }
 
 export interface Session {
   token: string;

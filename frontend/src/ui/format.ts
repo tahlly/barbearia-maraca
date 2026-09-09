@@ -29,7 +29,11 @@ export function toIsoDate(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+// parseIsoDate monta o Date em UTC; toda formatação de data pura (YYYY-MM-DD)
+// deve fixar timeZone: "UTC", senão navegadores em fuso negativo (ex.: -03:00)
+// deslocam o dia para trás (2026-09-09 aparece como 08/09).
 const longDate = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "UTC",
   weekday: "long",
   day: "2-digit",
   month: "long",
@@ -37,12 +41,14 @@ const longDate = new Intl.DateTimeFormat("pt-BR", {
 });
 
 const shortDate = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "UTC",
   day: "2-digit",
   month: "2-digit",
   year: "numeric",
 });
 
 const mediumDate = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "UTC",
   weekday: "short",
   day: "2-digit",
   month: "short",
@@ -61,6 +67,7 @@ export function formatDateMedium(iso: string): string {
 }
 
 const dayMonth = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "UTC",
   day: "2-digit",
   month: "short",
 });

@@ -72,6 +72,7 @@ export async function createAppointment(draft: BookingDraft): Promise<Appointmen
       data: draft.data,
       hora: draft.hora,
       observacao: draft.observacao ?? null,
+      timezone_offset_minutes: draft.timezoneOffsetMinutes ?? null,
       ...(draft.clienteId ? { cliente_id: draft.clienteId } : {}),
     }),
   });

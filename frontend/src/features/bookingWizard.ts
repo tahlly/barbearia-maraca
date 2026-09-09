@@ -465,6 +465,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       servico_id: state.serviceId,
       data: state.dateIso,
       hora: state.time,
+      timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
       ...(operatorMode && state.cliente ? { clienteId: state.cliente.id } : {}),
     };
 

@@ -19,12 +19,15 @@ export interface AgendamentoDTO {
 }
 
 export interface CreateAgendamentoRequest {
-  funcionario_id: string;
-  servico_id: string;
-  data: string;
-  hora: string;
-  observacao?: string | null;
-  // Obrigatório quando o solicitante é recepcionista/admin (cria em nome de
-  // um cliente informado); o papel cliente resolve o próprio registro via token.
-  cliente_id?: string;
-}
+    funcionario_id: string;
+    servico_id: string;
+    data: string;
+    hora: string;
+    observacao?: string | null;
+    // Obrigatório quando o solicitante é recepcionista/admin (cria em nome de
+    // um cliente informado); o papel cliente resolve o próprio registro via token.
+    cliente_id?: string;
+    // Offset do navegador em minutos relativos a UTC (ex.: -180 para UTC-3).
+    // Opcional: quando ausente, o servidor assume o fuso local do processo.
+    timezone_offset_minutes?: number | null;
+  }
