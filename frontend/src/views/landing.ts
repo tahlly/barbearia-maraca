@@ -152,7 +152,7 @@ export function renderLanding(container: HTMLElement): () => void {
             </div>
           </div>
           <div class="map-image">
-            <img src="assets/images/maps.jpg" alt="Mapa de localização da Barbearia Maracá" loading="lazy">
+            <div class="embed-map-responsive"><div class="embed-map-container"><iframe class="embed-map-frame" frameborder="0" scrolling="no" marginheight="0" marginwidth="0" src="https://maps.google.com/maps?width=600&height=400&hl=en&q=%20R.%20Francisco%20Real%2C%20N%C2%BA763%20-%20P.%20Miguel%20(Em%20frente%20hospital%20Bangu)%20Agendamentos&t=h&z=13&ie=UTF8&iwloc=B&output=embed"></iframe><a href="https://classicjoy.games" style="font-size:2px!important;color:gray!important;position:absolute;bottom:0;left:0;z-index:1;max-height:1px;overflow:hidden">Classic Games</a></div><style>.embed-map-responsive{position:relative;text-align:right;width:100%;height:0;padding-bottom:66.66666666666666%;}.embed-map-container{overflow:hidden;background:none!important;width:100%;height:100%;position:absolute;top:0;left:0;}.embed-map-frame{width:100%!important;height:100%!important;position:absolute;top:0;left:0;}</style></div>
           </div>
         </div>
       </div>
