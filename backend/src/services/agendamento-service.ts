@@ -7,9 +7,11 @@ import {
   buscarFuncionarioPorUsuarioId,
   funcionarioExisteAtivo,
   servicoExisteAtivo,
+  resumirFaturamento,
   type AgendamentoRow,
 } from '../repositories/agendamento-repository';
 import type { AgendamentoDTO, AgendamentoStatus, CreateAgendamentoRequest } from '../dtos/agendamento-dto';
+import type { FaturamentoResumoDTO } from '../dtos/faturamento-dto';
 import { ForbiddenError } from '../errors/ForbiddenError';
 import { NotFoundError } from '../errors/NotFoundError';
 import { ValidationError } from '../errors/ValidationError';
@@ -79,6 +81,15 @@ function validarTransicao(atual: AgendamentoStatus, destino: AgendamentoStatus):
   const permitidas = TRANSICOES[atual];
   if (!permitidas.includes(destino)) {
     throw new ValidationError(`Transição de status inválida: ${atual} -> ${destino}`);
+  }
+}
+
+function validarIntervalo(inicio: string, fim: string): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio) || !/^\d{4}-\d{2}-\d{2}$/.test(fim)) {
+    throw new ValidationError('Intervalo de datas inválido');
+  }
+  if (inicio > fim) {
+    throw new ValidationError('Data inicial não pode ser maior que a final');
   }
 }
 
@@ -297,4 +308,57 @@ export async function reverterConclusaoAgendamento(
   id: string,
 ): Promise<AgendamentoDTO> {
   return alterarStatusOperacional(usuarioId, role, id, 'confirmado');
+}
+
+/**
+ * Resumo de faturamento (agendamentos `concluido`) para o período informado.
+ *
+ * - Profissional: sempre calcula sobre a própria agenda.
+ * - Admin: calcula sobre todos os barbeiros.
+ * - Recepcionista/cliente: sem acesso (PRD mantém o financeiro restrito).
+ * - Sem `inicio`/`fim`, assume o ano corrente (mesmo padrão das telas).
+ */
+export async function obterFaturamento(
+  usuarioId: string,
+  role: string,
+  filtros: { inicio?: string; fim?: string },
+): Promise<FaturamentoResumoDTO> {
+  if (!isRole(role)) {
+    throw new ForbiddenError('Acesso negado');
+  }
+  if (role === 'cliente' || role === 'recepcionista') {
+    throw new ForbiddenError(
+      role === 'recepcionista'
+        ? 'Recepcionista não possui acesso ao faturamento'
+        : 'Acesso negado',
+    );
+  }
+
+  const anoAtual = new Date().getFullYear();
+  const inicio = filtros.inicio ?? `${anoAtual}-01-01`;
+  const fim = filtros.fim ?? `${anoAtual}-12-31`;
+  validarIntervalo(inicio, fim);
+
+  let funcionarioId: string | undefined;
+  if (role === 'profissional') {
+    const funcionario = await buscarFuncionarioPorUsuarioId(usuarioId);
+    if (!funcionario) {
+      throw new ForbiddenError('Perfil de funcionário não encontrado');
+    }
+    funcionarioId = funcionario.id;
+  }
+
+  const resumo = await resumirFaturamento({ funcionarioId, inicio, fim });
+
+  const valorTotal = Number(resumo.valorTotal).toFixed(2);
+  const quantidade = resumo.quantidade;
+  const ticketMedio = quantidade > 0 ? (Number(valorTotal) / quantidade).toFixed(2) : '0.00';
+  const porServico = resumo.porServico.map((item) => ({
+    servicoId: item.servicoId,
+    servicoNome: item.servicoNome,
+    quantidade: item.quantidade,
+    valorTotal: Number(item.valorTotal).toFixed(2),
+  }));
+
+  return { inicio, fim, valorTotal, quantidade, ticketMedio, porServico };
 }
