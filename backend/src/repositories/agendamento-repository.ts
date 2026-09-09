@@ -13,6 +13,7 @@ export interface AgendamentoRow {
   hora: string;
   status: AgendamentoStatus;
   observacao: string | null;
+  pessoa_atendida_nome: string | null;
   created_at: string | null;
 }
 
@@ -36,6 +37,7 @@ const SELECT_COLUNAS = [
   'a.hora',
   'a.status',
   'a.observacao',
+  'a.pessoa_atendida_nome',
   'a.created_at',
   'cliente.nome as cliente_nome',
   'funcionario.nome as funcionario_nome',
@@ -81,6 +83,7 @@ interface AgendamentoInsertRow {
   hora: string;
   status: AgendamentoStatus;
   observacao: string | null;
+  pessoa_atendida_nome: string | null;
 }
 
 export async function criar(dados: {
@@ -90,6 +93,7 @@ export async function criar(dados: {
   data: string;
   hora: string;
   observacao: string | null;
+  pessoaAtendidaNome: string | null;
 }): Promise<AgendamentoRow> {
   const inseridos = await db<AgendamentoInsertRow>('agendamento')
     .insert({
@@ -100,6 +104,7 @@ export async function criar(dados: {
       hora: dados.hora,
       status: 'pendente',
       observacao: dados.observacao,
+      pessoa_atendida_nome: dados.pessoaAtendidaNome,
     })
     .returning('id');
 

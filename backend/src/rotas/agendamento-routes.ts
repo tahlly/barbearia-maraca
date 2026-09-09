@@ -36,6 +36,7 @@ const agendamentoRoutes = Router();
  *         status:
  *           $ref: '#/components/schemas/AgendamentoStatus'
  *         observacao: { type: string, nullable: true }
+ *         pessoaAtendidaNome: { type: string, nullable: true }
  *         criadoEm: { type: string }
  *     CreateAgendamentoRequest:
  *       type: object
@@ -46,6 +47,7 @@ const agendamentoRoutes = Router();
  *         data: { type: string, format: date }
  *         hora: { type: string, example: '09:00' }
  *         observacao: { type: string, nullable: true }
+ *         pessoa_atendida_nome: { type: string, nullable: true }
  *         cliente_id:
  *           type: string
  *           format: uuid

@@ -145,7 +145,7 @@ const clienteRoutes = Router();
  */
 
 // Listar todos: apenas recepcionista/admin.
-clienteRoutes.get('/', authorize('recepcionista', 'admin'), listarClientesHandler);
+clienteRoutes.get('/', authorize('recepcionista', 'admin', 'profissional'), listarClientesHandler);
 
 // Buscar por e-mail: recepcionista/admin ou o próprio cliente autenticado
 // (ownership na service). Registrada antes de '/:id' para não ser capturada

@@ -132,6 +132,42 @@ export function fetchBarbeiros(): Promise<Professional[]> {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Funcionário autenticado (busca por e-mail — endpoint restrito)     */
+/* ------------------------------------------------------------------ */
+
+interface FuncionarioCompletoDTO {
+  id: string;
+  usuarioId: string;
+  nome: string;
+  telefone: string | null;
+  cargo: CargoFuncionario;
+  especialidade: string | null;
+  foto: string | null;
+  descricao: string | null;
+  ativo: boolean;
+  email: string;
+  createdAt: string;
+  updatedAt: string;
+  categorias?: string[];
+}
+
+/**
+ * Busca o próprio perfil de funcionário via `GET /funcionarios/buscar?email=...`.
+ * O backend garante que um `profissional` autenticado só recebe o próprio
+ * perfil. Em caso de erro retorna `null`.
+ */
+export async function fetchFuncionarioPorEmail(email: string): Promise<Professional | null> {
+  try {
+    const dto = await httpJson<FuncionarioCompletoDTO>(
+      `/funcionarios/buscar?email=${encodeURIComponent(email)}`,
+    );
+    return mapProfissional(dto);
+  } catch {
+    return null;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Sync cache readers (mantêm compatibilidade com call sites existentes) */
 /* ------------------------------------------------------------------ */
 

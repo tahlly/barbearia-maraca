@@ -20,6 +20,7 @@ interface AgendamentoDTO {
   hora: string;
   status: AgendamentoStatusDTO;
   observacao: string | null;
+  pessoaAtendidaNome: string | null;
   criadoEm?: string;
 }
 
@@ -40,6 +41,7 @@ export function mapAppointment(dto: AgendamentoDTO): Appointment {
     hora: dto.hora,
     status: mapStatus(dto.status),
     observacao: dto.observacao ?? undefined,
+    pessoaAtendidaNome: dto.pessoaAtendidaNome ?? null,
     criadoEm: dto.criadoEm,
   };
 }
@@ -72,6 +74,7 @@ export async function createAppointment(draft: BookingDraft): Promise<Appointmen
       data: draft.data,
       hora: draft.hora,
       observacao: draft.observacao ?? null,
+      pessoa_atendida_nome: draft.pessoaAtendidaNome ?? null,
       timezone_offset_minutes: draft.timezoneOffsetMinutes ?? null,
       ...(draft.clienteId ? { cliente_id: draft.clienteId } : {}),
     }),

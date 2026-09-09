@@ -84,7 +84,9 @@
         <li class="steps__item" data-step-name="cliente" hidden><span class="steps__dot">1</span><span class="steps__label">Cliente</span></li>
         <li class="steps__item is-active" data-step-name="servicos"><span class="steps__dot">2</span><span class="steps__label">Serviços</span></li>
         <li class="steps__item" data-step-name="horario"><span class="steps__dot">3</span><span class="steps__label">Profissional &amp; Horário</span></li>
-        <li class="steps__item" data-step-name="confirmacao"><span class="steps__dot">4</span><span class="steps__label">Confirmação</span></li>
+        <li class="steps__item" data-step-name="atendimento" hidden><span class="steps__dot">4</span><span class="steps__label">Para quem</span></li>
+        <li class="steps__item" data-step-name="revisao"><span class="steps__dot">5</span><span class="steps__label">Revisão</span></li>
+        <li class="steps__item" data-step-name="confirmacao"><span class="steps__dot">6</span><span class="steps__label">Confirmação</span></li>
       </ol>
       <div class="steps__track" aria-hidden="true"><span id="booking-progress"></span></div>
 
@@ -150,7 +152,40 @@
             <p class="slots-hint" id="slots-hint"><i class="bx bx-error-circle" aria-hidden="true"></i><span>Escolha um profissional para ver os horários disponíveis.</span></p>
             <div class="slots" id="booking-slots" hidden></div>
           </section>
-          <section class="wizard__step" data-step="3" data-step-name="confirmacao" aria-label="Passo 4 — Confirmação">
+          <section class="wizard__step" data-step="3" data-step-name="atendimento" aria-label="Passo 4 — Para quem" hidden>
+            <h3 class="wizard__heading">Para quem é este agendamento?</h3>
+            <p class="wizard__hint">Se o horário for para outra pessoa, como seu filho, informe o nome — ele fica registrado no seu cadastro, sem criar outra conta.</p>
+            <div class="role-options" id="booking-attendee-options">
+              <label class="option-card attendee-option">
+                <input type="radio" name="attendance" value="proprio" checked>
+                <span class="attendee-option__info">
+                  <strong>Para mim</strong>
+                  <small>O agendamento é para o cliente logado</small>
+                </span>
+                <span class="option-check"><i class="bx bx-user"></i></span>
+              </label>
+              <label class="option-card attendee-option">
+                <input type="radio" name="attendance" value="outra_pessoa">
+                <span class="attendee-option__info">
+                  <strong>Para outra pessoa</strong>
+                  <small>Ex.: filho(a), acompanhante ou dependente</small>
+                </span>
+                <span class="option-check"><i class="bx bx-group"></i></span>
+              </label>
+            </div>
+            <div class="field" id="booking-attendee-name-wrap" hidden>
+              <label class="field__label" for="booking-attendee-name">Nome da pessoa atendida *</label>
+              <input type="text" id="booking-attendee-name" maxlength="120" placeholder="Nome completo" autocomplete="off">
+            </div>
+          </section>
+          <section class="wizard__step" data-step="4" data-step-name="revisao" aria-label="Passo 5 — Revisão">
+            <h3 class="wizard__heading">Revise os dados do agendamento</h3>
+            <p class="wizard__hint">Confira se todas as informações estão corretas antes de finalizar. Se precisar alterar algo, clique em "Voltar".</p>
+            <div class="review-card" id="booking-review">
+              <dl class="summary summary--review" id="booking-review-summary"></dl>
+            </div>
+          </section>
+          <section class="wizard__step" data-step="5" data-step-name="confirmacao" aria-label="Passo 6 — Confirmação">
             <div class="success-card">
               <span class="success-card__icon" aria-hidden="true"><i class="bx bx-check-circle"></i></span>
               <h3 class="success-card__title" id="booking-success-title">Agendamento confirmado!</h3>

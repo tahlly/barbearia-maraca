@@ -74,6 +74,7 @@ export interface AgendamentoDTO {
   hora: string;
   status: AgendamentoStatus;
   observacao: string | null;
+  pessoaAtendidaNome: string | null;
   criadoEm?: string;
 }
 
@@ -83,6 +84,8 @@ export interface CreateAgendamentoRequest {
   data: string;
   hora: string;
   observacao?: string | null;
+  // Nome da pessoa que será atendida quando o agendamento não for para o próprio cliente.
+  pessoa_atendida_nome?: string | null;
   // OBRIGATÓRIO quando o solicitante é recepcionista/admin (cria para um
   // cliente informado). Ignorado/desnecessário para o papel cliente, cujo
   // registro é resolvido pelo token JWT.

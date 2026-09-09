@@ -18,6 +18,8 @@ const criarSchema = z.object({
   data: z.string(),
   hora: z.string(),
   observacao: z.string().max(1000).nullable().optional(),
+  // Nome da pessoa que será atendida quando o agendamento não for para o próprio cliente.
+  pessoa_atendida_nome: z.string().trim().min(2, 'Nome da pessoa atendida deve ter entre 2 e 120 caracteres').max(120, 'Nome da pessoa atendida deve ter entre 2 e 120 caracteres').nullable().optional(),
   // Permite que recepcionista/admin criem agendamento em nome de um cliente.
   // A service valida a obrigatoriedade conforme o papel do solicitante.
   cliente_id: z.string().uuid('cliente_id deve ser um UUID').optional(),

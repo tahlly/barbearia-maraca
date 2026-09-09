@@ -1,6 +1,6 @@
 import { CONFIG } from "../config.js";
 import type { Appointment, BookingDraft, Professional } from "../types.js";
-import { fetchBarbeiros, loadProfessionals, loadServices } from "../services/catalog.js";
+import { fetchBarbeiros, fetchFuncionarioPorEmail, loadProfessionals, loadServices } from "../services/catalog.js";
 import { createAppointment, reschedule } from "../services/booking.js";
 import { buscarClientes, criarCliente } from "../services/clientes.js";
 import { getSession } from "../services/auth.js";
@@ -11,7 +11,7 @@ import { formatCurrency, formatDateLong, toIsoDate } from "../ui/format.js";
 import { closeModal, openModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
 
-type StepName = "cliente" | "servicos" | "horario" | "confirmacao";
+type StepName = "cliente" | "servicos" | "horario" | "atendimento" | "revisao" | "confirmacao";
 
 interface ClienteSelecionado {
   id: string;
@@ -30,6 +30,8 @@ interface WizardState {
   cliente: ClienteSelecionado | null;
   clientResults: ClienteSelecionado[];
   clientSearchPerformed: boolean;
+  attendance: "proprio" | "outra_pessoa";
+  pessoaAtendidaNome: string | null;
 }
 
 export interface BookingWizardHandle {
@@ -69,6 +71,14 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       // Fallback: usa o cache global já populado (pelo prime), se houver.
       catalogProfessionals = loadProfessionals().filter((p) => p.cargo === "barbeiro");
     }
+    // Barbeiro agenda somente para si — resolve o id do próprio funcionário.
+    if (sessionRole === "profissional") {
+      const sess = getSession();
+      if (sess?.userEmail) {
+        const me = await fetchFuncionarioPorEmail(sess.userEmail);
+        ownProfessionalId = me?.id ?? null;
+      }
+    }
   };
 
   // Guard de sequência: evita que duas renderizações concorrentes de horários
@@ -79,7 +89,10 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   // o cliente (buscar existente ou cadastrar novo) e o agendamento é criado em
   // nome desse cliente. Cliente autenticado usa o fluxo padrão (token).
   const sessionRole = getSession()?.role;
-  const operatorMode = sessionRole === "recepcionista" || sessionRole === "admin";
+  const operatorMode = sessionRole === "recepcionista" || sessionRole === "admin" || sessionRole === "profissional";
+
+  /** Quando o papel é `profissional`, armazena o id do próprio funcionário. */
+  let ownProfessionalId: string | null = null;
 
   const overlay = $("#booking-modal")!;
   const form = $<HTMLFormElement>("#booking-form")!;
@@ -99,6 +112,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   const nextBtn = $<HTMLButtonElement>("#booking-next")!;
   const successTitle = $("#booking-success-title")!;
   const summaryEl = $("#booking-summary")!;
+  const reviewSummaryEl = $("#booking-review-summary")!;
 
   // Passo Cliente (modo operador)
   const clientSearchInput = $<HTMLInputElement>("#booking-client-search")!;
@@ -108,10 +122,28 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   const clientCreateSubmit = $<HTMLButtonElement>("[data-client-create-submit]", form)!;
   const clientCreateCancel = $<HTMLButtonElement>("[data-client-create-cancel]", form)!;
 
+  const attendeeOptions = $("#booking-attendee-options")!;
+  const attendeeNameWrap = $("#booking-attendee-name-wrap")!;
+  const attendeeInput = $<HTMLInputElement>("#booking-attendee-name");
+
   const clientStepItem = stepsItems.find((el) => el.dataset.stepName === "cliente");
   const clientPanel = panels.find((el) => el.dataset.stepName === "cliente");
   if (clientStepItem) clientStepItem.hidden = !operatorMode;
   if (clientPanel) clientPanel.hidden = !operatorMode;
+
+  // Etapa "Para quem" — visível somente no fluxo do cliente autenticado.
+  const atendimentoStepItem = stepsItems.find((el) => el.dataset.stepName === "atendimento");
+  const atendimentoPanel = panels.find((el) => el.dataset.stepName === "atendimento");
+  if (atendimentoStepItem) atendimentoStepItem.hidden = operatorMode;
+  if (atendimentoPanel) atendimentoPanel.hidden = operatorMode;
+
+  // Barbeiro não cadastra clientes — oculta o toggle de criação
+  if (operatorMode && sessionRole === "profissional") {
+    const createToggle = form.querySelector<HTMLElement>("[data-client-create-toggle]");
+    if (createToggle) createToggle.hidden = true;
+    const createForm = form.querySelector<HTMLElement>("[data-client-create-form]");
+    if (createForm) createForm.hidden = true;
+  }
 
   // Passos visíveis (ordem real do wizard para o papel atual).
   const steps = stepsItems.filter((el) => !el.hidden);
@@ -135,6 +167,8 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     cliente: null,
     clientResults: [],
     clientSearchPerformed: false,
+    attendance: "proprio",
+    pessoaAtendidaNome: null,
   };
 
   const today = new Date();
@@ -211,6 +245,29 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     });
   }
 
+  function initAttendeeField(): void {
+    attendeeOptions.addEventListener("change", (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.name !== "attendance") return;
+      if (target.value === "outra_pessoa") {
+        state.attendance = "outra_pessoa";
+        attendeeNameWrap.hidden = false;
+        attendeeInput?.focus();
+      } else {
+        state.attendance = "proprio";
+        attendeeNameWrap.hidden = true;
+        state.pessoaAtendidaNome = null;
+        if (attendeeInput) attendeeInput.value = "";
+      }
+      validateStep(positionOf("atendimento"), false);
+    });
+
+    attendeeInput?.addEventListener("input", () => {
+      state.pessoaAtendidaNome = attendeeInput.value.trim() || null;
+      validateStep(positionOf("atendimento"), false);
+    });
+  }
+
   function renderServices(): void {
     clearElement(servicesBox);
     const active = catalogServices.filter((s) => s.active);
@@ -245,6 +302,12 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
 
   async function renderProfessionals(): Promise<void> {
     clearElement(prosBox);
+    // O barbeiro agenda apenas para si mesmo: oculta a lista e mostra confirmação.
+    if (sessionRole === "profissional") {
+      prosBox.innerHTML = `
+        <p class="options-empty"><span>Você será o responsável pelo atendimento.</span></p>`;
+      return;
+    }
     // Somente barbeiros podem ser agendados. Itens sem o campo `cargo`
     // (payload antigo) NÃO são exibidos, para não permitir agendar com
     // recepcionista/administrador que não possuem horario_trabalho.
@@ -406,9 +469,12 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     prevBtn.hidden = pos === 0 || pos === TOTAL_STEPS - 1;
     nextBtn.hidden = pos === TOTAL_STEPS - 1;
     footer.classList.toggle("wizard__footer--summary", pos === TOTAL_STEPS - 1);
-    nextBtn.textContent = activeName === "horario" ? "Confirmar agendamento" : "Continuar";
+    nextBtn.textContent = activeName === "revisao" ? "Confirmar agendamento" : "Continuar";
     if (activeName === "horario") {
       void renderSlots();
+    }
+    if (activeName === "revisao") {
+      renderReviewSummary();
     }
     const activePanel = stepPanels[pos];
     if (activePanel) activePanel.scrollTop = 0;
@@ -439,6 +505,11 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       }
       return valid;
     }
+    if (name === "atendimento") {
+      const valid = state.attendance === "proprio" || Boolean(state.pessoaAtendidaNome);
+      if (!valid && report) showToast("Informe o nome da pessoa que será atendida.", "error");
+      return valid;
+    }
     return true;
   }
 
@@ -458,9 +529,42 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       ["Data", formatDateLong(appointment.data)],
       ["Horário", appointment.hora],
       ["Cliente", appointment.clienteNome ?? "-"],
-      ["Total", formatCurrency(total)],
     ];
+    if (appointment.pessoaAtendidaNome) {
+      rows.push(["Atendido", appointment.pessoaAtendidaNome]);
+    }
+    rows.push(["Total", formatCurrency(total)]);
     summaryEl.innerHTML = rows
+      .map(
+        ([label, value]) =>
+          `<div class="summary__row"><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`,
+      )
+      .join("");
+  }
+
+  function renderReviewSummary(): void {
+    const serviceName =
+      catalogServices.find((s) => s.id === state.serviceId)?.name ?? "";
+    const professional =
+      catalogProfessionals.find((p) => p.id === state.professionalId)?.name ?? "-";
+    const total = catalogServices.find((s) => s.id === state.serviceId)?.price ?? 0;
+    const clienteName = operatorMode ? (state.cliente?.nome ?? "-") : (getSession()?.userName ?? "-");
+    const rows: Array<[string, string]> = [
+      ["Serviço(s)", serviceName],
+      ["Profissional", professional],
+      ["Data", state.dateIso ? formatDateLong(state.dateIso) : "-"],
+      ["Horário", state.time ?? "-"],
+      ["Cliente", clienteName],
+    ];
+    if (!operatorMode) {
+      const attendLabel =
+        state.attendance === "outra_pessoa" && state.pessoaAtendidaNome
+          ? state.pessoaAtendidaNome
+          : "Para mim";
+      rows.push(["Atendimento", attendLabel]);
+    }
+    rows.push(["Total", formatCurrency(total)]);
+    reviewSummaryEl.innerHTML = rows
       .map(
         ([label, value]) =>
           `<div class="summary__row"><dt>${label}</dt><dd>${escapeHtml(value)}</dd></div>`,
@@ -479,6 +583,11 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       hora: state.time,
       timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
       ...(operatorMode && state.cliente ? { clienteId: state.cliente.id } : {}),
+      ...(
+        !operatorMode && state.attendance === "outra_pessoa" && state.pessoaAtendidaNome
+          ? { pessoaAtendidaNome: state.pessoaAtendidaNome }
+          : {}
+      ),
     };
 
     nextBtn.disabled = true;
@@ -516,7 +625,8 @@ onBookingCreatedRef?.();
 
   async function resetWizard(): Promise<void> {
     state.serviceId = null;
-    state.professionalId = null;
+    // Barbeiro só agenda para si mesmo — mantém o próprio id fixo.
+    state.professionalId = sessionRole === "profissional" ? ownProfessionalId : null;
     state.dateIso = await defaultDateIso();
     state.time = null;
     state.rescheduleId = null;
@@ -524,14 +634,19 @@ onBookingCreatedRef?.();
     state.cliente = null;
     state.clientResults = [];
     state.clientSearchPerformed = false;
+    state.attendance = "proprio";
+    state.pessoaAtendidaNome = null;
     form.reset();
     clearFormErrors(form);
     dateInput.value = state.dateIso;
+    if (attendeeInput) attendeeInput.value = "";
+    if (attendeeNameWrap) attendeeNameWrap.hidden = true;
     if (operatorMode) {
       clientSearchInput.value = "";
       clearElement(clientResultsBox);
       clientCreateForm.hidden = true;
-      clientCreateToggle.hidden = false;
+      // Barbeiro não cadastra clientes — mantém toggle oculto no reset
+      clientCreateToggle.hidden = sessionRole === "profissional";
     }
     renderServices();
     await renderProfessionals();
@@ -694,7 +809,7 @@ onBookingCreatedRef?.();
   });
 
   nextBtn.addEventListener("click", () => {
-    if (positionName(state.step) === "horario") {
+    if (positionName(state.step) === "revisao") {
       if (validateStep(state.step, true)) {
         void submit();
       }
@@ -741,6 +856,24 @@ onBookingCreatedRef?.();
       };
     }
     state.rescheduleId = appointment.id;
+
+    // Restaura estado de "Para quem" no fluxo cliente
+    if (!operatorMode) {
+      if (appointment.pessoaAtendidaNome) {
+        state.attendance = "outra_pessoa";
+        state.pessoaAtendidaNome = appointment.pessoaAtendidaNome;
+        const radio = form.querySelector<HTMLInputElement>(
+          'input[name="attendance"][value="outra_pessoa"]',
+        );
+        if (radio) radio.checked = true;
+        if (attendeeInput) attendeeInput.value = appointment.pessoaAtendidaNome;
+        attendeeNameWrap.hidden = false;
+      } else {
+        state.attendance = "proprio";
+        state.pessoaAtendidaNome = null;
+      }
+    }
+
     if (appointment.servicoId) {
       state.serviceId = appointment.servicoId;
       const input = servicesBox.querySelector<HTMLInputElement>(
@@ -773,6 +906,7 @@ onBookingCreatedRef?.();
   }
 
   initDateField();
+  initAttendeeField();
   renderServices();
   void renderProfessionals();
   goToStep(operatorMode ? positionOf("cliente") : positionOf("servicos"));

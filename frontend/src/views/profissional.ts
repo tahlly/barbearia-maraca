@@ -5,6 +5,7 @@ import { icon } from "../ui/icons.js";
 import { formatDateMedium, formatCurrency } from "../ui/format.js";
 import { listAppointments, getRevenueSummary, type RevenueSummary } from "../services/booking.js";
 import { showToast } from "../ui/toast.js";
+import { initBookingWizard } from "../features/bookingWizard.js";
 import type { Appointment } from "../types.js";
 
 const STATUS_LABEL: Record<Appointment["status"], string> = {
@@ -40,6 +41,13 @@ export function renderProfissional(container: HTMLElement): () => void {
   });
 
   const cleanups: Array<() => void> = [];
+  let currentReload: (() => void) | null = null;
+
+  const wizard = initBookingWizard({
+    onBookingCreated: () => {
+      currentReload?.();
+    },
+  });
 
   type ManageTab = "agendamentos" | "faturamento" | "configuracoes";
 
@@ -86,6 +94,7 @@ export function renderProfissional(container: HTMLElement): () => void {
           <p class="manage-head__sub">Controle completo da agenda do salão e status das reservas</p>
         </div>
         <div class="toolbar">
+          <button type="button" class="btn btn--primary" data-new-booking>${icon("plus", 16)} Novo agendamento</button>
           <select class="input" data-status-filter aria-label="Filtrar por status">
             <option value="todos">Todos Status</option>
             <option value="pendente">Pendente</option>
@@ -166,6 +175,8 @@ export function renderProfissional(container: HTMLElement): () => void {
       else refresh(list);
     }
 
+    currentReload = () => void reloadList();
+
     void reloadList();
 
     const onSearch = (): void => {
@@ -190,6 +201,15 @@ export function renderProfissional(container: HTMLElement): () => void {
     filter?.addEventListener("change", onFilter);
     $<HTMLButtonElement>("[data-consult]", content)?.addEventListener("click", onConsult);
     $<HTMLButtonElement>("[data-clear-filter]", content)?.addEventListener("click", onClear);
+
+    const newBookingBtn = $<HTMLButtonElement>("[data-new-booking]", content);
+    if (newBookingBtn) {
+      const h = (): void => {
+        void wizard.openNew();
+      };
+      newBookingBtn.addEventListener("click", h);
+      cleanups.push(() => newBookingBtn.removeEventListener("click", h));
+    }
 
     cleanups.push(() => search?.removeEventListener("input", onSearch));
     cleanups.push(() => filter?.removeEventListener("change", onFilter));

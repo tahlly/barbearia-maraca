@@ -223,6 +223,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
           <tr>
             <th>Serviço</th>
             <th>Profissional</th>
+            <th>Atendido</th>
             <th>Data/Hora</th>
             <th>Status</th>
             <th>Ações</th>
@@ -243,6 +244,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
                 <tr>
                   <td><strong>${escapeHtml(name)}</strong></td>
                   <td>${escapeHtml(a.funcionarioNome ?? professionalName(a.funcionarioId))}</td>
+                  <td>${a.pessoaAtendidaNome ? escapeHtml(a.pessoaAtendidaNome) : "—"}</td>
                   <td>${formatDateMedium(a.data)} · ${a.hora}</td>
                   <td>${statusBadge(a.status)}</td>
                   <td>${actions}</td>

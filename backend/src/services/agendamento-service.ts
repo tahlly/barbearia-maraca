@@ -44,6 +44,7 @@ function toDTO(row: AgendamentoRow): AgendamentoDTO {
     hora: formatarHora(row.hora),
     status: row.status,
     observacao: row.observacao,
+    pessoaAtendidaNome: row.pessoa_atendida_nome,
     criadoEm: row.created_at ?? undefined,
   };
 }
@@ -93,6 +94,17 @@ function validarIntervalo(inicio: string, fim: string): void {
   }
 }
 
+function validarPessoaAtendidaNome(valor?: string | null): string | null {
+  if (valor === undefined || valor === null) {
+    return null;
+  }
+  const nome = valor.trim();
+  if (nome.length < 2 || nome.length > 120) {
+    throw new ValidationError('Nome da pessoa atendida deve ter entre 2 e 120 caracteres');
+  }
+  return nome;
+}
+
 function isUniqueViolation(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) {
     return false;
@@ -116,12 +128,18 @@ export async function criarAgendamento(
   // Quem pode criar? Cliente (próprio registro via token) OU
   // recepcionista/admin (em nome de um cliente informado em `cliente_id`).
   let clienteId: string;
+  // O funcionarioId é resolvido de forma diferente conforme o papel:
+  // - profissional: resolvido pelo token (o barbeiro só pode agendar para si mesmo)
+  // - cliente/recepcionista/admin: enviado no corpo (dados.funcionario_id)
+  let funcionarioId: string;
+
   if (role === 'cliente') {
     const cliente = await buscarClientePorUsuarioId(usuarioId);
     if (!cliente) {
       throw new ForbiddenError('Perfil de cliente não encontrado');
     }
     clienteId = cliente.id;
+    funcionarioId = dados.funcionario_id;
   } else if (role === 'recepcionista' || role === 'admin') {
     if (!dados.cliente_id) {
       throw new ValidationError('cliente_id é obrigatório para criação de agendamento');
@@ -131,11 +149,30 @@ export async function criarAgendamento(
       throw new NotFoundError('Cliente não encontrado');
     }
     clienteId = cliente.id;
+    funcionarioId = dados.funcionario_id;
+  } else if (role === 'profissional') {
+    // Barbeiro cria agendamento para um cliente existente (informado via cliente_id).
+    if (!dados.cliente_id) {
+      throw new ValidationError('cliente_id é obrigatório para criação de agendamento por profissional');
+    }
+    const cliente = await buscarClientePorId(dados.cliente_id);
+    if (!cliente) {
+      throw new NotFoundError('Cliente não encontrado');
+    }
+    clienteId = cliente.id;
+
+    // O barbeiro só pode agendar para si mesmo: o funcionario_id é resolvido
+    // pelo token, NÃO pelo corpo da requisição.
+    const funcionario = await buscarFuncionarioPorUsuarioId(usuarioId);
+    if (!funcionario) {
+      throw new ForbiddenError('Perfil de funcionário não encontrado');
+    }
+    funcionarioId = funcionario.id;
   } else {
-    throw new ForbiddenError('Somente clientes, recepcionista ou admin podem criar agendamentos');
+    throw new ForbiddenError('Perfil não autorizado a criar agendamentos');
   }
 
-  if (!(await funcionarioExisteAtivo(dados.funcionario_id))) {
+  if (!(await funcionarioExisteAtivo(funcionarioId))) {
     throw new NotFoundError('Funcionário não encontrado ou inativo');
   }
 
@@ -144,15 +181,17 @@ export async function criarAgendamento(
   }
 
   validarDataHora(dados.data, dados.hora, dados.timezone_offset_minutes);
+  const pessoaAtendidaNome = validarPessoaAtendidaNome(dados.pessoa_atendida_nome);
 
   try {
     const row = await criar({
       clienteId,
-      funcionarioId: dados.funcionario_id,
+      funcionarioId,
       servicoId: dados.servico_id,
       data: dados.data,
       hora: dados.hora,
       observacao: dados.observacao ?? null,
+      pessoaAtendidaNome,
     });
     return toDTO(row);
   } catch (error) {

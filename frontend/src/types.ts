@@ -46,6 +46,7 @@ export interface Appointment {
   hora: string;
   status: AppointmentStatus;
   observacao?: string | null;
+  pessoaAtendidaNome: string | null;
   criadoEm?: string;
 }
 
@@ -61,6 +62,7 @@ export interface BookingDraft {
     data: string;
     hora: string;
     observacao?: string | null;
+    pessoaAtendidaNome?: string | null;
     clienteId?: string;
     /** Offset do navegador em minutos relativos a UTC (ex.: -180 para UTC-3). */
     timezoneOffsetMinutes?: number;

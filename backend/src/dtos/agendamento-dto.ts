@@ -15,6 +15,7 @@ export interface AgendamentoDTO {
   hora: string;
   status: AgendamentoStatus;
   observacao: string | null;
+  pessoaAtendidaNome: string | null;
   criadoEm?: string;
 }
 
@@ -24,6 +25,8 @@ export interface CreateAgendamentoRequest {
     data: string;
     hora: string;
     observacao?: string | null;
+    // Nome da pessoa que será atendida quando o agendamento não for para o próprio cliente.
+    pessoa_atendida_nome?: string | null;
     // Obrigatório quando o solicitante é recepcionista/admin (cria em nome de
     // um cliente informado); o papel cliente resolve o próprio registro via token.
     cliente_id?: string;
