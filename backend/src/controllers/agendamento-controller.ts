@@ -8,6 +8,7 @@ import {
   confirmarAgendamento,
   concluirAgendamento,
   reverterConclusaoAgendamento,
+  obterFaturamento,
 } from '../services/agendamento-service';
 import { UnauthorizedError } from '../errors/UnauthorizedError';
 
@@ -29,6 +30,11 @@ const criarSchema = z.object({
 const listarSchema = z.object({
   data: z.string().optional(),
   status: z.enum(['pendente', 'confirmado', 'cancelado', 'concluido']).optional(),
+});
+
+const faturamentoSchema = z.object({
+  inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inicial inválida').optional(),
+  fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data final inválida').optional(),
 });
 
 const idSchema = z.string().uuid('id deve ser um UUID');
@@ -88,4 +94,11 @@ export async function reverterHandler(req: Request, res: Response): Promise<void
   const id = idSchema.parse(req.params.id);
   const agendamento = await reverterConclusaoAgendamento(user.id, user.role, id);
   res.json(agendamento);
+}
+
+export async function faturamentoHandler(req: Request, res: Response): Promise<void> {
+  const user = exigirUsuario(req);
+  const filtros = faturamentoSchema.parse(req.query);
+  const faturamento = await obterFaturamento(user.id, user.role, filtros);
+  res.json(faturamento);
 }

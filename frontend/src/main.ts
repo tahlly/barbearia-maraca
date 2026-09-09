@@ -30,6 +30,7 @@ function init(): void {
   registerRoute("/admin/profissionais", renderManage);
   registerRoute("/admin/configuracoes", renderManage);
   registerRoute("/profissional", renderProfissional);
+  registerRoute("/profissional/faturamento", renderProfissional);
   registerRoute("/profissional/configuracoes", renderProfissional);
   registerRoute("/recepcionista", renderManage);
   registerRoute("/recepcionista/agendamentos", renderManage);

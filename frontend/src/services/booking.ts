@@ -159,3 +159,66 @@ export async function reschedule(
   }
   return { canceled };
 }
+
+/* ------------------------------------------------------------------ */
+/*  Faturamento (dashboard do profissional/admin)                      */
+/* ------------------------------------------------------------------ */
+
+export interface RevenueByService {
+  servicoId: string;
+  servicoNome: string;
+  quantidade: number;
+  valorTotal: string;
+}
+
+/**
+ * Resumo de faturamento: considera somente agendamentos `concluido` no
+ * período. Os valores monetários chegam como string normalizada (ex.:
+ * "45.90") para preservar a precisão vinda do DECIMAL(10,2).
+ */
+export interface RevenueSummary {
+  inicio: string;
+  fim: string;
+  valorTotal: string;
+  quantidade: number;
+  ticketMedio: string;
+  porServico: RevenueByService[];
+}
+
+interface FaturamentoResumoDTO {
+  inicio: string;
+  fim: string;
+  valorTotal: string;
+  quantidade: number;
+  ticketMedio: string;
+  porServico: Array<{
+    servicoId: string;
+    servicoNome: string;
+    quantidade: number;
+    valorTotal: string;
+  }>;
+}
+
+/**
+ * Busca o resumo de faturamento do usuário autenticado.
+ * Profissional recebe somente a própria agenda; admin recebe o total.
+ * GET /api/agendamentos/faturamento?inicio=&fim=
+ */
+export async function getRevenueSummary(
+  inicio?: string,
+  fim?: string,
+): Promise<RevenueSummary> {
+  const params = new URLSearchParams();
+  if (inicio) params.set("inicio", inicio);
+  if (fim) params.set("fim", fim);
+  const query = params.size > 0 ? `?${params.toString()}` : "";
+  const dto = await httpJson<FaturamentoResumoDTO>(`/agendamentos/faturamento${query}`);
+  return {
+    inicio: dto.inicio,
+    fim: dto.fim,
+    valorTotal: dto.valorTotal,
+    quantidade: dto.quantidade,
+    ticketMedio: dto.ticketMedio,
+    porServico: dto.porServico.map((p) => ({ ...p })),
+  };
+}
