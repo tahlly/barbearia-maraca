@@ -436,7 +436,8 @@ describe('POST /api/funcionarios — criar funcionário', () => {
     expect(res.statusCode).toBe(201);
     expect(funcionarioService.criarFuncionario).toHaveBeenCalledWith(
       expect.objectContaining({ senha: SENHA_FORTE }),
-      { id: 'u-admin', role: 'admin' },
+      'u-admin',
+      'admin',
     );
   });
 });
@@ -469,7 +470,11 @@ describe('PUT /api/funcionarios/:id — atualizar funcionário', () => {
     });
     const res = criarFakeRes();
     await atualizarFuncionarioHandler(
-      { params: { id: 'f1' }, body: { senha: SENHA_FORTE }, user: { id: 'u-admin', role: 'admin' } } as unknown as Request,
+{
+        params: { id: 'f1' },
+        body: { senha: SENHA_FORTE },
+        user: { id: 'u-admin', role: 'admin' },
+      } as unknown as Request,
       res as unknown as Response,
     );
 
@@ -477,7 +482,8 @@ describe('PUT /api/funcionarios/:id — atualizar funcionário', () => {
     expect(funcionarioService.atualizarFuncionario).toHaveBeenCalledWith(
       'f1',
       expect.objectContaining({ senha: SENHA_FORTE }),
-      { id: 'u-admin', role: 'admin' },
+'u-admin',
+      'admin',
     );
   });
 });

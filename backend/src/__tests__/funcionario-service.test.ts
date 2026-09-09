@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenError } from '../errors/ForbiddenError';
 import { ValidationError } from '../errors/ValidationError';
 import { NotFoundError } from '../errors/NotFoundError';
+import type { FuncionarioCompletoDTO } from '../dtos/funcionario-dto';
 
 // ── Mocks (hoisted) ────────────────────────────────────────────
 
 const criarRepoMock = vi.fn();
 const atualizarRepoMock = vi.fn();
-const buscarPorIdRepoMock = vi.fn();
-const trocarStatusRepoMock = vi.fn();
+const buscarPorIdMock = vi.fn();
+const trocarStatusMock = vi.fn();
 
 const findUsuarioByEmailMock = vi.fn();
 const listarCategoriasAtivasMock = vi.fn();
@@ -16,8 +17,8 @@ const listarCategoriasAtivasMock = vi.fn();
 vi.mock('../repositories/funcionario-repository', () => ({
   criar: (...args: unknown[]) => criarRepoMock(...args),
   atualizar: (...args: unknown[]) => atualizarRepoMock(...args),
-  buscarPorId: (...args: unknown[]) => buscarPorIdRepoMock(...args),
-  trocarStatus: (...args: unknown[]) => trocarStatusRepoMock(...args),
+  buscarPorId: (...args: unknown[]) => buscarPorIdMock(...args),
+  trocarStatus: (...args: unknown[]) => trocarStatusMock(...args),
   listarPublicos: vi.fn(),
   listarTodos: vi.fn(),
   buscarPorEmail: vi.fn(),
@@ -31,15 +32,23 @@ vi.mock('../services/categoria-service', () => ({
   listarCategoriasAtivas: (...args: unknown[]) => listarCategoriasAtivasMock(...args),
 }));
 
-const { criarFuncionario, atualizarFuncionario, alternarStatusFuncionario } =
-  await import('../services/funcionario-service');
+vi.mock('bcrypt', () => ({
+  default: {
+    compare: vi.fn(async () => true),
+    hash: vi.fn(async (senha: string) => `hash:${senha}`),
+  },
+}));
+
+const { criarFuncionario, atualizarFuncionario, alternarStatusFuncionario } = await import(
+  '../services/funcionario-service'
+);
 
 // ── Dados de teste ──────────────────────────────────────────────
 
-const FUNCIONARIO_BARBEIRO = {
-  id: 'func-b1',
-  usuarioId: 'u-b1',
-  nome: 'Barbeiro Um',
+const BASE_ALVO: FuncionarioCompletoDTO = {
+  id: 'f1',
+  usuarioId: 'u1',
+  nome: 'Barbeiro A',
   telefone: null,
   cargo: 'barbeiro',
   especialidade: null,
@@ -47,67 +56,37 @@ const FUNCIONARIO_BARBEIRO = {
   descricao: null,
   ativo: true,
   email: 'barbeiro@email.com',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  categorias: [] as string[],
+  createdAt: '2026-01-01T00:00:00.000Z',
+  updatedAt: '2026-01-01T00:00:00.000Z',
+  categorias: [],
 };
 
-const FUNCIONARIO_ADMIN = {
-  id: 'func-a1',
-  usuarioId: 'u-a1',
-  nome: 'Admin Um',
-  telefone: null,
-  cargo: 'administrador',
-  especialidade: null,
-  foto: null,
-  descricao: null,
-  ativo: true,
-  email: 'admin@email.com',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  categorias: [] as string[],
-};
+function alvoCargo(cargo: string, id = 'f1', usuarioId = 'u1'): FuncionarioCompletoDTO {
+  return { ...BASE_ALVO, id, usuarioId, cargo };
+}
 
-const FUNCIONARIO_RECEPCIONISTA = {
-  id: 'func-r1',
-  usuarioId: 'u-r1',
-  nome: 'Recep Uma',
-  telefone: null,
-  cargo: 'recepcionista',
-  especialidade: null,
-  foto: null,
-  descricao: null,
-  ativo: true,
-  email: 'recep@email.com',
-  createdAt: new Date(),
-  updatedAt: new Date(),
-  categorias: [] as string[],
-};
+const FUNCIONARIO_BARBEIRO = alvoCargo('barbeiro', 'func-b1', 'u-b1');
+const FUNCIONARIO_ADMIN = alvoCargo('administrador', 'func-a1', 'u-a1');
+const FUNCIONARIO_RECEPCIONISTA = alvoCargo('recepcionista', 'func-r1', 'u-r1');
 
 const CATEGORIAS_ATIVAS = [
   { id: 'cat-1', nome: 'Corte' },
   { id: 'cat-2', nome: 'Barba' },
 ];
 
-vi.mock('bcrypt', () => ({
-  default: {
-    hash: vi.fn().mockResolvedValue('$2b$10$hashfalso'),
-  },
-}));
-
 // ── Helpers ─────────────────────────────────────────────────────
 
 function resetAll(): void {
   criarRepoMock.mockReset();
   atualizarRepoMock.mockReset();
-  buscarPorIdRepoMock.mockReset();
-  trocarStatusRepoMock.mockReset();
+  buscarPorIdMock.mockReset();
+  trocarStatusMock.mockReset();
   findUsuarioByEmailMock.mockReset();
   listarCategoriasAtivasMock.mockReset();
 }
 
 function seedRepoBasico(): void {
-  buscarPorIdRepoMock.mockImplementation(async (id: string) => {
+  buscarPorIdMock.mockImplementation(async (id: string) => {
     if (id === 'func-a1') return FUNCIONARIO_ADMIN;
     if (id === 'func-b1') return FUNCIONARIO_BARBEIRO;
     if (id === 'func-r1') return FUNCIONARIO_RECEPCIONISTA;
@@ -116,7 +95,7 @@ function seedRepoBasico(): void {
   findUsuarioByEmailMock.mockResolvedValue(null);
 }
 
-// ── Testes ──────────────────────────────────────────────────────
+// ── Testes: criarFuncionario (RBAC) ───────────────────────────
 
 describe('criarFuncionario (RBAC)', () => {
   beforeEach(() => {
@@ -127,7 +106,9 @@ describe('criarFuncionario (RBAC)', () => {
       usuarioId: 'u-novo',
       nome: 'Novo',
       email: 'novo@email.com',
+      telefone: null,
       cargo: 'barbeiro',
+      especialidade: null,
       categorias: [],
     });
   });
@@ -137,7 +118,8 @@ describe('criarFuncionario (RBAC)', () => {
 
     const resultado = await criarFuncionario(
       { nome: 'Novo', email: 'novo@email.com', categorias: ['Corte'] },
-      { id: 'u-recep', role: 'recepcionista' },
+      'u-recep',
+      'recepcionista',
     );
 
     expect(resultado.id).toBe('func-novo');
@@ -151,7 +133,8 @@ describe('criarFuncionario (RBAC)', () => {
     await expect(
       criarFuncionario(
         { nome: 'Admin', email: 'a@email.com', cargo: 'administrador' },
-        { id: 'u-recep', role: 'recepcionista' },
+        'u-recep',
+        'recepcionista',
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
@@ -162,7 +145,8 @@ describe('criarFuncionario (RBAC)', () => {
     await expect(
       criarFuncionario(
         { nome: 'Recep', email: 'r@email.com', cargo: 'recepcionista' },
-        { id: 'u-recep', role: 'recepcionista' },
+        'u-recep',
+        'recepcionista',
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
@@ -175,13 +159,16 @@ describe('criarFuncionario (RBAC)', () => {
       usuarioId: 'u-novo',
       nome: 'Admin Novo',
       email: 'anovo@email.com',
+      telefone: null,
       cargo: 'administrador',
+      especialidade: null,
       categorias: [],
     });
 
     const resultado = await criarFuncionario(
       { nome: 'Admin Novo', email: 'anovo@email.com', cargo: 'administrador' },
-      { id: 'u-admin', role: 'admin' },
+      'u-admin',
+      'admin',
     );
 
     expect(resultado.cargo).toBe('administrador');
@@ -192,7 +179,8 @@ describe('criarFuncionario (RBAC)', () => {
     await expect(
       criarFuncionario(
         { nome: 'Recep', email: 'r@email.com', cargo: 'recepcionista', categorias: ['Corte'] },
-        { id: 'u-admin', role: 'admin' },
+        'u-admin',
+        'admin',
       ),
     ).rejects.toBeInstanceOf(ValidationError);
 
@@ -205,7 +193,8 @@ describe('criarFuncionario (RBAC)', () => {
     await expect(
       criarFuncionario(
         { nome: 'Novo', email: 'novo@email.com', categorias: ['Inexistente'] },
-        { id: 'u-admin', role: 'admin' },
+        'u-admin',
+        'admin',
       ),
     ).rejects.toBeInstanceOf(ValidationError);
 
@@ -218,13 +207,16 @@ describe('criarFuncionario (RBAC)', () => {
       usuarioId: 'u-novo',
       nome: 'Recep',
       email: 'recep@email.com',
+      telefone: null,
       cargo: 'recepcionista',
+      especialidade: null,
       categorias: [],
     });
 
     const resultado = await criarFuncionario(
       { nome: 'Recep', email: 'recep@email.com', cargo: 'recepcionista', categorias: [] },
-      { id: 'u-admin', role: 'admin' },
+      'u-admin',
+      'admin',
     );
 
     expect(resultado.id).toBe('func-novo');
@@ -235,7 +227,8 @@ describe('criarFuncionario (RBAC)', () => {
     await expect(
       criarFuncionario(
         { nome: 'X', email: 'x@email.com' },
-        { id: 'u-barb', role: 'profissional' },
+        'u-barb',
+        'profissional',
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
@@ -243,18 +236,45 @@ describe('criarFuncionario (RBAC)', () => {
   });
 });
 
-describe('atualizarFuncionario (RBAC)', () => {
+// ── Testes: atualizarFuncionario (RBAC) ───────────────────────
+
+describe('atualizarFuncionario — regra hierárquica de edição', () => {
   beforeEach(() => {
     resetAll();
     seedRepoBasico();
     atualizarRepoMock.mockResolvedValue(FUNCIONARIO_BARBEIRO);
   });
 
+  it('admin edita outro administrador → sucesso', async () => {
+    buscarPorIdMock.mockResolvedValue(alvoCargo('administrador', 'f2', 'u2'));
+    atualizarRepoMock.mockResolvedValue(alvoCargo('administrador', 'f2', 'u2'));
+
+    const resultado = await atualizarFuncionario(
+      'f2',
+      { nome: 'Admin Editado' },
+      'u1',
+      'admin',
+    );
+
+    expect(resultado.cargo).toBe('administrador');
+    expect(atualizarRepoMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('admin tentando editar o próprio cadastro → ForbiddenError', async () => {
+    buscarPorIdMock.mockResolvedValue(alvoCargo('administrador', 'f1', 'u1'));
+
+    await expect(
+      atualizarFuncionario('f1', { nome: 'Eu' }, 'u1', 'admin'),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(atualizarRepoMock).not.toHaveBeenCalled();
+  });
+
   it('recepcionista atualiza barbeiro ok', async () => {
     const resultado = await atualizarFuncionario(
       'func-b1',
       { nome: 'Barbeiro Atualizado' },
-      { id: 'u-recep', role: 'recepcionista' },
+      'u-recep',
+      'recepcionista',
     );
 
     expect(resultado.id).toBe('func-b1');
@@ -266,7 +286,8 @@ describe('atualizarFuncionario (RBAC)', () => {
       atualizarFuncionario(
         'func-a1',
         { nome: 'Tentativa' },
-        { id: 'u-recep', role: 'recepcionista' },
+        'u-recep',
+        'recepcionista',
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
@@ -278,66 +299,164 @@ describe('atualizarFuncionario (RBAC)', () => {
       atualizarFuncionario(
         'func-r1',
         { nome: 'Tentativa' },
-        { id: 'u-recep', role: 'recepcionista' },
+        'u-recep',
+        'recepcionista',
       ),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
     expect(atualizarRepoMock).not.toHaveBeenCalled();
   });
+
+  it('recepcionista tentando mudar cargo de barbeiro para outro → 403', async () => {
+    buscarPorIdMock.mockResolvedValue(alvoCargo('barbeiro'));
+
+    await expect(
+      atualizarFuncionario(
+        'f1',
+        { cargo: 'recepcionista' },
+        'u-recep',
+        'recepcionista',
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(atualizarRepoMock).not.toHaveBeenCalled();
+  });
+
+  it('recepcionista atualiza barbeiro com categorias válidas → repassa categorias', async () => {
+    listarCategoriasAtivasMock.mockResolvedValue(CATEGORIAS_ATIVAS);
+
+    await atualizarFuncionario(
+      'func-b1',
+      { nome: 'Barbeiro Um', categorias: ['Corte'] },
+      'u-recep',
+      'recepcionista',
+    );
+
+    expect(atualizarRepoMock).toHaveBeenCalledWith(
+      'func-b1',
+      expect.objectContaining({ categorias: ['Corte'] }),
+    );
+  });
+
+  it('atualização com cargo ≠ barbeiro e categorias não vazias → 400', async () => {
+    await expect(
+      atualizarFuncionario(
+        'func-a1',
+        { nome: 'Admin', categorias: ['Corte'] },
+        'u-admin',
+        'admin',
+      ),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(atualizarRepoMock).not.toHaveBeenCalled();
+  });
+
+  it('atualização com categoria inválida/inativa → 400', async () => {
+    listarCategoriasAtivasMock.mockResolvedValue(CATEGORIAS_ATIVAS);
+
+    await expect(
+      atualizarFuncionario(
+        'func-b1',
+        { nome: 'Barbeiro Um', categorias: ['Inexistente'] },
+        'u-admin',
+        'admin',
+      ),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(atualizarRepoMock).not.toHaveBeenCalled();
+  });
+
+  it('role fora de admin/recepcionista no update → 403 (negar por padrão)', async () => {
+    await expect(
+      atualizarFuncionario(
+        'func-b1',
+        { nome: 'X' },
+        'u-barb',
+        'profissional',
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(atualizarRepoMock).not.toHaveBeenCalled();
+  });
+
+  it('alvo inexistente → NotFoundError antes de qualquer atualização', async () => {
+    buscarPorIdMock.mockResolvedValue(null);
+
+    await expect(
+      atualizarFuncionario('f-x', { nome: 'X' }, 'u1', 'admin'),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    expect(atualizarRepoMock).not.toHaveBeenCalled();
+  });
 });
 
-describe('alternarStatusFuncionario (RBAC)', () => {
+// ── Testes: alternarStatusFuncionario (RBAC) ──────────────────
+
+describe('alternarStatusFuncionario — regra hierárquica de status', () => {
   beforeEach(() => {
     resetAll();
     seedRepoBasico();
-    trocarStatusRepoMock.mockResolvedValue(true);
+    trocarStatusMock.mockResolvedValue(true);
+  });
+
+  it('admin aplica em outro admin → sucesso', async () => {
+    buscarPorIdMock.mockResolvedValue(alvoCargo('administrador', 'f2', 'u2'));
+
+    const resultado = await alternarStatusFuncionario('f2', false, 'u1', 'admin');
+
+    expect(resultado).toBe(true);
+    expect(trocarStatusMock).toHaveBeenCalledWith('f2', false);
+  });
+
+  it('ninguém pode alterar o próprio status → ForbiddenError', async () => {
+    buscarPorIdMock.mockResolvedValue(alvoCargo('barbeiro', 'f1', 'u1'));
+
+    await expect(
+      alternarStatusFuncionario('f1', false, 'u1', 'admin'),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(trocarStatusMock).not.toHaveBeenCalled();
+  });
+
+  it('recepcionista alternar sobre existente barbeiro → ok', async () => {
+    const resultado = await alternarStatusFuncionario('func-b1', false, 'u-recep', 'recepcionista');
+
+    expect(resultado).toBe(true);
+    expect(trocarStatusMock).toHaveBeenCalledTimes(1);
+    expect(trocarStatusMock).toHaveBeenCalledWith('func-b1', false);
   });
 
   it('recepcionista alternar sobre existente administrador → 403', async () => {
     await expect(
-      alternarStatusFuncionario('func-a1', false, { id: 'u-recep', role: 'recepcionista' }),
+      alternarStatusFuncionario('func-a1', false, 'u-recep', 'recepcionista'),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
-    expect(trocarStatusRepoMock).not.toHaveBeenCalled();
+    expect(trocarStatusMock).not.toHaveBeenCalled();
   });
 
   it('recepcionista alternar sobre existente recepcionista → 403', async () => {
     await expect(
-      alternarStatusFuncionario('func-r1', false, { id: 'u-recep', role: 'recepcionista' }),
+      alternarStatusFuncionario('func-r1', false, 'u-recep', 'recepcionista'),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
-    expect(trocarStatusRepoMock).not.toHaveBeenCalled();
-  });
-
-  it('recepcionista alternar sobre existente barbeiro → ok', async () => {
-    const resultado = await alternarStatusFuncionario('func-b1', false, { id: 'u-recep', role: 'recepcionista' });
-
-    expect(resultado).toBe(true);
-    expect(trocarStatusRepoMock).toHaveBeenCalledTimes(1);
-    expect(trocarStatusRepoMock).toHaveBeenCalledWith('func-b1', false);
+    expect(trocarStatusMock).not.toHaveBeenCalled();
   });
 
   it('admin alterna status de qualquer cargo → ok', async () => {
-    const resultado = await alternarStatusFuncionario('func-a1', false, { id: 'u-admin', role: 'admin' });
+    const resultado = await alternarStatusFuncionario('func-a1', false, 'u-admin', 'admin');
 
     expect(resultado).toBe(true);
-    expect(trocarStatusRepoMock).toHaveBeenCalledTimes(1);
-    expect(trocarStatusRepoMock).toHaveBeenCalledWith('func-a1', false);
+    expect(trocarStatusMock).toHaveBeenCalledTimes(1);
+    expect(trocarStatusMock).toHaveBeenCalledWith('func-a1', false);
   });
 
-  it('funcionário inexistente → 404 mesmo para recepcionista', async () => {
+  it('funcionário inexistente → 404', async () => {
     await expect(
-      alternarStatusFuncionario('func-x', false, { id: 'u-recep', role: 'recepcionista' }),
+      alternarStatusFuncionario('func-x', false, 'u-recep', 'recepcionista'),
     ).rejects.toBeInstanceOf(NotFoundError);
 
-    expect(trocarStatusRepoMock).not.toHaveBeenCalled();
+    expect(trocarStatusMock).not.toHaveBeenCalled();
   });
 
   it('role fora de admin/recepcionista no alternar → 403 (negar por padrão)', async () => {
     await expect(
-      alternarStatusFuncionario('func-b1', false, { id: 'u-barb', role: 'profissional' }),
+      alternarStatusFuncionario('func-b1', false, 'u-barb', 'profissional'),
     ).rejects.toBeInstanceOf(ForbiddenError);
 
-    expect(trocarStatusRepoMock).not.toHaveBeenCalled();
+    expect(trocarStatusMock).not.toHaveBeenCalled();
   });
 });

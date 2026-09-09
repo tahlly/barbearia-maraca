@@ -103,29 +103,30 @@ export async function buscarPorEmail(req: Request, res: Response): Promise<void>
 /** POST /api/funcionarios — recepcionista/admin. */
 export async function criar(req: Request, res: Response): Promise<void> {
   const dados = criarFuncionarioSchema.parse(req.body);
-  const resultado = await funcionarioService.criarFuncionario(dados, {
-    id: req.user?.id ?? '',
-    role: req.user?.role ?? '',
-  });
+  const resultado = await funcionarioService.criarFuncionario(dados, req.user?.id, req.user?.role);
   res.status(201).json(resultado);
 }
 
-/** PUT /api/funcionarios/:id — recepcionista/admin. */
+/** PUT /api/funcionarios/:id — recepcionista/admin; regra hierárquica no service. */
 export async function atualizar(req: Request, res: Response): Promise<void> {
   const dados = atualizarFuncionarioSchema.parse(req.body);
-  const resultado = await funcionarioService.atualizarFuncionario(idParam(req), dados, {
-    id: req.user?.id ?? '',
-    role: req.user?.role ?? '',
-  });
+  const resultado = await funcionarioService.atualizarFuncionario(
+    idParam(req),
+    dados,
+    req.user?.id,
+    req.user?.role,
+  );
   res.json(resultado);
 }
 
 /** PATCH /api/funcionarios/:id/status — recepcionista/admin. */
 export async function alterarStatus(req: Request, res: Response): Promise<void> {
   const dados = alterarStatusSchema.parse(req.body);
-  await funcionarioService.alternarStatusFuncionario(idParam(req), dados.ativo, {
-    id: req.user?.id ?? '',
-    role: req.user?.role ?? '',
-  });
+  await funcionarioService.alternarStatusFuncionario(
+    idParam(req),
+    dados.ativo,
+    req.user?.id,
+    req.user?.role,
+  );
   res.json({ mensagem: 'Status atualizado', ativo: dados.ativo });
 }

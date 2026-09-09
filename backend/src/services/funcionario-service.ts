@@ -117,12 +117,13 @@ export async function criarFuncionario(
     especialidade?: string;
     categorias?: string[];
   },
-  solicitante: { id: string; role: string },
+  requestingUserId?: string,
+  requestingRole?: string,
 ): Promise<FuncionarioCriadoDTO> {
   // RBAC: recepcionista só cria barbeiro; demais papéis negados por padrão.
-  if (solicitante.role !== 'admin') {
+  if (requestingRole !== 'admin') {
     const cargoFinal = dados.cargo ?? 'barbeiro';
-    if (solicitante.role !== 'recepcionista' || cargoFinal !== 'barbeiro') {
+    if (requestingRole !== 'recepcionista' || cargoFinal !== 'barbeiro') {
       throw new ForbiddenError('Acesso negado');
     }
   }
@@ -166,38 +167,32 @@ export async function atualizarFuncionario(
     senha?: string;
     categorias?: string[];
   },
-  solicitante?: { id: string; role: string },
+  requestingUserId?: string,
+  requestingRole?: string,
 ): Promise<FuncionarioCompletoDTO> {
   // ── RBAC ────────────────────────────────────────────────────
-  if (solicitante && solicitante.role !== 'admin') {
-    const atual = await funcionarioRepo.buscarPorId(id);
-    if (!atual) {
-      throw new NotFoundError('Funcionário não encontrado');
-    }
-
-    if (solicitante.role === 'recepcionista') {
-      // Recepcionista só pode atualizar barbeiros
-      if (atual.cargo !== 'barbeiro') {
-        throw new ForbiddenError('Recepcionista não pode alterar funcionários com cargo diferente de barbeiro');
-      }
-      // Cargo final permanece barbeiro (não pode mudar cargo)
-      const cargoFinal = dados.cargo ?? atual.cargo;
-      if (cargoFinal !== 'barbeiro') {
-        throw new ForbiddenError('Recepcionista não pode alterar cargo para diferente de barbeiro');
-      }
-    } else {
-      // Qualquer outro papel (ex.: barbeiro, cliente) — negar por padrão
-      throw new ForbiddenError('Acesso negado');
-    }
-  }
-
-  // ── Busca atual para validações ─────────────────────────────
-  const atual = await funcionarioRepo.buscarPorId(id);
-  if (!atual) {
+  // Regra hierárquica de edição (consolidação mainline + card):
+  // - ninguém edita o próprio cadastro pela tela de gestão;
+  // - recepcionista só gerencia (edita) funcionários com cargo `barbeiro`;
+  // - recepcionista não pode mudar cargo para diferente de barbeiro;
+  // - deny-by-default: roles fora de admin/recepcionista negados.
+  const alvo = await funcionarioRepo.buscarPorId(id);
+  if (!alvo) {
     throw new NotFoundError('Funcionário não encontrado');
   }
-
-  const cargoFinal = dados.cargo ?? atual.cargo;
+  if (requestingUserId && requestingUserId === alvo.usuarioId) {
+    throw new ForbiddenError('Não é possível editar o próprio cadastro nesta tela');
+  }
+  if (requestingRole === 'recepcionista' && alvo.cargo !== 'barbeiro') {
+    throw new ForbiddenError('Acesso negado');
+  }
+  const cargoFinal = dados.cargo ?? alvo.cargo;
+  if (requestingRole === 'recepcionista' && cargoFinal !== 'barbeiro') {
+    throw new ForbiddenError('Recepcionista não pode alterar cargo para diferente de barbeiro');
+  }
+  if (requestingRole !== 'admin' && requestingRole !== 'recepcionista') {
+    throw new ForbiddenError('Acesso negado');
+  }
 
   // ── Categorias ──────────────────────────────────────────────
   const categorias = await validarCategorias(dados.categorias, cargoFinal);
@@ -205,7 +200,7 @@ export async function atualizarFuncionario(
   // Se email foi fornecido, verificar se já está em uso por outro usuário
   if (dados.email) {
     const existente = await findUsuarioByEmail(dados.email);
-    if (existente && atual.usuarioId !== existente.id) {
+    if (existente && alvo.usuarioId !== existente.id) {
       throw new ValidationError('Email já cadastrado por outro usuário');
     }
   }
@@ -228,26 +223,41 @@ export async function atualizarFuncionario(
 
 // ── Alternância de status ─────────────────────────────────────
 
+/**
+ * Alterna o status ativo/inativo de um funcionário.
+ *
+ * Regras hierárquicas:
+ * - nenhum papel pode alterar o próprio status (auto-desativação/auto-ativação);
+ * - `admin` pode alterar o status de qualquer cargo, exceto o próprio;
+ * - `recepcionista` pode alterar o status somente de funcionários com
+ *   `cargo === 'barbeiro'`;
+ * - deny-by-default: roles fora de admin/recepcionista (incluindo uso interno
+ *   sem papel informado) são negados.
+ */
 export async function alternarStatusFuncionario(
   id: string,
   ativo: boolean,
-  solicitante?: { id: string; role: string },
+  requestingUserId?: string,
+  requestingRole?: string,
 ): Promise<boolean> {
-  // ── RBAC ────────────────────────────────────────────────────
-  if (solicitante && solicitante.role !== 'admin') {
-    if (solicitante.role === 'recepcionista') {
-      // Busca o funcionário para verificar o cargo
-      const atual = await funcionarioRepo.buscarPorId(id);
-      if (!atual) {
-        throw new NotFoundError('Funcionário não encontrado');
-      }
-      if (atual.cargo !== 'barbeiro') {
-        throw new ForbiddenError('Recepcionista não pode alterar status de funcionários com cargo diferente de barbeiro');
-      }
-    } else {
-      // Qualquer outro papel — negar por padrão
-      throw new ForbiddenError('Acesso negado');
-    }
+  const alvo = await funcionarioRepo.buscarPorId(id);
+  if (!alvo) {
+    throw new NotFoundError('Funcionário não encontrado');
+  }
+
+  // Ninguém pode alterar o próprio status.
+  if (requestingUserId === alvo.usuarioId) {
+    throw new ForbiddenError('Não é possível alterar o próprio status');
+  }
+
+  // Recepcionista só gerencia barbeiros; admin segue liberado.
+  if (requestingRole === 'recepcionista' && alvo.cargo !== 'barbeiro') {
+    throw new ForbiddenError('Acesso negado');
+  }
+
+  // Deny-by-default: apenas admin/recepcionista gerem status.
+  if (requestingRole !== 'admin' && requestingRole !== 'recepcionista') {
+    throw new ForbiddenError('Acesso negado');
   }
 
   const alterado = await funcionarioRepo.trocarStatus(id, ativo);

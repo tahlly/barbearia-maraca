@@ -190,36 +190,46 @@ const funcionarioRoutes = Router();
  *             schema: { $ref: '#/components/schemas/Funcionario' }
  *       '404':
  *         $ref: '#/components/responses/Erro404'
- *   put:
- *     tags: [Funcionarios]
- *     summary: Atualiza um funcionario (recepcionista/admin)
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: { $ref: '#/components/schemas/UpdateFuncionarioRequest' }
- *     responses:
- *       '200':
- *         description: Funcionario atualizado
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/Funcionario' }
- *       '400':
- *         $ref: '#/components/responses/Erro400'
- *       '403':
- *         $ref: '#/components/responses/Erro403'
- *
- * /api/funcionarios/{id}/status:
+*   put:
+  *     tags: [Funcionarios]
+  *     summary: Atualiza um funcionario (admin: qualquer cargo exceto o próprio; recepcionista: somente barbeiros)
+  *     description: |
+  *       Regras de permissão:
+  *       - Ninguém pode editar o próprio cadastro pela tela de gestão (bloqueado com 403).
+  *       - Administrador pode editar qualquer funcionário, exceto o próprio.
+  *       - Recepcionista pode editar somente funcionários com cargo `barbeiro`.
+  *     security:
+  *       - bearerAuth: []
+  *     parameters:
+  *       - in: path
+  *         name: id
+  *         required: true
+  *         schema: { type: string }
+  *     requestBody:
+  *       required: true
+  *       content:
+  *         application/json:
+  *           schema: { $ref: '#/components/schemas/UpdateFuncionarioRequest' }
+  *     responses:
+  *       '200':
+  *         description: Funcionario atualizado
+  *         content:
+  *           application/json:
+  *             schema: { $ref: '#/components/schemas/Funcionario' }
+  *       '400':
+  *         $ref: '#/components/responses/Erro400'
+  *       '403':
+  *         $ref: '#/components/responses/Erro403'
+  *
+  * /api/funcionarios/{id}/status:
  *   patch:
  *     tags: [Funcionarios]
- *     summary: Alterna status ativo/inativo de um funcionario (recepcionista/admin)
+ *     summary: Alterna status ativo/inativo (admin: qualquer cargo exceto o próprio; recepcionista: somente barbeiros)
+ *     description: |
+ *       Regras de permissão:
+ *       - Ninguém pode alterar o próprio status (auto-desativação/auto-ativação é bloqueada com 403).
+ *       - Administrador pode alterar o status de qualquer funcionário, exceto o próprio.
+ *       - Recepcionista pode alterar o status somente de funcionários com cargo `barbeiro`.
  *     security:
  *       - bearerAuth: []
  *     parameters:
