@@ -10,6 +10,7 @@ export async function seed(knex: Knex): Promise<void> {
   await knex('horario_trabalho').del();
   await knex('servico').del();
   await knex('funcionario').del();
+  await knex('categoria').del();
   await knex('cliente').del();
   await knex('usuario').del();
 
@@ -87,18 +88,20 @@ export async function seed(knex: Knex): Promise<void> {
 
   await knex('horario_trabalho').insert(horariosTrabalho);
 
-  await knex('cliente').insert([
-    {
-      usuario_id: usuarios[4].id,
-      nome: 'Maria Oliveira',
-      telefone: '(11) 99999-5555',
-    },
-    {
-      usuario_id: usuarios[5].id,
-      nome: 'Pedro Santos',
-      telefone: '(11) 99999-6666',
-    },
-  ]);
+  const clientes = await knex('cliente')
+    .insert([
+      {
+        usuario_id: usuarios[4].id,
+        nome: 'Maria Oliveira',
+        telefone: '(11) 99999-5555',
+      },
+      {
+        usuario_id: usuarios[5].id,
+        nome: 'Pedro Santos',
+        telefone: '(11) 99999-6666',
+      },
+    ])
+    .returning('id');
 
   await knex('servico').insert([
     {
@@ -163,4 +166,82 @@ export async function seed(knex: Knex): Promise<void> {
   }
 
   await knex('funcionario_categoria').insert(funcionarioCategorias);
+
+  // --- Agendamentos de demonstração ---
+
+  function dataDiasAtras(dias: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() - dias);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dia = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dia}`;
+  }
+
+  const joaoId = funcionarios[2].id;
+  const lucasId = funcionarios[3].id;
+  const mariaId = clientes[0].id;
+  const pedroId = clientes[1].id;
+  const servicoCorteId = mapaServicos['Corte'];
+  const servicoBarbaId = mapaServicos['Barba'];
+  const servicoCorteBarbaId = mapaServicos['Corte + Barba'];
+
+  await knex('agendamento').insert([
+    // João Pedro — 2 concluídos, 1 confirmado
+    {
+      funcionario_id: joaoId,
+      cliente_id: mariaId,
+      servico_id: servicoCorteId,
+      data: dataDiasAtras(6),
+      hora: '09:00',
+      status: 'concluido',
+      observacao: null,
+    },
+    {
+      funcionario_id: joaoId,
+      cliente_id: pedroId,
+      servico_id: servicoCorteBarbaId,
+      data: dataDiasAtras(5),
+      hora: '10:00',
+      status: 'concluido',
+      observacao: null,
+    },
+    {
+      funcionario_id: joaoId,
+      cliente_id: mariaId,
+      servico_id: servicoCorteId,
+      data: dataDiasAtras(1),
+      hora: '14:00',
+      status: 'confirmado',
+      observacao: null,
+    },
+    // Lucas Mendes — 2 concluídos, 1 cancelado
+    {
+      funcionario_id: lucasId,
+      cliente_id: pedroId,
+      servico_id: servicoBarbaId,
+      data: dataDiasAtras(7),
+      hora: '09:00',
+      status: 'concluido',
+      observacao: null,
+    },
+    {
+      funcionario_id: lucasId,
+      cliente_id: mariaId,
+      servico_id: servicoBarbaId,
+      data: dataDiasAtras(4),
+      hora: '11:00',
+      status: 'concluido',
+      observacao: null,
+    },
+    {
+      funcionario_id: lucasId,
+      cliente_id: pedroId,
+      servico_id: servicoBarbaId,
+      data: dataDiasAtras(2),
+      hora: '09:00',
+      status: 'cancelado',
+      observacao: null,
+    },
+  ]);
 }
