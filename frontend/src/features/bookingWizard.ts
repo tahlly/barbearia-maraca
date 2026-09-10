@@ -4,6 +4,7 @@ import { fetchBarbeiros, loadProfessionals, loadServices } from "../services/cat
 import { createAppointment, reschedule } from "../services/booking.js";
 import { buscarClientes, criarCliente } from "../services/clientes.js";
 import { getSession } from "../services/auth.js";
+import { findUsuarioByEmail } from "../services/usuarios.js";
 import { isDateOpen, slotsForDate } from "../services/schedule.js";
 import { $, $$, clearElement, clearFormErrors, escapeHtml, initials } from "../ui/dom.js";
 import { icon, serviceIcon } from "../ui/icons.js";
@@ -130,8 +131,10 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
    * cliente após logout de staff. Chamado na inicialização e a cada abertura.
    */
   function applyOperatorMode(): void {
-    const role = getSession()?.role;
-    operatorMode = role === "recepcionista" || role === "admin";
+    const session = getSession();
+    const role = session?.role;
+    const hasBookingPerm = session?.permissoes?.agendar_para_cliente === true;
+    operatorMode = role === "recepcionista" || role === "admin" || (role === "profissional" && hasBookingPerm);
     if (clientStepItem) clientStepItem.hidden = !operatorMode;
     if (clientPanel) clientPanel.hidden = !operatorMode;
     steps = stepsItems.filter((el) => !el.hidden);
@@ -278,9 +281,28 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     const matchesService = (p: Professional): boolean =>
       !hasFilter ||
       (p.categories.length > 0 && p.categories.some((c) => serviceCategories.includes(c)));
-    const available = catalogProfessionals.filter(
+    let available = catalogProfessionals.filter(
       (p) => p.active && p.cargo === "barbeiro" && matchesService(p),
     );
+
+    // Profissional com permissão `agendar_para_cliente` opera em modo
+    // operador, mas o backend restringe a criação/cancelamento ao próprio
+    // funcionário (403 se tentar agendar em nome de outro). O seletor de
+    // profissional mostra SOMENTE o próprio barbeiro do usuário logado.
+    const session = getSession();
+    if (operatorMode && session?.role === "profissional") {
+      const usuario = await findUsuarioByEmail(session.userEmail);
+      const ownProfessionalId = usuario?.professionalId;
+      if (!ownProfessionalId) {
+        prosBox.innerHTML = `<p class="options-empty options-empty--alert options-empty--error">${icon("alert-circle", 18)}<span>Nenhum profissional disponível</span></p>`;
+        return;
+      }
+      available = available.filter((p) => p.id === ownProfessionalId);
+      if (available.length === 0) {
+        prosBox.innerHTML = `<p class="options-empty options-empty--alert options-empty--error">${icon("alert-circle", 18)}<span>Nenhum profissional disponível</span></p>`;
+        return;
+      }
+    }
 
     if (state.professionalId && !available.some((p) => p.id === state.professionalId)) {
       state.professionalId = null;

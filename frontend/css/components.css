@@ -533,3 +533,76 @@
 .toast--info .toast__icon {
   color: var(--color-gold);
 }
+
+/* ── Switch (toggle de permissões) ─────────────────────────────────────────
+   Checkbox visual em forma de chave seletora. O input fica 1x1 transparente;
+   o label grande `.switch` recebe o clique e alterna o checkbox de forma
+   nativa (teclado e leitor de tela preservados via role="switch"). */
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 42px;
+  height: 24px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.switch__track {
+  display: block;
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-border);
+  border: 1px solid var(--color-border);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.switch__track::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background-color: var(--color-text-secondary);
+  transition:
+    transform var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.switch input:checked + .switch__track {
+  background-color: var(--color-gold);
+  border-color: var(--color-gold);
+}
+
+.switch input:checked + .switch__track::after {
+  transform: translateY(-50%) translateX(18px);
+  background-color: #16130a;
+}
+
+.switch input:focus-visible + .switch__track {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
+.switch:has(input:disabled) {
+  cursor: not-allowed;
+}
+
+.switch input:disabled + .switch__track {
+  opacity: 0.45;
+}

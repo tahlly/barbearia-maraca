@@ -605,3 +605,60 @@ body.light-theme .manage-toolbar select.input {
     min-width: 100%;
   }
 }
+
+/* ── Modal Gerenciar Permissões ─────────────────────────────────────────────
+   Escopado por :has([data-perm-switch]), atributo exclusivo do modal de
+   permissões da view manage. Não altera .modal--lg genérico (Agenda), nem o
+   .table global, .table--fit ou .table--conta (Agenda/Conta ficam intactos).
+   A tabela tem 7 colunas (Funcionário + 6 permissões); aqui ela usa
+   table-layout fixed e min-width: 0 para caber no corpo do modal sem gerar
+   scrollbar horizontal no .table-wrap. Em telas menores, o overlay (padding)
+   + width:100% do modal já respeitam a viewport; o overflow-x do .table-wrap
+   permanece intacto. */
+.modal:has([data-perm-switch]) {
+  max-width: 900px;
+}
+
+.modal:has([data-perm-switch]) .modal__body {
+  padding: var(--space-5);
+}
+
+.modal:has([data-perm-switch]) .table {
+  table-layout: fixed;
+  min-width: 0;
+}
+
+.modal:has([data-perm-switch]) .table th,
+.modal:has([data-perm-switch]) .table td {
+  padding: var(--space-4) 20px;
+}
+
+/* 1ª coluna (Funcionário): nome/e-mail/badge, alinhada à esquerda, com wrap
+   normal e largura maior (~27%); e-mail/nome quebram sem estourar a célula. */
+.modal:has([data-perm-switch]) .table th:nth-child(1),
+.modal:has([data-perm-switch]) .table td:nth-child(1) {
+  width: 27%;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-align: left;
+}
+
+/* Colunas de permissão (2..7): cabeçalhos quebram em linhas curtas, switches
+   centralizados e larguras iguais dividindo os ~73% restantes (6 colunas). */
+.modal:has([data-perm-switch]) .table th:nth-child(n + 2),
+.modal:has([data-perm-switch]) .table td:nth-child(n + 2) {
+  width: calc(73% / 6);
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-align: center;
+}
+
+/* Cabeçalhos desse modal: menores e com mais espaço vertical para caber as
+   descrições longas em poucas linhas, sem afetar o .table th global. */
+.modal:has([data-perm-switch]) .table th {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  line-height: 1.35;
+}
