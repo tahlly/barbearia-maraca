@@ -16,6 +16,7 @@ import { ForbiddenError } from '../errors/ForbiddenError';
 import { NotFoundError } from '../errors/NotFoundError';
 import { ValidationError } from '../errors/ValidationError';
 import { buscarClientePorId } from '../repositories/cliente-repository';
+import { exigirPermissao } from './permissao-service';
 import { formatarData, formatarHora } from '../utils/formatadores';
 
 type Role = 'admin' | 'recepcionista' | 'profissional' | 'cliente';
@@ -113,8 +114,9 @@ export async function criarAgendamento(
     throw new ForbiddenError('Acesso negado');
   }
 
-  // Quem pode criar? Cliente (próprio registro via token) OU
-  // recepcionista/admin (em nome de um cliente informado em `cliente_id`).
+  // Quem pode criar? Cliente (próprio registro via token) OU staff com a
+  // permissão efetiva `agendar_para_cliente` (em nome de um cliente informado
+  // em `cliente_id`). Profissional só pode criar na própria agenda.
   let clienteId: string;
   if (role === 'cliente') {
     const cliente = await buscarClientePorUsuarioId(usuarioId);
@@ -122,7 +124,8 @@ export async function criarAgendamento(
       throw new ForbiddenError('Perfil de cliente não encontrado');
     }
     clienteId = cliente.id;
-  } else if (role === 'recepcionista' || role === 'admin') {
+  } else {
+    await exigirPermissao({ id: usuarioId, role }, 'agendar_para_cliente');
     if (!dados.cliente_id) {
       throw new ValidationError('cliente_id é obrigatório para criação de agendamento');
     }
@@ -131,8 +134,16 @@ export async function criarAgendamento(
       throw new NotFoundError('Cliente não encontrado');
     }
     clienteId = cliente.id;
-  } else {
-    throw new ForbiddenError('Somente clientes, recepcionista ou admin podem criar agendamentos');
+
+    if (role === 'profissional') {
+      const funcionario = await buscarFuncionarioPorUsuarioId(usuarioId);
+      if (!funcionario) {
+        throw new ForbiddenError('Perfil de funcionário não encontrado');
+      }
+      if (dados.funcionario_id !== funcionario.id) {
+        throw new ForbiddenError('Acesso negado');
+      }
+    }
   }
 
   if (!(await funcionarioExisteAtivo(dados.funcionario_id))) {
@@ -250,8 +261,14 @@ export async function cancelarAgendamento(
     if (!cliente || cliente.id !== row.cliente_id) {
       throw new ForbiddenError('Acesso negado');
     }
-  } else if (role === 'profissional') {
-    throw new ForbiddenError('Barbeiro não pode cancelar agendamento');
+  } else {
+    await exigirPermissao({ id: usuarioId, role }, 'agendar_para_cliente');
+    if (role === 'profissional') {
+      const funcionario = await buscarFuncionarioPorUsuarioId(usuarioId);
+      if (!funcionario || funcionario.id !== row.funcionario_id) {
+        throw new ForbiddenError('Acesso negado');
+      }
+    }
   }
 
   validarTransicao(row.status, 'cancelado');

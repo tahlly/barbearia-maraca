@@ -49,6 +49,7 @@ const CHAVES = [
   'criar_admin',
   'gerenciar_permissoes',
   'editar_servicos_categorias',
+  'agendar_para_cliente',
 ];
 
 beforeEach(() => {
@@ -62,7 +63,7 @@ function usuario(id: string, role: string) {
 // ── Matriz default ─────────────────────────────────────────────
 
 describe('temPermissao — matriz default por papel', () => {
-  it('admin possui todas as 5 permissões quando não há override', async () => {
+  it('admin possui todas as 6 permissões quando não há override', async () => {
     listarPermissoesPorUsuariosMock.mockResolvedValue([]);
 
     for (const chave of CHAVES) {
@@ -70,23 +71,33 @@ describe('temPermissao — matriz default por papel', () => {
     }
   });
 
-  it('recepcionista: excluir_desativar_funcionario e editar_servicos_categorias true; demais false', async () => {
+  it('recepcionista: excluir_desativar_funcionario, editar_servicos_categorias e agendar_para_cliente true; demais false', async () => {
     listarPermissoesPorUsuariosMock.mockResolvedValue([]);
 
     expect(await temPermissao(usuario('u2', 'recepcionista'), 'excluir_desativar_funcionario')).toBe(true);
     expect(await temPermissao(usuario('u2', 'recepcionista'), 'editar_servicos_categorias')).toBe(true);
+    expect(await temPermissao(usuario('u2', 'recepcionista'), 'agendar_para_cliente')).toBe(true);
     expect(await temPermissao(usuario('u2', 'recepcionista'), 'ver_financeiro')).toBe(false);
     expect(await temPermissao(usuario('u2', 'recepcionista'), 'criar_admin')).toBe(false);
     expect(await temPermissao(usuario('u2', 'recepcionista'), 'gerenciar_permissoes')).toBe(false);
   });
 
-  it('profissional e cliente: todas false', async () => {
+  it('profissional: apenas agendar_para_cliente true; demais false', async () => {
     listarPermissoesPorUsuariosMock.mockResolvedValue([]);
 
-    for (const role of ['profissional', 'cliente']) {
-      for (const chave of CHAVES) {
-        expect(await temPermissao(usuario('u3', role), chave)).toBe(false);
+    expect(await temPermissao(usuario('u3', 'profissional'), 'agendar_para_cliente')).toBe(true);
+    for (const chave of CHAVES) {
+      if (chave !== 'agendar_para_cliente') {
+        expect(await temPermissao(usuario('u3', 'profissional'), chave)).toBe(false);
       }
+    }
+  });
+
+  it('cliente: todas as 6 false', async () => {
+    listarPermissoesPorUsuariosMock.mockResolvedValue([]);
+
+    for (const chave of CHAVES) {
+      expect(await temPermissao(usuario('u3', 'cliente'), chave)).toBe(false);
     }
   });
 
@@ -221,9 +232,11 @@ describe('listarUsuariosComPermissoes — permissões efetivas', () => {
 
     expect(admin?.permissoes['ver_financeiro']).toBe(true);
     expect(admin?.permissoes['gerenciar_permissoes']).toBe(true);
+    expect(admin?.permissoes['agendar_para_cliente']).toBe(true);
     // Override concedido à recepcionista vence a matriz default (false).
     expect(recep?.permissoes['ver_financeiro']).toBe(true);
     expect(recep?.permissoes['editar_servicos_categorias']).toBe(true);
+    expect(recep?.permissoes['agendar_para_cliente']).toBe(true);
     expect(recep?.permissoes['criar_admin']).toBe(false);
     expect(recep?.permissoes['gerenciar_permissoes']).toBe(false);
   });
@@ -237,6 +250,7 @@ describe('obterPermissoesEfetivasUsuario — permissões do usuário logado', ()
 
     expect(permissoes['editar_servicos_categorias']).toBe(true);
     expect(permissoes['excluir_desativar_funcionario']).toBe(true);
+    expect(permissoes['agendar_para_cliente']).toBe(true);
     expect(permissoes['ver_financeiro']).toBe(false);
     expect(permissoes['gerenciar_permissoes']).toBe(false);
   });

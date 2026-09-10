@@ -18,6 +18,7 @@ export const CHAVES_PERMISSOES = [
   'criar_admin',
   'gerenciar_permissoes',
   'editar_servicos_categorias',
+  'agendar_para_cliente',
 ] as const;
 
 export type ChavePermissao = (typeof CHAVES_PERMISSOES)[number];
@@ -26,12 +27,14 @@ export type ChavePermissao = (typeof CHAVES_PERMISSOES)[number];
  * Matriz de permissões por papel (default).
  *
  * Aprovada em decisão humana (Item 1):
- * - admin: todas as 5; além disso, cada admin possui linha de override no banco
+ * - admin: todas as 6; além disso, cada admin possui linha de override no banco
  *   (backfill da migration) que, na prática, replica a matriz;
- * - recepcionista: `excluir_desativar_funcionario` e
- *   `editar_servicos_categorias` verdadeiras (expansão intencional aprovada);
- *   demais negadas;
- * - profissional e cliente: todas negadas.
+ * - recepcionista: `excluir_desativar_funcionario`,
+ *   `editar_servicos_categorias` e `agendar_para_cliente` verdadeiras (expansão
+ *   intencional aprovada); demais negadas;
+ * - profissional: apenas `agendar_para_cliente` verdadeira (nasce com a
+ *   permissão; admin pode revogar via override);
+ * - cliente: todas negadas.
  *
  * A linha em `permissao_usuario` (override) tem precedência sobre a matriz.
  */
@@ -42,6 +45,7 @@ const PERMISSOES_DEFAULT: Record<string, Record<ChavePermissao, boolean>> = {
     criar_admin: true,
     gerenciar_permissoes: true,
     editar_servicos_categorias: true,
+    agendar_para_cliente: true,
   },
   recepcionista: {
     ver_financeiro: false,
@@ -49,6 +53,7 @@ const PERMISSOES_DEFAULT: Record<string, Record<ChavePermissao, boolean>> = {
     criar_admin: false,
     gerenciar_permissoes: false,
     editar_servicos_categorias: true,
+    agendar_para_cliente: true,
   },
   profissional: {
     ver_financeiro: false,
@@ -56,6 +61,7 @@ const PERMISSOES_DEFAULT: Record<string, Record<ChavePermissao, boolean>> = {
     criar_admin: false,
     gerenciar_permissoes: false,
     editar_servicos_categorias: false,
+    agendar_para_cliente: true,
   },
   cliente: {
     ver_financeiro: false,
@@ -63,6 +69,7 @@ const PERMISSOES_DEFAULT: Record<string, Record<ChavePermissao, boolean>> = {
     criar_admin: false,
     gerenciar_permissoes: false,
     editar_servicos_categorias: false,
+    agendar_para_cliente: false,
   },
 };
 
