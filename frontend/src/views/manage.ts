@@ -1429,8 +1429,8 @@ if (status === "cancelado") {
     // RBAC-F3: categorias visíveis somente para barbeiro.
     const showCategories = cargoAtual === "barbeiro";
     const editCatSet = new Set(usuario?.categorias ?? []);
-    const categoriaOptions = categories
-      .map((c) => `<option value="${escapeHtml(c)}" ${editCatSet.has(c) ? "selected" : ""}>${escapeHtml(c)}</option>`)
+    const categoriaCheckboxes = categories
+      .map((c) => `<label class="check-line"><input type="checkbox" name="pro-categorias" value="${escapeHtml(c)}" ${editCatSet.has(c) ? "checked" : ""}><span>${escapeHtml(c)}</span></label>`)
       .join("");
 
     const overlay = document.createElement("div");
@@ -1460,12 +1460,10 @@ if (status === "cancelado") {
               <input type="text" id="pro-especialidade" value="" maxlength="40" placeholder="Ex.: Corte e barba">
             </div>
           </div>
-          <div class="field" id="pro-categorias-wrap" ${showCategories ? "" : "hidden"}>
-            <label class="field__label" for="pro-categorias">Categorias</label>
-            <select id="pro-categorias" multiple size="3">
-              ${categoriaOptions}
-            </select>
-          </div>
+          <fieldset class="field" id="pro-categorias-wrap" ${showCategories ? "" : "hidden"}>
+            <legend class="field__label">Categorias</legend>
+            ${categoriaCheckboxes}
+          </fieldset>
           <div class="field">
             <label class="field__label" for="pro-email">Email (login) *</label>
             <input type="email" id="pro-email" value="${escapeHtml(usuario?.email ?? pro?.email ?? "")}" ${isEdit && usuario ? "readonly" : ""} maxlength="100" autocapitalize="none" spellcheck="false" required>
@@ -1543,10 +1541,8 @@ if (status === "cancelado") {
       const email = ($("#pro-email", overlay) as HTMLInputElement).value.trim().toLowerCase();
       const role = ($("#pro-role", overlay) as HTMLSelectElement).value as CargoFuncionario;
       const especialidade = ($("#pro-especialidade", overlay) as HTMLInputElement).value.trim();
-      const categoriasSelect = overlay.querySelector<HTMLSelectElement>("#pro-categorias");
-      const categorias = categoriasSelect
-        ? Array.from(categoriasSelect.selectedOptions).map((o) => o.value)
-        : [];
+      const categoriasCheckboxes = overlay.querySelectorAll<HTMLInputElement>("input[name='pro-categorias']:checked");
+      const categorias = Array.from(categoriasCheckboxes).map((cb) => cb.value);
 
       if (name.length < 3) {
         showToast("Informe o nome.", "error");

@@ -143,6 +143,7 @@
   flex-direction: column;
   gap: 6px;
   text-align: left;
+  border: none;
 }
 
 .field__label {

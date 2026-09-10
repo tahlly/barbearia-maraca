@@ -112,7 +112,8 @@ export async function buscarFuncionarioPorEmail(
  * Cria um funcionário (rotas de gestão — recepcionista/admin).
  *
  * `requestingUserId`/`requestingRole` são os dados do usuário autenticado e
- * são OBRIGATÓRIOS nas rotas de gestão.
+ * são OBRIGATÓRIOS nas rotas de gestão: a exigência de presença impede
+ * chamadas acidentais que omitam o contexto de quem executa a operação.
  *
  * RBAC: recepcionista só cria barbeiros; admin cria qualquer cargo. Demais
  * papéis (ou chamadas sem solicitante) são negados por padrão.
