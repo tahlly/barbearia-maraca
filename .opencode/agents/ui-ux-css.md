@@ -1,7 +1,6 @@
 ---
 description: Constrói uma interface responsiva, acessível e coerente usando somente CSS3 nativo, com microinterações performáticas, estados visuais completos e integração com a estrutura funcional da SPA.
 mode: all
-steps: 10
 color: "#DB2777"
 permissions:
   - action: subagent
