@@ -9,13 +9,15 @@ const obterFuncionarioNomeMock = vi.fn();
 
 let ultimoUpdateUsuario: Record<string, unknown> | undefined;
 
+const usuarioQueryMock = {
+  update: (obj: Record<string, unknown>) => {
+    ultimoUpdateUsuario = obj;
+    return Promise.resolve(1);
+  },
+  increment: vi.fn(async () => 1),
+};
 const usuarioTableMock = {
-  where: vi.fn(() => ({
-    update: (obj: Record<string, unknown>) => {
-      ultimoUpdateUsuario = obj;
-      return Promise.resolve(1);
-    },
-  })),
+  where: vi.fn(() => usuarioQueryMock),
 };
 const clienteTableMock = {
   where: vi.fn(() => ({ update: vi.fn(async () => 1) })),
@@ -75,6 +77,7 @@ const BASE_USUARIO: UsuarioRow = {
   reset_token_hash: null,
   reset_token_expires_at: null,
   primeiro_acesso: true,
+  token_version: 0,
 };
 
 describe('atualizarPerfil — primeiro acesso (P4)', () => {
@@ -177,5 +180,32 @@ describe('login — funcionário desativado (fix)', () => {
       login({ email: 'sumido@email.com', senha: 'hash:123456' }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(obterFuncionarioNomeMock).not.toHaveBeenCalled();
+  });
+
+  it('funcionário sem linha em funcionario (linha ausente) → ForbiddenError sem token', async () => {
+    findUsuarioByEmailMock.mockResolvedValue({
+      ...BASE_USUARIO,
+      senha_hash: 'hash:123456',
+      primeiro_acesso: false,
+    });
+    obterFuncionarioNomeMock.mockResolvedValue(null);
+
+    await expect(
+      login({ email: 'barbeiro@email.com', senha: 'hash:123456' }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(obterFuncionarioNomeMock).toHaveBeenCalled();
+  });
+
+  it('funcionário com ativo null/ausente (conta inconsistente) → ForbiddenError sem token', async () => {
+    findUsuarioByEmailMock.mockResolvedValue({
+      ...BASE_USUARIO,
+      senha_hash: 'hash:123456',
+      primeiro_acesso: false,
+    });
+    obterFuncionarioNomeMock.mockResolvedValue({ nome: 'Barbeiro A', cargo: 'barbeiro', ativo: null });
+
+    await expect(
+      login({ email: 'barbeiro@email.com', senha: 'hash:123456' }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
   });
 });

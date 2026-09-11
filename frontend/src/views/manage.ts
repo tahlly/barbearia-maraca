@@ -26,6 +26,14 @@ import {
   listUsuariosInternos,
   updateUsuarioInterno,
 } from "../services/usuarios.js";
+import {
+  atualizarPermissaoUsuario,
+  listarPermissoesCatalogo,
+  listarUsuariosComPermissoes,
+  PERMISSOES_LABELS,
+  type PermissaoCatalogoItem,
+  type UsuarioComPermissoes,
+} from "../services/permissoes.js";
 import { DEFAULT_DAYS, loadSchedule, saveSchedule, type ScheduleConfig } from "../services/schedule.js";
 import { confirmDialog, openModal, closeModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
@@ -140,6 +148,7 @@ function inferCargo(role: string): CargoFuncionario {
 export function renderManage(container: HTMLElement): () => void {
   const session = requireRole(["admin", "recepcionista"]);
   const isAdmin = session.role === "admin";
+  const canManageServices = isAdmin || session.permissoes?.editar_servicos_categorias === true;
   refreshCaches();
 
   const base = isAdmin ? "/admin" : "/recepcionista";
@@ -1052,9 +1061,9 @@ if (status === "cancelado") {
   // --------------------------------------------------------------- Serviços
   function renderServicos(): void {
     refreshCaches();
-    const actionsHeader = isAdmin ? `<th>Ações</th>` : "";
+    const actionsHeader = canManageServices ? `<th>Ações</th>` : "";
     const actionsCell = (id: string): string =>
-      isAdmin
+      canManageServices
         ? `<td><span class="cell-actions"><button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-service="${escapeHtml(id)}">Editar</button><button type="button" class="btn btn--sm btn--danger-outline" data-delete-service="${escapeHtml(id)}">Excluir</button></span></td>`
         : "";
 
@@ -1064,7 +1073,7 @@ if (status === "cancelado") {
           <h3 class="panel__section-title">Serviços</h3>
           <p class="manage-head__sub">Gerencie os serviços oferecidos pelo salão</p>
         </div>
-        ${isAdmin ? `
+        ${canManageServices ? `
         <div class="toolbar">
           <button type="button" class="btn btn--primary" data-new-service>${icon("plus", 16)} Novo serviço</button>
         </div>` : ""}
@@ -1127,7 +1136,7 @@ if (status === "cancelado") {
   }
 
   async function handleDeleteService(service: Service): Promise<void> {
-    if (!isAdmin) return; // Recepcionista não altera serviços (PRD).
+    if (!canManageServices) return; // Exige permissão editar_servicos_categorias.
     const confirmed = await confirmDialog({
       title: "Excluir serviço",
       message: `Excluir o serviço "${service.name}"? Esta ação não pode ser desfeita.`,
@@ -1145,7 +1154,7 @@ if (status === "cancelado") {
   }
 
   function openServiceModal(service: Service | null): void {
-    if (!isAdmin) return; // Recepcionista não altera serviços (PRD).
+    if (!canManageServices) return; // Exige permissão editar_servicos_categorias.
     const isEdit = Boolean(service);
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
@@ -1332,6 +1341,8 @@ if (status === "cancelado") {
         </div>
         <div class="toolbar">
           <button type="button" class="btn btn--primary" data-new-pro>${icon("plus", 16)} Adicionar novo</button>
+          ${isAdmin && session?.permissoes?.gerenciar_permissoes === true ? `
+          <button type="button" class="btn btn--gold-outline" data-open-permissoes>${icon("cog", 16)} Gerenciar Permissões</button>` : ""}
         </div>
       </div>
       <div class="pro-grid" id="manage-pros-list">
@@ -1347,6 +1358,15 @@ if (status === "cancelado") {
       };
       newBtn.addEventListener("click", h);
       cleanups.push(() => newBtn.removeEventListener("click", h));
+    }
+
+    const permissoesBtn = $<HTMLButtonElement>("[data-open-permissoes]", content);
+    if (permissoesBtn) {
+      const h = (): void => {
+        void openPermissoesModal();
+      };
+      permissoesBtn.addEventListener("click", h);
+      cleanups.push(() => permissoesBtn.removeEventListener("click", h));
     }
 
     $$("[data-edit-pro]", content).forEach((btn) => {
@@ -1632,6 +1652,132 @@ if (status === "cancelado") {
     });
     document.body.appendChild(overlay);
     openModal(overlay);
+  }
+
+  // ------------------------------------------------- Gerenciar permissões
+  async function openPermissoesModal(): Promise<void> {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.innerHTML = `
+      <div class="modal modal--lg" role="dialog" aria-modal="true" aria-labelledby="permissoes-modal-title">
+        <div class="modal__header">
+          <h2 class="modal__title" id="permissoes-modal-title">Gerenciar Permissões</h2>
+          <button type="button" class="modal__close" data-close aria-label="Fechar">${icon("x", 18)}</button>
+        </div>
+        <div class="modal__body" data-permissoes-content>
+          <p class="panel__empty">Carregando permissões...</p>
+        </div>
+      </div>
+    `;
+
+    const finish = (): void => {
+      closeModal(overlay);
+      window.setTimeout(() => overlay.remove(), 300);
+    };
+    overlay.querySelectorAll("[data-close]").forEach((el) => el.addEventListener("click", finish));
+    overlay.addEventListener("mousedown", (event) => {
+      if (event.target === overlay) finish();
+    });
+    document.body.appendChild(overlay);
+    openModal(overlay);
+
+    const contentBox = overlay.querySelector<HTMLElement>("[data-permissoes-content]");
+    if (!contentBox) return;
+
+    let catalogo: PermissaoCatalogoItem[];
+    let usuarios: UsuarioComPermissoes[];
+    try {
+      [catalogo, usuarios] = await Promise.all([
+        listarPermissoesCatalogo(),
+        listarUsuariosComPermissoes(),
+      ]);
+    } catch (error) {
+      contentBox.innerHTML = `<p class="panel__empty" role="alert">${escapeHtml(
+        errorMessage(error, "Não foi possível carregar as permissões."),
+      )}</p>`;
+      return;
+    }
+
+    // A ordem das colunas vem do catálogo; os rótulos usam a descrição do
+    // catálogo com fallback para PERMISSOES_LABELS (e a própria chave como
+    // último recurso, caso o backend venha a adicionar chaves novas).
+    const chaves =
+      catalogo.length > 0 ? catalogo.map((c) => c.chave) : Object.keys(PERMISSOES_LABELS);
+    const rotulo = (chave: string): string =>
+      catalogo.find((c) => c.chave === chave)?.descricao ?? PERMISSOES_LABELS[chave] ?? chave;
+    const cargoLabel = (cargo: string): string => {
+      if (cargo === "administrador") return "Administrador";
+      if (cargo === "recepcionista") return "Recepcionista";
+      return "Barbeiro";
+    };
+    const selfEmail = session.userEmail.trim().toLowerCase();
+
+    if (usuarios.length === 0) {
+      contentBox.innerHTML = `<p class="panel__empty">Nenhum funcionário encontrado.</p>`;
+      return;
+    }
+
+    const switchHtml = (usuario: UsuarioComPermissoes, chave: string, isSelf: boolean): string =>
+      `<label class="switch"${isSelf ? ` title="Suas permissões não são alteradas por aqui."` : ""}>
+        <input type="checkbox" role="switch"
+          data-perm-switch="${escapeHtml(chave)}"
+          data-user-id="${escapeHtml(usuario.usuarioId)}"
+          ${usuario.permissoes[chave] === true ? "checked" : ""}
+          ${isSelf ? "disabled" : ""}
+          aria-label="${escapeHtml(rotulo(chave))} para ${escapeHtml(usuario.nome)}">
+        <span class="switch__track" aria-hidden="true"></span>
+      </label>`;
+
+    contentBox.innerHTML = `
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Funcionário</th>
+              ${chaves.map((chave) => `<th title="${escapeHtml(chave)}">${escapeHtml(rotulo(chave))}</th>`).join("")}
+            </tr>
+          </thead>
+          <tbody>
+            ${usuarios
+              .map((usuario) => {
+                const isSelf = usuario.email.trim().toLowerCase() === selfEmail;
+                return `
+                  <tr>
+                    <td>
+                      <strong>${escapeHtml(usuario.nome)}</strong><br>
+                      <small>${escapeHtml(usuario.email)}</small><br>
+                      <span class="badge badge--neutral">${escapeHtml(cargoLabel(usuario.cargo))}</span>
+                    </td>
+                    ${chaves.map((chave) => `<td>${switchHtml(usuario, chave, isSelf)}</td>`).join("")}
+                  </tr>`;
+              })
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    overlay.querySelectorAll<HTMLInputElement>("[data-perm-switch]").forEach((input) => {
+      const change = (): void => {
+        void (async () => {
+          const usuarioId = input.getAttribute("data-user-id")!;
+          const chave = input.getAttribute("data-perm-switch")!;
+          const concedida = input.checked;
+          input.disabled = true;
+          try {
+            await atualizarPermissaoUsuario(usuarioId, chave, concedida);
+            showToast(concedida ? "Permissão concedida." : "Permissão revogada.");
+          } catch (error) {
+            input.checked = !concedida;
+            showToast(errorMessage(error, "Não foi possível atualizar a permissão."), "error");
+          } finally {
+            input.disabled = false;
+          }
+        })();
+      };
+      input.addEventListener("change", change);
+    });
   }
 
   // ---------------------------------------------------------- Configurações

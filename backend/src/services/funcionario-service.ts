@@ -1,7 +1,8 @@
 import bcrypt from 'bcrypt';
-import { findUsuarioByEmail } from '../repositories/auth-repository';
+import { findUsuarioByEmail, incrementarTokenVersion } from '../repositories/auth-repository';
 import * as funcionarioRepo from '../repositories/funcionario-repository';
 import { listarCategoriasAtivas } from './categoria-service';
+import { exigirPermissao } from './permissao-service';
 import { ValidationError } from '../errors/ValidationError';
 import { NotFoundError } from '../errors/NotFoundError';
 import { ForbiddenError } from '../errors/ForbiddenError';
@@ -111,10 +112,11 @@ export async function buscarFuncionarioPorEmail(
  * Cria um funcionário (rotas de gestão — recepcionista/admin).
  *
  * `requestingUserId`/`requestingRole` são os dados do usuário autenticado e
- * são OBRIGATÓRIOS nas rotas de gestão: a exigência de presença (card A2)
- * impede chamadas acidentais que omitam o contexto de quem executa a operação.
- * Regra hierárquica aplicada: recepcionista só cria funcionários com cargo
- * `barbeiro`; demais papéis negados por padrão.
+ * são OBRIGATÓRIOS nas rotas de gestão: a exigência de presença impede
+ * chamadas acidentais que omitam o contexto de quem executa a operação.
+ *
+ * RBAC: recepcionista só cria barbeiros; admin cria qualquer cargo. Demais
+ * papéis (ou chamadas sem solicitante) são negados por padrão.
  */
 export async function criarFuncionario(
   dados: {
@@ -135,6 +137,11 @@ export async function criarFuncionario(
     if (requestingRole !== 'recepcionista' || cargoFinal !== 'barbeiro') {
       throw new ForbiddenError('Acesso negado');
     }
+  }
+
+  // Item 1 — RBAC granular: criar administradores exige a permissão `criar_admin`.
+  if ((dados.cargo ?? 'barbeiro') === 'administrador') {
+    await exigirPermissao({ id: requestingUserId, role: requestingRole }, 'criar_admin');
   }
 
   const categorias = await validarCategorias(dados.categorias, dados.cargo ?? 'barbeiro');
@@ -211,6 +218,11 @@ export async function atualizarFuncionario(
     throw new ForbiddenError('Acesso negado');
   }
 
+  // Item 1 — RBAC granular: promover alguém a administrador exige `criar_admin`.
+  if (cargoFinal === 'administrador' && alvo.cargo !== 'administrador') {
+    await exigirPermissao({ id: requestingUserId, role: requestingRole }, 'criar_admin');
+  }
+
   // ── Categorias ──────────────────────────────────────────────
   const categorias = await validarCategorias(dados.categorias, cargoFinal);
 
@@ -234,6 +246,11 @@ export async function atualizarFuncionario(
   });
   if (!atualizado) {
     throw new NotFoundError('Funcionário não encontrado');
+  }
+  // Item 1: mudança de cargo invalida as sessões do funcionário (a role é
+  // revalidada no banco a cada requisição; o token_version força o relogin).
+  if (cargoFinal !== alvo.cargo) {
+    await incrementarTokenVersion(alvo.usuarioId);
   }
   return atualizado;
 }
@@ -281,9 +298,15 @@ export async function alternarStatusFuncionario(
     throw new ForbiddenError('Acesso negado');
   }
 
+  // Item 1 — RBAC granular: desativar/excluir exige a permissão
+  // `excluir_desativar_funcionario` (admin e recepcionista a têm por padrão).
+  await exigirPermissao({ id: requestingUserId, role: requestingRole }, 'excluir_desativar_funcionario');
+
   const alterado = await funcionarioRepo.trocarStatus(id, ativo);
   if (!alterado) {
     throw new NotFoundError('Funcionário não encontrado');
   }
+  // Item 1: desativar/rebaixar invalida imediatamente as sessões do alvo.
+  await incrementarTokenVersion(alvo.usuarioId);
   return alterado;
 }

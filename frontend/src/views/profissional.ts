@@ -3,7 +3,9 @@ import { requireRole, updateSessionUser } from "../services/auth.js";
 import { $, escapeHtml, initials } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { formatDateMedium, formatCurrency } from "../ui/format.js";
-import { listAppointments, getRevenueSummary, type RevenueSummary } from "../services/booking.js";
+import { cancelAppointment, listAppointments, getRevenueSummary, type RevenueSummary } from "../services/booking.js";
+import { confirmDialog } from "../ui/modal.js";
+import { initBookingWizard } from "../features/bookingWizard.js";
 import { showToast } from "../ui/toast.js";
 import type { Appointment } from "../types.js";
 
@@ -41,6 +43,14 @@ export function renderProfissional(container: HTMLElement): () => void {
 
   const cleanups: Array<() => void> = [];
 
+  // Wizard único da SPA em MODO OPERADOR: o profissional com permissão
+  // `agendar_para_cliente` cria/cancela/reagenda agendamentos de clientes.
+  // O callback de sucesso recarrega a lista da aba atual.
+  const wizard = initBookingWizard({
+    onBookingCreated: () => renderAgendamentos(),
+  });
+  const canManage = session?.permissoes?.agendar_para_cliente === true;
+
   type ManageTab = "agendamentos" | "faturamento" | "configuracoes";
 
   const base = "/profissional";
@@ -53,6 +63,10 @@ export function renderProfissional(container: HTMLElement): () => void {
 
   // ------------------------------------------------------ Estado de erro da lista
   let appointmentsError: string | null = null;
+
+  // Última lista de agendamentos carregada (sem filtros). Conservada para
+  // resolver o objeto `Appointment` completo nas ações de Reagendar/Cancelar.
+  let currentAppointments: Appointment[] = [];
 
   async function fetchAppointments(): Promise<Appointment[]> {
     try {
@@ -86,6 +100,7 @@ export function renderProfissional(container: HTMLElement): () => void {
           <p class="manage-head__sub">Controle completo da agenda do salão e status das reservas</p>
         </div>
         <div class="toolbar">
+          ${canManage ? `<button type="button" class="btn btn--primary" data-new-booking>${icon("plus", 16)} Agendar</button>` : ""}
           <select class="input" data-status-filter aria-label="Filtrar por status">
             <option value="todos">Todos Status</option>
             <option value="pendente">Pendente</option>
@@ -157,6 +172,7 @@ export function renderProfissional(container: HTMLElement): () => void {
     }
 
     function refresh(appointments: Appointment[]): void {
+      currentAppointments = appointments;
       $("#pro-agenda-table", content)!.innerHTML = buildTable(applyFilters(appointments));
     }
 
@@ -164,6 +180,26 @@ export function renderProfissional(container: HTMLElement): () => void {
       const list = await fetchAppointments();
       if (appointmentsError) renderAppointmentsError();
       else refresh(list);
+    }
+
+    async function handleCancel(id: string): Promise<void> {
+      const confirmed = await confirmDialog({
+        title: "Cancelar agendamento",
+        message: "Cancelar este agendamento?",
+        confirmLabel: "Cancelar agendamento",
+        danger: true,
+      });
+      if (!confirmed) return;
+      try {
+        await cancelAppointment(id);
+        showToast("Agendamento cancelado.");
+        await reloadList();
+      } catch (error) {
+        showToast(
+          error instanceof Error ? error.message : "Não foi possível cancelar o agendamento.",
+          "error",
+        );
+      }
     }
 
     void reloadList();
@@ -191,6 +227,38 @@ export function renderProfissional(container: HTMLElement): () => void {
     $<HTMLButtonElement>("[data-consult]", content)?.addEventListener("click", onConsult);
     $<HTMLButtonElement>("[data-clear-filter]", content)?.addEventListener("click", onClear);
 
+    const newBookingBtn = $<HTMLButtonElement>("[data-new-booking]", content);
+    if (newBookingBtn) {
+      const h = (): void => {
+        void wizard.openNew();
+      };
+      newBookingBtn.addEventListener("click", h);
+      cleanups.push(() => newBookingBtn.removeEventListener("click", h));
+    }
+
+    // Delegação de eventos na tabela (recriada a cada refresh): um único
+    // listener por renderização resolve Reagendar/Cancelar por closest.
+    const agendaTable = $("#pro-agenda-table", content);
+    if (agendaTable) {
+      const onActions = (event: Event): void => {
+        const target = event.target as HTMLElement;
+        const reagendarBtn = target.closest<HTMLElement>("[data-reagendar]");
+        if (reagendarBtn) {
+          const id = reagendarBtn.getAttribute("data-reagendar")!;
+          const appointment = currentAppointments.find((a) => a.id === id);
+          if (appointment) void wizard.openForReschedule(appointment);
+          return;
+        }
+        const cancelBtn = target.closest<HTMLElement>("[data-cancel]");
+        if (cancelBtn) {
+          const id = cancelBtn.getAttribute("data-cancel")!;
+          void handleCancel(id);
+        }
+      };
+      agendaTable.addEventListener("click", onActions);
+      cleanups.push(() => agendaTable.removeEventListener("click", onActions));
+    }
+
     cleanups.push(() => search?.removeEventListener("input", onSearch));
     cleanups.push(() => filter?.removeEventListener("change", onFilter));
   }
@@ -199,6 +267,7 @@ export function renderProfissional(container: HTMLElement): () => void {
     if (appointments.length === 0) {
       return `<p class="panel__empty">Nenhum agendamento encontrado.</p>`;
     }
+    const actionsHeader = canManage ? `<th>Ações</th>` : "";
     return `
       <table class="table">
         <thead>
@@ -207,18 +276,29 @@ export function renderProfissional(container: HTMLElement): () => void {
             <th>Serviço</th>
             <th>Data/Hora</th>
             <th>Status</th>
+            ${actionsHeader}
           </tr>
         </thead>
         <tbody>
           ${appointments
             .map((a) => {
               const name = a.servicoNome ?? "-";
+              const canAct = canManage && (a.status === "pendente" || a.status === "confirmado");
+              const actionsCell = canAct
+                ? `<td><span class="cell-actions">
+                    <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-reagendar="${escapeHtml(a.id)}">Reagendar</button>
+                    <button type="button" class="btn btn--sm btn--danger-outline" data-cancel="${escapeHtml(a.id)}">Cancelar</button>
+                  </span></td>`
+                : canManage
+                  ? `<td></td>`
+                  : "";
               return `
                 <tr>
                   <td><strong>${escapeHtml(a.clienteNome ?? "-")}</strong></td>
                   <td>${escapeHtml(name)}</td>
                   <td>${formatDateMedium(a.data)} · ${a.hora}</td>
                   <td>${statusBadge(a.status)}</td>
+                  ${actionsCell}
                 </tr>`;
             })
             .join("")}

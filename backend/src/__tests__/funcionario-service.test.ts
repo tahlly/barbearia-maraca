@@ -13,6 +13,8 @@ const trocarStatusMock = vi.fn();
 
 const findUsuarioByEmailMock = vi.fn();
 const listarCategoriasAtivasMock = vi.fn();
+const incrementarTokenVersionMock = vi.fn(async () => {});
+const exigirPermissaoMock = vi.fn(async () => {});
 
 vi.mock('../repositories/funcionario-repository', () => ({
   criar: (...args: unknown[]) => criarRepoMock(...args),
@@ -26,6 +28,11 @@ vi.mock('../repositories/funcionario-repository', () => ({
 
 vi.mock('../repositories/auth-repository', () => ({
   findUsuarioByEmail: (...args: unknown[]) => findUsuarioByEmailMock(...args),
+  incrementarTokenVersion: (...args: unknown[]) => incrementarTokenVersionMock(...args),
+}));
+
+vi.mock('../services/permissao-service', () => ({
+  exigirPermissao: (...args: unknown[]) => exigirPermissaoMock(...args),
 }));
 
 vi.mock('../services/categoria-service', () => ({
@@ -83,6 +90,8 @@ function resetAll(): void {
   trocarStatusMock.mockReset();
   findUsuarioByEmailMock.mockReset();
   listarCategoriasAtivasMock.mockReset();
+  incrementarTokenVersionMock.mockReset();
+  exigirPermissaoMock.mockReset();
 }
 
 function seedRepoBasico(): void {
@@ -173,6 +182,20 @@ describe('criarFuncionario (RBAC)', () => {
 
     expect(resultado.cargo).toBe('administrador');
     expect(criarRepoMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('admin sem permissão criar_admin → 403 (gate granular Item 1)', async () => {
+    exigirPermissaoMock.mockRejectedValue(new ForbiddenError('Acesso negado'));
+
+    await expect(
+      criarFuncionario(
+        { nome: 'Admin Novo', email: 'anovo@email.com', cargo: 'administrador' },
+        'u-admin',
+        'admin',
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    expect(criarRepoMock).not.toHaveBeenCalled();
   });
 
   it('cargo ≠ barbeiro com categorias não vazias → 400', async () => {
@@ -442,6 +465,16 @@ describe('alternarStatusFuncionario — regra hierárquica de status', () => {
     expect(resultado).toBe(true);
     expect(trocarStatusMock).toHaveBeenCalledTimes(1);
     expect(trocarStatusMock).toHaveBeenCalledWith('func-a1', false);
+  });
+
+  it('alternar status sem permissão excluir_desativar_funcionario → 403 (gate granular Item 1)', async () => {
+    exigirPermissaoMock.mockRejectedValue(new ForbiddenError('Acesso negado'));
+
+    await expect(
+      alternarStatusFuncionario('func-b1', false, 'u-admin', 'admin'),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    expect(trocarStatusMock).not.toHaveBeenCalled();
   });
 
   it('funcionário inexistente → 404', async () => {

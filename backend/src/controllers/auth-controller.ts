@@ -18,6 +18,7 @@ import {
   senhaForteSchema,
   senhaForteOpcionalSchema,
 } from '../utils/senha';
+import { obterPermissoesEfetivasUsuario } from '../services/permissao-service';
 
 function expiresAt(): number {
   return Date.now() + parseExpiresInToMs(JWT_EXPIRES_IN);
@@ -36,6 +37,7 @@ export async function loginComGoogle(req: Request, res: Response): Promise<void>
 
   try {
     const resultado = await autenticarComGoogle(idToken);
+    const permissoes = await obterPermissoesEfetivasUsuario({ id: resultado.user.id, role: resultado.role });
     res.json({
       token: resultado.token,
       userName: resultado.user.nome,
@@ -43,6 +45,7 @@ export async function loginComGoogle(req: Request, res: Response): Promise<void>
       expiresAt: expiresAt(),
       role: resultado.role,
       avatarUrl: resultado.user.avatarUrl,
+      permissoes,
     });
   } catch (error: unknown) {
     const status = (error as { status?: number }).status ?? 401;
@@ -104,6 +107,7 @@ export async function loginLocal(req: Request, res: Response): Promise<void> {
 
   try {
     const resultado = await login({ email, senha: password });
+    const permissoes = await obterPermissoesEfetivasUsuario({ id: resultado.user.id, role: resultado.role });
     res.status(200).json({
       token: resultado.token,
       userName: resultado.user.nome,
@@ -112,6 +116,7 @@ export async function loginLocal(req: Request, res: Response): Promise<void> {
       role: resultado.role,
       precisaTrocarSenha: resultado.precisaTrocarSenha ?? false,
       user: resultado.user,
+      permissoes,
     });
   } catch (error: unknown) {
     const status = (error as { status?: number }).status ?? 401;

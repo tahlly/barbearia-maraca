@@ -96,6 +96,7 @@ function gerarTokenJWT(usuario: UsuarioRow, role: string): string {
     id: usuario.id,
     tipo: usuario.tipo,
     role,
+    ver: usuario.token_version,
   });
 }
 
@@ -114,9 +115,15 @@ async function resolveNomeECargo(
   };
 }
 
-/** Bloqueia funcionários inativados no login e na autenticação social. */
+/**
+ * Bloqueia funcionários inativados no login e na autenticação social.
+ *
+ * Trata como inativo qualquer estado diferente de `ativo === true`, incluindo
+ * `null`/linha ausente na tabela `funcionario` (conta inconsistente) — evita
+ * que uma exclusão/inconsistência permita login residual.
+ */
 function garantirFuncionarioAtivo(ativo: boolean | null): void {
-  if (ativo === false) {
+  if (ativo !== true) {
     throw new ForbiddenError('Conta desativada. Contate o administrador.');
   }
 }
@@ -208,6 +215,11 @@ export async function atualizarPerfil(
     if (Object.keys(updateUsuario).length > 0) {
       updateUsuario.updated_at = new Date();
       await trx('usuario').where('id', usuarioId).update(updateUsuario);
+    }
+
+    // Item 1: troca de senha invalida todas as sessões anteriores.
+    if (senhaHash) {
+      await trx('usuario').where('id', usuarioId).increment('token_version', 1);
     }
 
     // Atualizar nome na tabela correta
@@ -333,5 +345,7 @@ export async function redefinirSenha(token: string, novaSenha: string): Promise<
       reset_token_expires_at: null,
       updated_at: new Date(),
     });
+    // Item 1: nova senha invalida todas as sessões anteriores.
+    await trx('usuario').where('id', usuario.id).increment('token_version', 1);
   });
 }

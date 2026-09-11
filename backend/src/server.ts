@@ -78,6 +78,7 @@ import agendamentoRoutes from './rotas/agendamento-routes';
 import horarioRoutes from './rotas/horario-routes';
 import categoriaRoutes from './rotas/categoria-routes';
 import horarioExcecaoRoutes from './rotas/horario-excecao-routes';
+import permissaoRoutes from './rotas/permissao-routes';
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -131,6 +132,7 @@ app.use('/api/funcionarios', funcionarioRoutes);
 app.use('/api/agendamentos', agendamentoRoutes);
 app.use('/api/horarios', horarioRoutes);
 app.use('/api/categorias', categoriaRoutes);
+app.use('/api/permissoes', permissaoRoutes);
 app.use('/api/horario-excecoes', horarioExcecaoRoutes);
 
 // ── 404 para rotas /api não mapeadas ────────────────────────────────

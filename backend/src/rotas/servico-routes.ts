@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authorize } from '../middlewares/authorize';
+import { requerPermissao } from '../middlewares/requerPermissao';
 import {
   listarServicos,
   obterServico,
@@ -178,10 +179,12 @@ const servicoRoutes = Router();
 // Público (sem autenticação) — apenas serviços ativos (S1-11.3)
 servicoRoutes.get('/', listarServicos);
 
-// Protegido: somente administrador (S1-11.1, S1-11.2)
-servicoRoutes.get('/:id', authorize('admin'), obterServico);
-servicoRoutes.post('/', authorize('admin'), criarServico);
-servicoRoutes.put('/:id', authorize('admin'), atualizarServico);
-servicoRoutes.patch('/:id/status', authorize('admin'), atualizarStatusServico);
+// Protegido: admin ou recepcionista com permissão granular
+// `editar_servicos_categorias` (Item 1 — decisão A aprovada: recepcionista
+// também edita serviços).
+servicoRoutes.get('/:id', authorize('admin', 'recepcionista'), requerPermissao('editar_servicos_categorias'), obterServico);
+servicoRoutes.post('/', authorize('admin', 'recepcionista'), requerPermissao('editar_servicos_categorias'), criarServico);
+servicoRoutes.put('/:id', authorize('admin', 'recepcionista'), requerPermissao('editar_servicos_categorias'), atualizarServico);
+servicoRoutes.patch('/:id/status', authorize('admin', 'recepcionista'), requerPermissao('editar_servicos_categorias'), atualizarStatusServico);
 
 export default servicoRoutes;
