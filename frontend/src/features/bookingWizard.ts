@@ -11,6 +11,7 @@ import { icon, serviceIcon } from "../ui/icons.js";
 import { formatCurrency, formatDateLong, toIsoDate } from "../ui/format.js";
 import { closeModal, openModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
+import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
 
 type StepName = "cliente" | "servicos" | "horario" | "confirmacao";
 
@@ -771,8 +772,8 @@ onBookingCreatedRef?.();
       showToast("Informe um e-mail válido.", "error");
       return;
     }
-    if (senha.length < 6) {
-      showToast("A senha deve ter no mínimo 6 caracteres.", "error");
+    if (!isSenhaForte(senha)) {
+      showToast(SENHA_FORTE_MESSAGE, "error");
       return;
     }
 
@@ -789,6 +790,9 @@ onBookingCreatedRef?.();
       // texto claro. form.reset() NÃO é chamado para preservar as seleções
       // já feitas pelo operador nos passos de serviço/horário.
       resetPasswordReveal();
+      clientCreateForm.querySelectorAll<HTMLInputElement>("input").forEach((input) => {
+        input.value = "";
+      });
       showToast("Cliente cadastrado e selecionado.", "success");
     } catch (error) {
       showToast(
