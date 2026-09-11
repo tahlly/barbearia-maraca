@@ -242,3 +242,60 @@ export interface UpdateClienteRequest {
   email?: string;
   telefone?: string;
 }
+
+// --- Contratos HTTP do Domínio Financeiro (Despesas / Faturamento) ---
+// Valores monetários são SEMPRE strings decimais normalizadas (ex.: "45.90") —
+// nunca numbers — para preservar a precisão decimal exata de moeda no JSON.
+
+export type TipoDespesa = 'fixa' | 'variavel' | 'comissao' | 'outro';
+
+/**
+ * Resumo de despesas de um período.
+ * Endpoint: `GET /api/despesas/resumo`.
+ * Acesso: somente usuários com a permissão efetiva `ver_financeiro`
+ * (admin tem por padrão; overrides no banco contam). Caso contrário → 403.
+ */
+export interface DespesaResumoDTO {
+  /** Data inicial do período (YYYY-MM-DD). */
+  inicio: string;
+  /** Data final do período (YYYY-MM-DD). */
+  fim: string;
+  /** Soma das despesas do período, string decimal normalizada (ex.: "57.50"). */
+  despesaTotal: string;
+}
+
+/**
+ * Resumo de faturamento (agendamentos concluídos) de um período.
+ * Endpoint: `GET /api/agendamentos/faturamento`.
+ *
+ * `despesaTotal`, `lucroLiquido` e `margem` são campos financeiros sensíveis e
+ * SÓ aparecem na resposta quando o solicitante possui a permissão efetiva
+ * `ver_financeiro` (admin tem por padrão; overrides no banco contam). Para
+ * demais usuários (ex.: profissional sem override) estes três campos são
+ * OMITIDOS do JSON — nunca retornados como "0.00" fake.
+ */
+export interface FaturamentoResumoDTO {
+  /** Data inicial do período (YYYY-MM-DD). */
+  inicio: string;
+  /** Data final do período (YYYY-MM-DD). */
+  fim: string;
+  /** Faturamento no período (soma dos serviços de agendamentos concluídos). */
+  valorTotal: string;
+  /** Quantidade de agendamentos concluídos no período. */
+  quantidade: number;
+  /** Ticket médio = valorTotal / quantidade (string decimal normalizada). */
+  ticketMedio: string;
+  /** Detalhamento por serviço. */
+  porServico: Array<{
+    servicoId: string;
+    servicoNome: string;
+    quantidade: number;
+    valorTotal: string;
+  }>;
+  /** Soma das despesas do período. SÓ para quem tem `ver_financeiro`. */
+  despesaTotal?: string;
+  /** Lucro líquido = valorTotal − despesaTotal. SÓ para quem tem `ver_financeiro`. */
+  lucroLiquido?: string;
+  /** Margem = lucro / faturamento × 100 (percentual, 2 casas). SÓ para quem tem `ver_financeiro`. */
+  margem?: string;
+}
