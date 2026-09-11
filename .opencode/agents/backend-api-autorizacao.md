@@ -1,7 +1,6 @@
 ---
 description: Implementa a API REST em Node.js e TypeScript, aplicando regras de negócio, validação, autenticação e autorização no servidor para os papéis Cliente, Barbeiro, Recepcionista e Administrador.
 mode: all
-steps: 10
 color: "#059669"
 permissions:
   - action: subagent
