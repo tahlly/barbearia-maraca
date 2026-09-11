@@ -1,7 +1,6 @@
 ---
 description: Implementa o comportamento da SPA em Vanilla TypeScript, incluindo roteamento client-side, estado, DOM, formulários, autenticação no cliente e integração com a API para os papéis Cliente, Barbeiro, Recepcionista e Administrador.
 mode: all
-steps: 10
 color: "#7C3AED"
 permissions:
   - action: subagent
