@@ -786,7 +786,6 @@ if (status === "cancelado") {
               if (a.status === "pendente") {
                 actions = `<span class="actions-cell">
                   <button type="button" class="btn btn--sm btn--success" data-confirm-app data-id="${escapeHtml(a.id)}">CONFIRMAR</button>
-                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-conclude-app data-id="${escapeHtml(a.id)}">CONCLUIR</button>
                   <button type="button" class="btn btn--sm btn--danger-outline" data-cancel-app data-id="${escapeHtml(a.id)}">Cancelar</button>
                 </span>`;
               } else if (a.status === "confirmado") {
