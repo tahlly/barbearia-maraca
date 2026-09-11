@@ -11,6 +11,7 @@ import { icon, serviceIcon } from "../ui/icons.js";
 import { formatCurrency, formatDateLong, toIsoDate } from "../ui/format.js";
 import { closeModal, openModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
+import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
 
 type StepName = "cliente" | "servicos" | "horario" | "confirmacao";
 
@@ -570,6 +571,7 @@ onBookingCreatedRef?.();
     state.clientSearchPerformed = false;
     form.reset();
     clearFormErrors(form);
+    resetPasswordReveal();
     dateInput.value = state.dateIso;
     if (operatorMode) {
       clientSearchInput.value = "";
@@ -671,10 +673,58 @@ onBookingCreatedRef?.();
   clientCreateCancel.addEventListener("click", () => {
     clientCreateForm.hidden = true;
     clientCreateToggle.hidden = false;
+    resetPasswordReveal();
   });
   clientCreateSubmit.addEventListener("click", () => {
     void createNewClient();
   });
+
+  // Toggle olhinho campo senha
+  const senhaInput = $<HTMLInputElement>("#client-create-senha", form)!;
+  const toggleSenhaBtn = $<HTMLButtonElement>("#toggle-client-create-senha", form);
+  if (toggleSenhaBtn) {
+    toggleSenhaBtn.innerHTML = icon("eye", 18);
+    toggleSenhaBtn.addEventListener("click", () => {
+      const reveal = senhaInput.type === "password";
+      senhaInput.type = reveal ? "text" : "password";
+      toggleSenhaBtn.innerHTML = icon(reveal ? "eye-off" : "eye", 18);
+      toggleSenhaBtn.setAttribute("aria-label", reveal ? "Ocultar senha" : "Mostrar senha");
+      senhaInput.focus({ preventScroll: true });
+    });
+  }
+
+  // Toggle olhinho campo confirmar senha
+  const senhaConfirmInput = $<HTMLInputElement>("#client-create-senha-confirm", form)!;
+  const toggleSenhaConfirmBtn = $<HTMLButtonElement>("#toggle-client-create-senha-confirm", form);
+  if (toggleSenhaConfirmBtn) {
+    toggleSenhaConfirmBtn.innerHTML = icon("eye", 18);
+    toggleSenhaConfirmBtn.addEventListener("click", () => {
+      const reveal = senhaConfirmInput.type === "password";
+      senhaConfirmInput.type = reveal ? "text" : "password";
+      toggleSenhaConfirmBtn.innerHTML = icon(reveal ? "eye-off" : "eye", 18);
+      toggleSenhaConfirmBtn.setAttribute("aria-label", reveal ? "Ocultar senha" : "Mostrar senha");
+      senhaConfirmInput.focus({ preventScroll: true });
+    });
+  }
+
+  // Restaura o estado "ocultar senha" dos dois campos do cadastro rápido.
+  // form.reset() limpa os valores, mas NÃO restaura o atributo type nem o
+  // ícone/aria-label dos toggles de olhinho; sem isto, uma senha revelada
+  // continuaria visível em texto claro após cancelar o form ou reabrir o
+  // wizard (defeito M-1). Não é chamada ao abrir o cadastro rápido: o cancel
+  // e o reset já restauram, e assim não sobrescreve o que o operador digita.
+  function resetPasswordReveal(): void {
+    senhaInput.type = "password";
+    senhaConfirmInput.type = "password";
+    if (toggleSenhaBtn) {
+      toggleSenhaBtn.innerHTML = icon("eye", 18);
+      toggleSenhaBtn.setAttribute("aria-label", "Mostrar senha");
+    }
+    if (toggleSenhaConfirmBtn) {
+      toggleSenhaConfirmBtn.innerHTML = icon("eye", 18);
+      toggleSenhaConfirmBtn.setAttribute("aria-label", "Mostrar senha");
+    }
+  }
 
   async function runClientSearch(): Promise<void> {
     const term = clientSearchInput.value.trim();
@@ -702,6 +752,17 @@ onBookingCreatedRef?.();
     const email = form.querySelector<HTMLInputElement>("#client-create-email")!.value.trim().toLowerCase();
     const telefone = form.querySelector<HTMLInputElement>("#client-create-telefone")!.value.trim();
     const senha = form.querySelector<HTMLInputElement>("#client-create-senha")!.value;
+    const emailConfirm = form.querySelector<HTMLInputElement>("#client-create-email-confirm")!.value.trim().toLowerCase();
+    const senhaConfirm = form.querySelector<HTMLInputElement>("#client-create-senha-confirm")!.value;
+
+    if (emailConfirm !== email) {
+      showToast("Os e-mails informados não coincidem.", "error");
+      return;
+    }
+    if (senhaConfirm !== senha) {
+      showToast("As senhas informadas não coincidem.", "error");
+      return;
+    }
 
     if (nome.length < 2) {
       showToast("Informe o nome do cliente.", "error");
@@ -711,8 +772,8 @@ onBookingCreatedRef?.();
       showToast("Informe um e-mail válido.", "error");
       return;
     }
-    if (senha.length < 6) {
-      showToast("A senha deve ter no mínimo 6 caracteres.", "error");
+    if (!isSenhaForte(senha)) {
+      showToast(SENHA_FORTE_MESSAGE, "error");
       return;
     }
 
@@ -724,6 +785,14 @@ onBookingCreatedRef?.();
       clientCreateForm.hidden = true;
       clientCreateToggle.hidden = false;
       clientSearchInput.value = "";
+      // Defeito M-1 residual: sem restauração do type/ícone aqui, o form
+      // reaberto na mesma sessão exibiria a senha do cliente anterior em
+      // texto claro. form.reset() NÃO é chamado para preservar as seleções
+      // já feitas pelo operador nos passos de serviço/horário.
+      resetPasswordReveal();
+      clientCreateForm.querySelectorAll<HTMLInputElement>("input").forEach((input) => {
+        input.value = "";
+      });
       showToast("Cliente cadastrado e selecionado.", "success");
     } catch (error) {
       showToast(

@@ -1,4 +1,4 @@
-import { getSession, logout } from "../services/auth.js";
+import { getSession } from "../services/auth.js";
 import { $, escapeHtml, initials } from "./dom.js";
 import { bindThemeToggles, syncLogoImages } from "../theme.js";
 import { icon } from "./icons.js";
@@ -70,9 +70,6 @@ export function renderPanel(container: HTMLElement, options: PanelOptions): Pane
               <small>${escapeHtml(options.roleLabel)}</small>
             </div>
           </div>
-          <button type="button" class="panel__logout" data-panel-logout title="Sair">
-            ${icon("logout", 18)}<span>Sair</span>
-          </button>
         </div>
       </aside>
       <div class="panel__backdrop" data-panel-backdrop></div>
@@ -151,15 +148,6 @@ export function renderPanel(container: HTMLElement, options: PanelOptions): Pane
   markActive();
   window.addEventListener("hashchange", markActive);
   cleanups.push(() => window.removeEventListener("hashchange", markActive));
-
-  const logoutBtn = $<HTMLButtonElement>("[data-panel-logout]", container);
-  if (logoutBtn) {
-    const handler = (): void => {
-      logout();
-    };
-    logoutBtn.addEventListener("click", handler);
-    cleanups.push(() => logoutBtn.removeEventListener("click", handler));
-  }
 
   const cleanup = (): void => {
     document.body.classList.remove("panel-mode");

@@ -37,7 +37,6 @@ export function renderProfissional(container: HTMLElement): () => void {
       { href: "#/profissional", label: "Agendamentos", icon: "calendar" },
       { href: "#/profissional/faturamento", label: "Faturamento", icon: "dollar" },
       { href: "#/profissional/configuracoes", label: "Configurações", icon: "cog" },
-      { href: "#/", label: "Voltar ao site", icon: "arrow-left" },
     ],
   });
 

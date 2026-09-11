@@ -553,6 +553,7 @@ body.light-theme .table tbody tr:hover {
 }
 
 body.light-theme .input-wrap .input-suffix:hover {
+  color: var(--color-text);
   background-color: rgba(0, 0, 0, 0.04);
 }
 

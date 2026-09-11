@@ -160,14 +160,12 @@ export function renderManage(container: HTMLElement): () => void {
         { href: `#${base}/servicos`, label: "Serviços", icon: "scissors" },
         { href: `#${base}/profissionais`, label: "Profissionais", icon: "users" },
         { href: `#${base}/configuracoes`, label: "Configurações", icon: "cog" },
-        { href: "#/", label: "Voltar ao site", icon: "arrow-left" },
       ]
     : [
         { href: `#${base}`, label: "Agendamentos", icon: "calendar" },
         { href: `#${base}/servicos`, label: "Serviços", icon: "scissors" },
         { href: `#${base}/profissionais`, label: "Profissionais", icon: "users" },
         { href: `#${base}/configuracoes`, label: "Configurações", icon: "cog" },
-        { href: "#/", label: "Voltar ao site", icon: "arrow-left" },
       ];
 
   const { content, cleanup: cleanupPanel } = renderPanel(container, {
@@ -786,7 +784,6 @@ if (status === "cancelado") {
               if (a.status === "pendente") {
                 actions = `<span class="actions-cell">
                   <button type="button" class="btn btn--sm btn--success" data-confirm-app data-id="${escapeHtml(a.id)}">CONFIRMAR</button>
-                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-conclude-app data-id="${escapeHtml(a.id)}">CONCLUIR</button>
                   <button type="button" class="btn btn--sm btn--danger-outline" data-cancel-app data-id="${escapeHtml(a.id)}">Cancelar</button>
                 </span>`;
               } else if (a.status === "confirmado") {
