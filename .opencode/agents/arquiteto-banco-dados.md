@@ -1,7 +1,6 @@
 ---
 description: Traduz regras aprovadas em arquitetura de domínio e modelo SQL relacional com Knex, garantindo integridade, normalização, concorrência segura de agendamentos e evolução por migrations.
 mode: all
-steps: 8
 color: "#2563EB"
 permissions:
   - action: subagent
