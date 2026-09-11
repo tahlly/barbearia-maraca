@@ -39,7 +39,6 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     links: [
       { href: "#/minha-conta", label: "Agendamentos", icon: "calendar" },
       { href: "#/minha-conta/configuracoes", label: "Configurações", icon: "cog" },
-      { href: "#/", label: "Voltar ao site", icon: "arrow-left" },
     ],
   });
 

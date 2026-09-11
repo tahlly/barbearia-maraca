@@ -160,14 +160,12 @@ export function renderManage(container: HTMLElement): () => void {
         { href: `#${base}/servicos`, label: "Serviços", icon: "scissors" },
         { href: `#${base}/profissionais`, label: "Profissionais", icon: "users" },
         { href: `#${base}/configuracoes`, label: "Configurações", icon: "cog" },
-        { href: "#/", label: "Voltar ao site", icon: "arrow-left" },
       ]
     : [
         { href: `#${base}`, label: "Agendamentos", icon: "calendar" },
         { href: `#${base}/servicos`, label: "Serviços", icon: "scissors" },
         { href: `#${base}/profissionais`, label: "Profissionais", icon: "users" },
         { href: `#${base}/configuracoes`, label: "Configurações", icon: "cog" },
-        { href: "#/", label: "Voltar ao site", icon: "arrow-left" },
       ];
 
   const { content, cleanup: cleanupPanel } = renderPanel(container, {
