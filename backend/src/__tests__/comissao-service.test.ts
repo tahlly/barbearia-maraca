@@ -6,6 +6,7 @@ import {
   salvarComissoesDoFuncionario,
   aplicarComissaoNaConclusao,
   removerComissaoDaConclusao,
+  listarPendenciasComissao,
 } from '../services/comissao-service';
 import { ForbiddenError } from '../errors/ForbiddenError';
 import { NotFoundError } from '../errors/NotFoundError';
@@ -26,6 +27,10 @@ const buscarDadosParaComissaoDeAgendamentoMock = vi.fn();
 const buscarDespesaComissaoPorAgendamentoMock = vi.fn();
 const criarDespesaComissaoAutomaticaMock = vi.fn();
 const removerDespesaComissaoPorAgendamentoMock = vi.fn();
+const criarPendenciaComissaoMock = vi.fn();
+const buscarPendenciaComissaoPorAgendamentoMock = vi.fn();
+const removerPendenciaComissaoPorAgendamentoMock = vi.fn();
+const listarPendenciasComissaoRepoMock = vi.fn();
 const buscarFuncionarioPorIdMock = vi.fn();
 const buscarServicoPorIdMock = vi.fn();
 
@@ -49,6 +54,12 @@ vi.mock('../repositories/comissao-repository', () => ({
   buscarDespesaComissaoPorAgendamento: (...args: unknown[]) => buscarDespesaComissaoPorAgendamentoMock(...args),
   criarDespesaComissaoAutomatica: (...args: unknown[]) => criarDespesaComissaoAutomaticaMock(...args),
   removerDespesaComissaoPorAgendamento: (...args: unknown[]) => removerDespesaComissaoPorAgendamentoMock(...args),
+  criarPendenciaComissao: (...args: unknown[]) => criarPendenciaComissaoMock(...args),
+  buscarPendenciaComissaoPorAgendamento: (...args: unknown[]) =>
+    buscarPendenciaComissaoPorAgendamentoMock(...args),
+  removerPendenciaComissaoPorAgendamento: (...args: unknown[]) =>
+    removerPendenciaComissaoPorAgendamentoMock(...args),
+  listarPendenciasComissao: (...args: unknown[]) => listarPendenciasComissaoRepoMock(...args),
 }));
 
 vi.mock('../repositories/funcionario-repository', () => ({
@@ -442,18 +453,44 @@ describe('aplicarComissaoNaConclusao', () => {
     expect(criarDespesaComissaoAutomaticaMock).not.toHaveBeenCalled();
   });
 
-  it('sem percentual configurado → não cria despesa', async () => {
+  it('sem percentual configurado → NÃO cria despesa e registra pendência consultável', async () => {
     buscarConfiguracaoComissaoMock.mockResolvedValue(true);
     buscarDespesaComissaoPorAgendamentoMock.mockResolvedValue(false);
     buscarDadosParaComissaoDeAgendamentoMock.mockResolvedValue(dadosComissao());
     buscarPercentualComissaoMock.mockResolvedValue(null);
+    buscarPendenciaComissaoPorAgendamentoMock.mockResolvedValue(false);
+    criarPendenciaComissaoMock.mockResolvedValue(undefined);
 
     await aplicarComissaoNaConclusao({ agendamentoId: 'ag-1', trx: trxFake });
 
     expect(criarDespesaComissaoAutomaticaMock).not.toHaveBeenCalled();
+    expect(criarPendenciaComissaoMock).toHaveBeenCalledTimes(1);
+    expect(criarPendenciaComissaoMock).toHaveBeenCalledWith(
+      {
+        agendamentoId: 'ag-1',
+        funcionarioId: 'func-1',
+        servicoId: 'svc-1',
+        data: '2026-09-10',
+      },
+      trxFake,
+    );
+    // A conclusão do atendimento NUNCA é bloqueada por % ausente: a função
+    // resolve normalmente (sem throw).
   });
 
-  it('percentual 0 → não cria despesa', async () => {
+  it('sem percentual configurado mas pendência já aberta → NÃO duplica o aviso', async () => {
+    buscarConfiguracaoComissaoMock.mockResolvedValue(true);
+    buscarDespesaComissaoPorAgendamentoMock.mockResolvedValue(false);
+    buscarDadosParaComissaoDeAgendamentoMock.mockResolvedValue(dadosComissao());
+    buscarPercentualComissaoMock.mockResolvedValue(null);
+    buscarPendenciaComissaoPorAgendamentoMock.mockResolvedValue(true);
+
+    await aplicarComissaoNaConclusao({ agendamentoId: 'ag-1', trx: trxFake });
+
+    expect(criarPendenciaComissaoMock).not.toHaveBeenCalled();
+  });
+
+  it('percentual 0 → não cria despesa E NÃO registra pendência (0 é configuração válida)', async () => {
     buscarConfiguracaoComissaoMock.mockResolvedValue(true);
     buscarDespesaComissaoPorAgendamentoMock.mockResolvedValue(false);
     buscarDadosParaComissaoDeAgendamentoMock.mockResolvedValue(dadosComissao());
@@ -462,6 +499,16 @@ describe('aplicarComissaoNaConclusao', () => {
     await aplicarComissaoNaConclusao({ agendamentoId: 'ag-1', trx: trxFake });
 
     expect(criarDespesaComissaoAutomaticaMock).not.toHaveBeenCalled();
+    expect(criarPendenciaComissaoMock).not.toHaveBeenCalled();
+  });
+
+  it('comissão inativa + sem percentual → não registra pendência (interruptor desligado)', async () => {
+    buscarConfiguracaoComissaoMock.mockResolvedValue(false);
+
+    await aplicarComissaoNaConclusao({ agendamentoId: 'ag-1', trx: trxFake });
+
+    expect(criarPendenciaComissaoMock).not.toHaveBeenCalled();
+    expect(buscarDespesaComissaoPorAgendamentoMock).not.toHaveBeenCalled();
   });
 
   it('agendamento sem dados (sumiu) → não cria despesa', async () => {
@@ -478,9 +525,55 @@ describe('aplicarComissaoNaConclusao', () => {
 describe('removerComissaoDaConclusao', () => {
   it('remove a despesa de comissão vinculada ao agendamento', async () => {
     removerDespesaComissaoPorAgendamentoMock.mockResolvedValue(undefined);
+    removerPendenciaComissaoPorAgendamentoMock.mockResolvedValue(undefined);
 
     await removerComissaoDaConclusao({ agendamentoId: 'ag-1', trx: trxFake });
 
     expect(removerDespesaComissaoPorAgendamentoMock).toHaveBeenCalledWith('ag-1', trxFake);
+  });
+
+  it('remove TAMBÉM a pendência de % ausente (sem conclusão não há aviso a revisar)', async () => {
+    removerDespesaComissaoPorAgendamentoMock.mockResolvedValue(undefined);
+    removerPendenciaComissaoPorAgendamentoMock.mockResolvedValue(undefined);
+
+    await removerComissaoDaConclusao({ agendamentoId: 'ag-1', trx: trxFake });
+
+    expect(removerPendenciaComissaoPorAgendamentoMock).toHaveBeenCalledWith('ag-1', trxFake);
+  });
+});
+
+// ── Avisos (pendências) de % ausente ────────────────────────────
+
+describe('listarPendenciasComissao', () => {
+  it('lista apenas pendências não resolvidas com nome do funcionário e do serviço', async () => {
+    listarPendenciasComissaoRepoMock.mockResolvedValue([
+      {
+        id: 'pend-1',
+        agendamento_id: 'ag-1',
+        funcionario_id: 'func-1',
+        funcionario_nome: 'João Pedro',
+        servico_id: 'svc-1',
+        servico_nome: 'Corte',
+        data: '2026-09-10',
+        resolvido: false,
+      },
+    ]);
+
+    const pendencias = await listarPendenciasComissao(usuario('admin'), 'admin');
+
+    expect(exigirPermissaoMock).toHaveBeenCalledWith({ id: usuario('admin'), role: 'admin' }, 'ver_financeiro');
+    expect(listarPendenciasComissaoRepoMock).toHaveBeenCalledTimes(1);
+    expect(pendencias).toHaveLength(1);
+    expect(pendencias[0].funcionario_nome).toBe('João Pedro');
+    expect(pendencias[0].servico_nome).toBe('Corte');
+  });
+
+  it('nega quem não tem ver_financeiro e nada é consultado', async () => {
+    exigirPermissaoMock.mockRejectedValue(new ForbiddenError());
+
+    await expect(listarPendenciasComissao(usuario('recepcionista'), 'recepcionista')).rejects.toBeInstanceOf(
+      ForbiddenError,
+    );
+    expect(listarPendenciasComissaoRepoMock).not.toHaveBeenCalled();
   });
 });

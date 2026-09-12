@@ -610,3 +610,30 @@ export interface RequestSalvarComissoesFuncionario {
 
 /** Resposta da listagem/salvamento de comissões de um funcionário. */
 export type ResponseListarComissoesFuncionario = ComissaoServicoDTO[];
+
+/**
+ * Aviso de atendimento concluído SEM percentual de comissão cadastrado.
+ * GET `/api/financeiro/comissao/pendencias`.
+ *
+ * Quando um agendamento é CONCLUÍDO com o interruptor de comissão ATIVO e o
+ * profissional NÃO tem linha em `comissao_servico` para o serviço
+ * (`percentual = null`), o hook automático NÃO trava a conclusão (decisão de
+ * negócio registrada), mas registra este aviso consultável para o admin
+ * revisar. `resolvido` nasce `false`; o endpoint lista apenas os não
+ * resolvidos. `funcionario_nome`/`servico_nome` vêm do JOIN para exibição.
+ */
+export interface ComissaoPendenciaDTO {
+  id: string;
+  agendamento_id: string;
+  funcionario_id: string;
+  funcionario_nome: string;
+  servico_id: string;
+  servico_nome: string;
+  /** Data do agendamento (YYYY-MM-DD). */
+  data: string;
+  /** Nasce `false`; pendência pendente de revisão. */
+  resolvido: boolean;
+}
+
+/** Resposta da listagem de pendências de comissão não resolvidas. */
+export type ResponseListarPendenciasComissao = ComissaoPendenciaDTO[];

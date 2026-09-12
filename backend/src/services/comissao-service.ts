@@ -16,6 +16,10 @@ import {
   buscarDespesaComissaoPorAgendamento,
   criarDespesaComissaoAutomatica,
   removerDespesaComissaoPorAgendamento,
+  criarPendenciaComissao,
+  buscarPendenciaComissaoPorAgendamento,
+  removerPendenciaComissaoPorAgendamento,
+  listarPendenciasComissao as listarPendenciasComissaoRepo,
 } from '../repositories/comissao-repository';
 import { buscarPorId as buscarFuncionarioPorId } from '../repositories/funcionario-repository';
 import { buscarServicoPorId } from '../repositories/servico-repository';
@@ -125,8 +129,14 @@ const PRECO_VALIDO_RE = /^\d+(?:\.\d{0,2})?$/;
  * um agendamento passa a `concluido`, dentro da MESMA transação da mudança de
  * status. Regras:
  * - comissão inativa → não faz nada (linhas de `comissao_servico` preservadas);
- * - sem percentual configurado ou percentual 0 → não cria despesa;
+ * - sem percentual configurado (linha ausente) → NÃO cria despesa E registra
+ *   uma PENDÊNCIA consultável (`comissao_pendencia`) para o admin revisar
+ *   depois — DECISÃO DE NEGÓCIO registrada: o atendimento conclui normalmente,
+ *   nunca bloqueia por configuração administrativa faltando (padrão de mercado);
+ * - percentual 0 → não cria despesa nem pendência (0 é configuração VÁLIDA,
+ *   significa "não paga comissão" — não é pendência);
  * - já existe despesa de comissão para o agendamento → não duplica;
+ * - já existe pendência NÃO resolvida para o agendamento → não duplica;
  * - senão, cria despesa automática:
  *   `descricao = "Comissão {nome do funcionário}"`,
  *   `tipo_despesa = 'comissao'`,
@@ -165,6 +175,21 @@ export async function aplicarComissaoNaConclusao(input: {
     trx,
   );
   if (percentual === null) {
+    // Aviso em vez de silêncio (decisão de negócio): registra a pendência DENTRO
+    // da mesma transação da conclusão, mas a conclusão NUNCA é bloqueada —
+    // com ou sem % cadastrada, o atendimento conclui normalmente.
+    const haPendencia = await buscarPendenciaComissaoPorAgendamento(agendamentoId, trx);
+    if (!haPendencia) {
+      await criarPendenciaComissao(
+        {
+          agendamentoId,
+          funcionarioId: dados.funcionario_id,
+          servicoId: dados.servico_id,
+          data: dados.data,
+        },
+        trx,
+      );
+    }
     return;
   }
   const percentualBase = percentualParaBaseCentesimal(percentual);
@@ -202,14 +227,40 @@ export async function aplicarComissaoNaConclusao(input: {
 
 /**
  * Gancho chamado na REVERSÃO da conclusão (`confirmado` vindo de `concluido`),
- * dentro da MESMA transação da mudança de status. Remove APENAS a despesa de
- * comissão vinculada ao agendamento (nunca despesas manuais deste cliente).
+ * dentro da MESMA transação da mudança de status. Remove a despesa de comissão
+ * vinculada ao agendamento (nunca despesas manuais deste cliente) e a pendência
+ * de % ausente (sem agendamento concluído não há aviso a revisar).
  */
 export async function removerComissaoDaConclusao(input: {
   agendamentoId: string;
   trx: Knex.Transaction;
 }): Promise<void> {
   await removerDespesaComissaoPorAgendamento(input.agendamentoId, input.trx);
+  await removerPendenciaComissaoPorAgendamento(input.agendamentoId, input.trx);
+}
+
+/**
+ * Lista as pendências de comissão NÃO resolvidas (atendimentos concluídos sem
+ * percentual cadastrado para o serviço no momento da conclusão). Acesso
+ * administrativo-financeiro: exige a permissão `ver_financeiro`.
+ */
+export async function listarPendenciasComissao(
+  usuarioId: string,
+  role: string,
+): Promise<
+  Array<{
+    id: string;
+    agendamento_id: string;
+    funcionario_id: string;
+    funcionario_nome: string;
+    servico_id: string;
+    servico_nome: string;
+    data: string;
+    resolvido: boolean;
+  }>
+> {
+  await exigirPermissao({ id: usuarioId, role }, 'ver_financeiro');
+  return listarPendenciasComissaoRepo();
 }
 
 // ── Validações ────────────────────────────────────────────────────────

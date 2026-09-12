@@ -94,6 +94,9 @@ const buscarDadosParaComissaoDeAgendamentoMock = vi.fn();
 const buscarPercentualComissaoMock = vi.fn();
 const criarDespesaComissaoAutomaticaMock = vi.fn();
 const removerDespesaComissaoPorAgendamentoMock = vi.fn();
+const criarPendenciaComissaoMock = vi.fn();
+const buscarPendenciaComissaoPorAgendamentoMock = vi.fn();
+const removerPendenciaComissaoPorAgendamentoMock = vi.fn();
 
 vi.mock('../repositories/comissao-repository', () => ({
   buscarConfiguracaoComissao: (...args: unknown[]) => buscarConfiguracaoComissaoMock(...args),
@@ -108,6 +111,11 @@ vi.mock('../repositories/comissao-repository', () => ({
   criarDespesaComissaoAutomatica: (...args: unknown[]) => criarDespesaComissaoAutomaticaMock(...args),
   removerDespesaComissaoPorAgendamento: (...args: unknown[]) =>
     removerDespesaComissaoPorAgendamentoMock(...args),
+  criarPendenciaComissao: (...args: unknown[]) => criarPendenciaComissaoMock(...args),
+  buscarPendenciaComissaoPorAgendamento: (...args: unknown[]) =>
+    buscarPendenciaComissaoPorAgendamentoMock(...args),
+  removerPendenciaComissaoPorAgendamento: (...args: unknown[]) =>
+    removerPendenciaComissaoPorAgendamentoMock(...args),
 }));
 
 const buscarFuncionarioPorIdMock = vi.fn();
@@ -479,6 +487,8 @@ describe('concluirAgendamento — hook de comissão', () => {
     buscarDadosParaComissaoDeAgendamentoMock.mockResolvedValue(dadosComissaoHook());
     buscarPercentualComissaoMock.mockResolvedValue('40.00');
     criarDespesaComissaoAutomaticaMock.mockResolvedValue(undefined);
+    buscarPendenciaComissaoPorAgendamentoMock.mockResolvedValue(false);
+    criarPendenciaComissaoMock.mockResolvedValue(undefined);
   });
 
   it('conclui e cria despesa de comissão com valor = preço × percentual / 100 na MESMA transação', async () => {
@@ -514,6 +524,33 @@ describe('concluirAgendamento — hook de comissão', () => {
     await concluirAgendamento('user-recep', 'recepcionista', 'ag-1');
 
     expect(criarDespesaComissaoAutomaticaMock).not.toHaveBeenCalled();
+  });
+
+  it('INTERRUPTOR ATIVO + SEM % CADASTRADA → conclui normalmente E registra o aviso (pendência)', async () => {
+    buscarPercentualComissaoMock.mockResolvedValue(null);
+    buscarPendenciaComissaoPorAgendamentoMock.mockResolvedValue(false);
+    criarPendenciaComissaoMock.mockResolvedValue(undefined);
+
+    const resultado = await concluirAgendamento('user-recep', 'recepcionista', 'ag-1');
+
+    // O atendimento conclui NORMALMENTE (nunca é bloqueado por falta de %).
+    expect(resultado.status).toBe('concluido');
+    expect(transactionMock).toHaveBeenCalledTimes(1);
+    expect(atualizarStatusMock).toHaveBeenCalledWith('ag-1', 'concluido', trxObj);
+    // Aviso registrado na MESMA transação da conclusão.
+    expect(criarPendenciaComissaoMock).toHaveBeenCalledTimes(1);
+    expect(criarPendenciaComissaoMock).toHaveBeenCalledWith(
+      {
+        agendamentoId: 'ag-1',
+        funcionarioId: 'func-1',
+        servicoId: 'svc-1',
+        data: agendamentoRow().data,
+      },
+      trxObj,
+    );
+    // Sem despesa (não há % para calcular).
+    expect(criarDespesaComissaoAutomaticaMock).not.toHaveBeenCalled();
+    expect(transacaoCommitada).toBe(true);
   });
 
   it('comissão inativa → não cria despesa', async () => {
@@ -552,6 +589,7 @@ describe('confirmarAgendamento / reverterConclusaoAgendamento — hook de comiss
   beforeEach(() => {
     atualizarStatusMock.mockResolvedValue(undefined);
     removerDespesaComissaoPorAgendamentoMock.mockResolvedValue(undefined);
+    removerPendenciaComissaoPorAgendamentoMock.mockResolvedValue(undefined);
   });
 
   it('confirmar a partir de pendente não gera nem remove comissão', async () => {
@@ -563,9 +601,10 @@ describe('confirmarAgendamento / reverterConclusaoAgendamento — hook de comiss
     expect(atualizarStatusMock).toHaveBeenCalledWith('ag-1', 'confirmado', trxObj);
     expect(buscarConfiguracaoComissaoMock).not.toHaveBeenCalled();
     expect(removerDespesaComissaoPorAgendamentoMock).not.toHaveBeenCalled();
+    expect(removerPendenciaComissaoPorAgendamentoMock).not.toHaveBeenCalled();
   });
 
-  it('reverter conclusão remove a despesa de comissão do agendamento', async () => {
+  it('reverter conclusão remove a despesa de comissão E a pendência de % ausente do agendamento', async () => {
     buscarPorIdMock.mockResolvedValue(agendamentoRow({ status: 'concluido' }));
 
     const resultado = await reverterConclusaoAgendamento('user-recep', 'recepcionista', 'ag-1');
@@ -573,5 +612,6 @@ describe('confirmarAgendamento / reverterConclusaoAgendamento — hook de comiss
     expect(resultado.status).toBe('confirmado');
     expect(atualizarStatusMock).toHaveBeenCalledWith('ag-1', 'confirmado', trxObj);
     expect(removerDespesaComissaoPorAgendamentoMock).toHaveBeenCalledWith('ag-1', trxObj);
+    expect(removerPendenciaComissaoPorAgendamentoMock).toHaveBeenCalledWith('ag-1', trxObj);
   });
 });

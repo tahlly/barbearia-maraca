@@ -5,6 +5,7 @@ import {
   atualizarConfiguracao,
   listarComissoesDoFuncionario,
   salvarComissoesDoFuncionario,
+  listarPendenciasComissao,
 } from '../services/comissao-service';
 import { UnauthorizedError } from '../errors/UnauthorizedError';
 
@@ -64,4 +65,10 @@ export async function salvarComissoesHandler(req: Request, res: Response): Promi
   const body = salvarComissoesSchema.parse(req.body);
   const comissoes = await salvarComissoesDoFuncionario(user.id, user.role, funcionarioId, body);
   res.json(comissoes);
+}
+
+export async function listarPendenciasHandler(req: Request, res: Response): Promise<void> {
+  const user = exigirUsuario(req);
+  const pendencias = await listarPendenciasComissao(user.id, user.role);
+  res.json(pendencias);
 }

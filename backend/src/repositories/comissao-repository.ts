@@ -213,3 +213,112 @@ export async function removerDespesaComissaoPorAgendamento(
     .where({ agendamento_id: agendamentoId, tipo_despesa: 'comissao' })
     .del();
 }
+
+// ── Pendências de comissão (aviso de % ausente) ────────────────────────────
+//
+// Registro consultável criado pelo hook quando o agendamento é concluído com o
+// interruptor de comissão ATIVO e o profissional NÃO tem percentual cadastrado
+// para o serviço. O atendimento conclui normalmente (nunca trava); o aviso fica
+// para o admin revisar depois (endpoint de leitura protegido por ver_financeiro).
+
+interface ComissaoPendenciaRow {
+  id: string;
+  agendamento_id: string;
+  funcionario_id: string;
+  funcionario_nome: string;
+  servico_id: string;
+  servico_nome: string;
+  data: string;
+  resolvido: boolean;
+}
+
+/** Cria o aviso (pendência) dentro da MESMA transação da conclusão. */
+export async function criarPendenciaComissao(
+  input: {
+    agendamentoId: string;
+    funcionarioId: string;
+    servicoId: string;
+    data: string;
+  },
+  trx: Knex.Transaction,
+): Promise<void> {
+  await trx('comissao_pendencia').insert({
+    agendamento_id: input.agendamentoId,
+    funcionario_id: input.funcionarioId,
+    servico_id: input.servicoId,
+    data: input.data,
+    resolvido: false,
+  });
+}
+
+/**
+ * Já existe pendência NÃO resolvida para este agendamento? Proteção da
+ * aplicação contra duplicação (o índice único parcial é o backstop de banco).
+ */
+export async function buscarPendenciaComissaoPorAgendamento(
+  agendamentoId: string,
+  trx: Knex.Transaction,
+): Promise<boolean> {
+  const row = await trx('comissao_pendencia')
+    .where({ agendamento_id: agendamentoId, resolvido: false })
+    .first();
+  return row !== undefined;
+}
+
+/** Remove pendências do agendamento (reverter conclusão / limpeza). */
+export async function removerPendenciaComissaoPorAgendamento(
+  agendamentoId: string,
+  trx: Knex.Transaction,
+): Promise<void> {
+  await trx('comissao_pendencia')
+    .where({
+      agendamento_id: agendamentoId,
+      resolvido: false,
+    })
+    .del();
+}
+
+/**
+ * Lista as pendências NÃO resolvidas (aviso de % ausente) com nomes via JOIN —
+ * dados mínimos para o admin revisar (funcionario e serviço).
+ */
+export async function listarPendenciasComissao(): Promise<
+  Array<{
+    id: string;
+    agendamento_id: string;
+    funcionario_id: string;
+    funcionario_nome: string;
+    servico_id: string;
+    servico_nome: string;
+    data: string;
+    resolvido: boolean;
+  }>
+> {
+  const rows = (await db('comissao_pendencia as cp')
+    .join('funcionario as f', 'f.id', 'cp.funcionario_id')
+    .join('servico as s', 's.id', 'cp.servico_id')
+    .where('cp.resolvido', false)
+    .orderBy('cp.data', 'desc')
+    .orderBy('cp.created_at', 'desc')
+    .select(
+      'cp.id',
+      'cp.agendamento_id',
+      'cp.funcionario_id',
+      'f.nome as funcionario_nome',
+      'cp.servico_id',
+      's.nome as servico_nome',
+      'cp.data',
+      'cp.resolvido',
+    )) as ComissaoPendenciaRow[];
+
+  return rows.map((r) => ({
+    id: r.id,
+    agendamento_id: r.agendamento_id,
+    funcionario_id: r.funcionario_id,
+    funcionario_nome: r.funcionario_nome,
+    servico_id: r.servico_id,
+    servico_nome: r.servico_nome,
+    data: r.data,
+    resolvido: r.resolvido,
+  }));
+}

@@ -7,6 +7,7 @@ import {
   atualizarConfiguracaoHandler,
   listarComissoesHandler,
   salvarComissoesHandler,
+  listarPendenciasHandler,
 } from '../controllers/comissao-controller';
 
 const financeiroRoutes = Router();
@@ -130,6 +131,18 @@ const financeiroRoutes = Router();
  *         comissoes:
  *           type: array
  *           items: { $ref: '#/components/schemas/ItemComissaoServicoRequest' }
+ *     ComissaoPendencia:
+ *       type: object
+ *       required: [id, agendamento_id, funcionario_id, funcionario_nome, servico_id, servico_nome, data, resolvido]
+ *       properties:
+ *         id: { type: string, format: uuid }
+ *         agendamento_id: { type: string, format: uuid }
+ *         funcionario_id: { type: string, format: uuid }
+ *         funcionario_nome: { type: string, example: 'Carlos' }
+ *         servico_id: { type: string, format: uuid }
+ *         servico_nome: { type: string, example: 'Corte' }
+ *         data: { type: string, format: date }
+ *         resolvido: { type: boolean, default: false }
  *
  * /api/financeiro/resumo:
  *   get:
@@ -293,6 +306,34 @@ const financeiroRoutes = Router();
  *         $ref: '#/components/responses/Erro403'
  *       '404':
  *         $ref: '#/components/responses/Erro404'
+ *
+ * /api/financeiro/comissao/pendencias:
+ *   get:
+ *     tags: [Financeiro]
+ *     summary: Lista atendimentos concluidos sem percentual de comissao cadastrado (aviso; requer ver_financeiro).
+ *     description: >
+ *       Acesso restrito a `ver_financeiro`.
+ *
+ *       Quando um agendamento e CONCLUIDO com o interruptor de comissao ATIVO e
+ *       o profissional NAO tem percentual cadastrado para o servico em
+ *       `comissao_servico`, o hook automatico NAO trava a conclusao, mas regista
+ *       este aviso consultavel (tabela `comissao_pendencia`). O endpoint lista
+ *       apenas as pendencias NAO resolvidas (`resolvido = false`) com nome do
+ *       funcionario e do servico, ordenadas por data decrescente.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       '200':
+ *         description: Lista de pendencias nao resolvidas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/ComissaoPendencia' }
+ *       '401':
+ *         $ref: '#/components/responses/Erro401'
+ *       '403':
+ *         $ref: '#/components/responses/Erro403'
  */
 
 // Negação por padrão: qualquer usuário autenticado, mas apenas quem tem a
@@ -324,6 +365,12 @@ financeiroRoutes.put(
   authenticate,
   requerPermissao('ver_financeiro'),
   salvarComissoesHandler,
+);
+financeiroRoutes.get(
+  '/comissao/pendencias',
+  authenticate,
+  requerPermissao('ver_financeiro'),
+  listarPendenciasHandler,
 );
 
 export default financeiroRoutes;
