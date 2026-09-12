@@ -1,132 +1,166 @@
 /**
- * Estado em memória de despesas do salão.
+ * Camada de integração de Despesas do módulo financeiro.
  *
- * Mock local: as despesas são persistidas apenas durante a sessão da SPA.
- * Persistência real depende de endpoint de despesas do Backend (pendência
- * registrada). Aqui os dados servem apenas à experiência do Frontend.
+ * Agora consome a API real do Backend (PR #76 / feat/modulo-financeiro-comissao):
+ * - `GET /api/despesas`      → listagem (filtros opcionais inicio+fim, tipo)
+ * - `POST /api/despesas`     → criação manual (tipo_despesa NUNCA comissao)
+ * - `DELETE /api/despesas/:id` → exclusão manual (automatica/comissao é bloqueada)
+ * - `GET /api/despesas/resumo` → soma de despesas de um período
  *
- * Fonte de verdade compartilhada entre a tela Financeiro (CRUD) e o
- * Dashboard do Administrador (cálculos de lucro / margem).
+ * Valores monetários vêm do Backend como strings decimais normalizadas
+ * ("45.90"); convertidos para `number` na origem do dado, já que o resto do
+ * Frontend (formatCurrency) trabalha com number.
  */
 
+import { apiFetch, httpJson } from "./api.js";
+
+export type TipoDespesa = "fixa" | "variavel" | "comissao" | "outro";
+
+/** Tipos que o usuário pode escolher manualmente (Comissão é 100% automática). */
+export const TIPO_DESPESA_MANUAL: readonly Exclude<TipoDespesa, "comissao">[] = [
+  "fixa",
+  "variavel",
+  "outro",
+] as const;
+
+export const TIPO_DESPESA_LABEL: Record<TipoDespesa, string> = {
+  fixa: "FIXA",
+  variavel: "VARIÁVEL",
+  comissao: "COMISSÃO",
+  outro: "OUTRO",
+};
+
+/** Despesa exibida na tela (modelo de leitura, já com valor numérico). */
 export interface Despesa {
   id: string;
   descricao: string;
-  categoria: string;
+  tipo_despesa: TipoDespesa;
+  /** Valor em reais (convertido da string decimal do Backend). */
   valor: number;
-  /** Data no formato ISO (YYYY-MM-DD). */
+  /** Data do lançamento (YYYY-MM-DD). */
+  data: string;
+  recorrente: boolean;
+  /** `true` quando gerada automaticamente (comissão) — não pode ser excluída. */
+  automatica: boolean;
+}
+
+interface DespesaDTO {
+  id: string;
+  descricao: string;
+  tipo_despesa: TipoDespesa;
+  valor: string;
+  data: string;
+  recorrente: boolean;
+  funcionario_id: string | null;
+  automatica: boolean;
+}
+
+interface DespesaResumoDTO {
+  inicio: string;
+  fim: string;
+  despesaTotal: string;
+}
+
+function toDespesa(dto: DespesaDTO): Despesa {
+  return {
+    id: dto.id,
+    descricao: dto.descricao,
+    tipo_despesa: dto.tipo_despesa,
+    valor: Number(dto.valor),
+    data: dto.data,
+    recorrente: dto.recorrente,
+    automatica: dto.automatica,
+  };
+}
+
+/** Corpo recebido no POST (valores já validados na tela). */
+export interface NovaDespesa {
+  descricao: string;
+  tipo_despesa: Exclude<TipoDespesa, "comissao">;
+  /** Valor em reais. */
+  valor: number;
   data: string;
   recorrente: boolean;
 }
 
-export const DESPESA_CATEGORIAS = [
-  "INSUMOS",
-  "EQUIPAMENTOS",
-  "ALUGUEL",
-  "FUNCIONÁRIOS",
-  "MARKETING",
-  "UTILIDADES",
-  "MANUTENÇÃO",
-  "OUTROS",
-] as const;
-
-export type DespesaCategoria = (typeof DESPESA_CATEGORIAS)[number];
-
-/* ------------------------------------------------------------------------ */
-/*  Estado em memória                                                       */
-/* ------------------------------------------------------------------------ */
-
-let despesas: Despesa[] = [
-  { id: "d1", descricao: "ALUGUEL DO SALAO (SETEMBRO)", categoria: "ALUGUEL", valor: 1800, data: "2026-09-01", recorrente: true },
-  { id: "d2", descricao: "FOLHA DE PAGAMENTO — EQUIPE", categoria: "FUNCIONÁRIOS", valor: 6800, data: "2026-09-05", recorrente: true },
-  { id: "d3", descricao: "COMPRA DE POMADAS E FINALIZADORES", categoria: "INSUMOS", valor: 320.5, data: "2026-09-08", recorrente: false },
-  { id: "d4", descricao: "AGUA E LUZ DO SALAO", categoria: "UTILIDADES", valor: 410, data: "2026-09-10", recorrente: true },
-  { id: "d5", descricao: "MANUTENCAO DA CADEIRA DE CORTE", categoria: "MANUTENÇÃO", valor: 150, data: "2026-09-12", recorrente: false },
-];
-
-let seq = despesas.length + 1;
-
-/* ------------------------------------------------------------------------ */
-/*  API pública do módulo                                                    */
-/* ------------------------------------------------------------------------ */
-
-/** Retorna uma cópia da lista completa (evita mutação externa). */
-export function listarDespesas(): Despesa[] {
-  return [...despesas];
+/** Lista todas as despesas (o Backend ordena por data, mais recentes primeiro). */
+export async function listarDespesas(): Promise<Despesa[]> {
+  const dtos = await httpJson<DespesaDTO[]>("/despesas");
+  return dtos.map(toDespesa);
 }
 
-/** Retorna despesas cuja `data` está no intervalo [inicio, fim] (ambos ISO). */
-export function despesasNoPeriodo(inicio: string, fim: string): Despesa[] {
-  return despesas.filter((d) => {
-    if (inicio && d.data < inicio) return false;
-    if (fim && d.data > fim) return false;
-    return true;
+/** Cria uma despesa manual no Backend e devolve a despesa persistida. */
+export async function criarDespesa(dados: NovaDespesa): Promise<Despesa> {
+  const dto = await httpJson<DespesaDTO>("/despesas", {
+    method: "POST",
+    body: JSON.stringify({
+      descricao: dados.descricao,
+      tipo_despesa: dados.tipo_despesa,
+      valor: Number(dados.valor.toFixed(2)),
+      data: dados.data,
+      recorrente: dados.recorrente,
+    }),
   });
+  return toDespesa(dto);
 }
 
-/** Retorna despesas cuja data começa com `ano` (ex.: "2026"). */
-export function despesasNoAno(ano: number): Despesa[] {
-  const prefix = String(ano);
-  return despesas.filter((d) => d.data.startsWith(prefix));
+/** Exclui uma despesa manual. Retorna `false` se o Backend recusar (ex.: automática). */
+export async function removerDespesa(id: string): Promise<boolean> {
+  const res = await apiFetch(`/despesas/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok) {
+    return false;
+  }
+  return true;
 }
 
-/** Retorna despesas cuja data começa com `ano-mes` (ex.: "2026-09"). */
-export function despesasNoMes(ano: number, mes: number): Despesa[] {
-  const prefix = `${ano}-${String(mes).padStart(2, "0")}`;
-  return despesas.filter((d) => d.data.startsWith(prefix));
+/** Soma das despesas de um período via `GET /api/despesas/resumo`. */
+async function somarDespesasPeriodo(inicio?: string, fim?: string): Promise<number> {
+  const params = new URLSearchParams();
+  if (inicio) params.set("inicio", inicio);
+  if (fim) params.set("fim", fim);
+  const qs = params.toString();
+  const dto = await httpJson<DespesaResumoDTO>(`/despesas/resumo${qs ? `?${qs}` : ""}`);
+  return Number(dto.despesaTotal);
+}
+
+/** Último dia do mês no formato ISO. */
+function ultimoDiaDoMes(ano: number, mes: number): string {
+  const ultimo = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  return `${String(ano).padStart(4, "0")}-${String(mes).padStart(2, "0")}-${String(ultimo).padStart(2, "0")}`;
 }
 
 /**
- * Soma dos valores das despesas no período informado.
- * Útil para cálculos de lucro / margem no Dashboard.
+ * Total de despesas conforme o filtro temporal ativo do dashboard.
+ * Ignora filtro de profissional (despesas não têm vínculo com profissional).
+ * "todos" soma a listagem completa; os demais usam o resumo por período.
  */
-export function somaDespesas(lista: Despesa[]): number {
-  return lista.reduce((acc, d) => acc + d.valor, 0);
-}
-
-/**
- * Calcula o total de despesas de acordo com o filtro temporal ativo do
- * dashboard. Ignora filtro de profissional (despesas não têm vínculo).
- */
-export function totalDespesasFiltro(opts: {
+export async function totalDespesasFiltro(opts: {
   mode: "todos" | "ano" | "mes" | "periodo";
   ano: number;
   mes: number;
   inicio: string;
   fim: string;
-}): number {
-  let lista: Despesa[];
+}): Promise<number> {
   switch (opts.mode) {
-    case "ano":
-      lista = despesasNoAno(opts.ano);
-      break;
-    case "mes":
-      lista = despesasNoMes(opts.ano, opts.mes);
-      break;
-    case "periodo":
-      lista = despesasNoPeriodo(opts.inicio, opts.fim);
-      break;
-    default:
-      lista = despesas;
-      break;
+    case "ano": {
+      const ano = opts.ano;
+      return somarDespesasPeriodo(`${ano}-01-01`, `${ano}-12-31`);
+    }
+    case "mes": {
+      return somarDespesasPeriodo(
+        `${opts.ano}-${String(opts.mes).padStart(2, "0")}-01`,
+        ultimoDiaDoMes(opts.ano, opts.mes),
+      );
+    }
+    case "periodo": {
+      const temInicio = opts.inicio.trim() !== "";
+      const temFim = opts.fim.trim() !== "";
+      if (!temInicio && !temFim) return somarDespesasPeriodo();
+      return somarDespesasPeriodo(temInicio ? opts.inicio : undefined, temFim ? opts.fim : undefined);
+    }
+    default: {
+      const lista = await listarDespesas();
+      return lista.reduce((acc, d) => acc + d.valor, 0);
+    }
   }
-  return somaDespesas(lista);
-}
-
-/** Cria uma nova despesa e a adiciona ao início da lista. */
-export function criarDespesa(dados: Omit<Despesa, "id">): Despesa {
-  const nova: Despesa = {
-    ...dados,
-    id: `desp-${Date.now()}-${seq++}`,
-  };
-  despesas.unshift(nova);
-  return nova;
-}
-
-/** Remove uma despesa pelo id. Retorna `true` se removida, `false` se não encontrada. */
-export function removerDespesa(id: string): boolean {
-  const idx = despesas.findIndex((d) => d.id === id);
-  if (idx === -1) return false;
-  despesas.splice(idx, 1);
-  return true;
 }

@@ -397,7 +397,7 @@ export function renderManage(container: HTMLElement): () => void {
           </div>
         </div>
       </div>
-      <div id="dashboard-metrics">${dashboardMetricsHTML(appointments)}</div>
+      <div id="dashboard-metrics">${await dashboardMetricsHTML(appointments)}</div>
     `;
 
     const modeSelect = $<HTMLSelectElement>("#dashboard-mode", content);
@@ -415,7 +415,7 @@ export function renderManage(container: HTMLElement): () => void {
       void (async () => {
         try {
           const appts = await listAppointments();
-          $("#dashboard-metrics", content)!.innerHTML = dashboardMetricsHTML(appts);
+          $("#dashboard-metrics", content)!.innerHTML = await dashboardMetricsHTML(appts);
         } catch (error) {
           const metrics = $("#dashboard-metrics", content);
           if (metrics) {
@@ -515,7 +515,7 @@ export function renderManage(container: HTMLElement): () => void {
     }
   }
 
-  function dashboardMetricsHTML(appointments: Appointment[]): string {
+  async function dashboardMetricsHTML(appointments: Appointment[]): Promise<string> {
     const filtered = appointments.filter(matchesFilter);
     const counts: Record<Appointment["status"], number> = {
       confirmado: 0,
@@ -563,7 +563,7 @@ export function renderManage(container: HTMLElement): () => void {
     // Lucro Líquido = Faturamento - Despesas; Margem = (Lucro / Faturamento) * 100.
     // PENDÊNCIA: a regra de comissão citada no wireframe não está definida no
     // sistema (sem taxa/origem aprovada); o cálculo atual não desconta comissão.
-    const despesasTotal = totalDespesasFiltro(state);
+    const despesasTotal = await totalDespesasFiltro(state);
     const lucroLiquido = financial ? financial.revenue - despesasTotal : 0;
     const margemPercent =
       financial && financial.revenue > 0 ? (lucroLiquido / financial.revenue) * 100 : null;
