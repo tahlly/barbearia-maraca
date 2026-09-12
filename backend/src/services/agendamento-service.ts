@@ -10,14 +10,19 @@ import {
   resumirFaturamento,
   type AgendamentoRow,
 } from '../repositories/agendamento-repository';
+import db from '../database/connection';
+import { aplicarComissaoNaConclusao, removerComissaoDaConclusao } from './comissao-service';
 import type { AgendamentoDTO, AgendamentoStatus, CreateAgendamentoRequest } from '../dtos/agendamento-dto';
 import type { FaturamentoResumoDTO } from '../dtos/faturamento-dto';
 import { ForbiddenError } from '../errors/ForbiddenError';
 import { NotFoundError } from '../errors/NotFoundError';
 import { ValidationError } from '../errors/ValidationError';
 import { buscarClientePorId } from '../repositories/cliente-repository';
-import { exigirPermissao } from './permissao-service';
+import { somarDespesasPeriodo } from '../repositories/despesa-repository';
+import { exigirPermissao, temPermissao } from './permissao-service';
 import { formatarData, formatarHora } from '../utils/formatadores';
+import { paraCentavos, deCentavos, normalizarDecimal } from '../utils/dinheiro';
+import { validarIntervaloData } from '../utils/validadores';
 
 type Role = 'admin' | 'recepcionista' | 'profissional' | 'cliente';
 
@@ -82,15 +87,6 @@ function validarTransicao(atual: AgendamentoStatus, destino: AgendamentoStatus):
   const permitidas = TRANSICOES[atual];
   if (!permitidas.includes(destino)) {
     throw new ValidationError(`Transição de status inválida: ${atual} -> ${destino}`);
-  }
-}
-
-function validarIntervalo(inicio: string, fim: string): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(inicio) || !/^\d{4}-\d{2}-\d{2}$/.test(fim)) {
-    throw new ValidationError('Intervalo de datas inválido');
-  }
-  if (inicio > fim) {
-    throw new ValidationError('Data inicial não pode ser maior que a final');
   }
 }
 
@@ -299,7 +295,25 @@ async function alterarStatusOperacional(
   }
 
   validarTransicao(row.status, destino);
-  await atualizarStatus(id, destino);
+
+  // ATOMICIDADE (Regras de Comissão, Passo 5): mudança de status + gancho de
+  // comissão rodam na MESMA transação. Concluir (destino 'concluido') gera a
+  // despesa automática de comissão; reverter conclusão ('confirmado' vindo de
+  // 'concluido') remove a despesa vinculada. Se a transação falhar, NADA é
+  // persistido — nunca fica agendamento concluído sem despesa correspondente,
+  // nem despesa para agendamento não concluído.
+  await db.transaction(async (trx) => {
+    await atualizarStatus(id, destino, trx);
+
+    if (destino === 'concluido') {
+      await aplicarComissaoNaConclusao({ agendamentoId: id, trx });
+    } else if (row.status === 'concluido') {
+      // Só remove comissão quando a reversão vem de 'concluido'; confirmar a
+      // partir de 'pendente' ('confirmarAgendamento') não gera/remove nada.
+      await removerComissaoDaConclusao({ agendamentoId: id, trx });
+    }
+  });
+
   return toDTO({ ...row, status: destino });
 }
 
@@ -334,6 +348,10 @@ export async function reverterConclusaoAgendamento(
  * - Admin: calcula sobre todos os barbeiros.
  * - Recepcionista/cliente: sem acesso (PRD mantém o financeiro restrito).
  * - Sem `inicio`/`fim`, assume o ano corrente (mesmo padrão das telas).
+ * - `despesaTotal`, `lucroLiquido` e `margem` só aparecem quando o solicitante
+ *   possui a permissão efetiva `ver_financeiro`
+ *   (admin por padrão; sobre escritas no banco contam). Sem a permissão,
+ *   os campos são omitidos do JSON.
  */
 export async function obterFaturamento(
   usuarioId: string,
@@ -354,7 +372,7 @@ export async function obterFaturamento(
   const anoAtual = new Date().getFullYear();
   const inicio = filtros.inicio ?? `${anoAtual}-01-01`;
   const fim = filtros.fim ?? `${anoAtual}-12-31`;
-  validarIntervalo(inicio, fim);
+  validarIntervaloData(inicio, fim);
 
   let funcionarioId: string | undefined;
   if (role === 'profissional') {
@@ -367,7 +385,7 @@ export async function obterFaturamento(
 
   const resumo = await resumirFaturamento({ funcionarioId, inicio, fim });
 
-  const valorTotal = Number(resumo.valorTotal).toFixed(2);
+  const valorTotal = normalizarDecimal(resumo.valorTotal);
   const quantidade = resumo.quantidade;
   const ticketMedio = quantidade > 0 ? (Number(valorTotal) / quantidade).toFixed(2) : '0.00';
   const porServico = resumo.porServico.map((item) => ({
@@ -377,5 +395,26 @@ export async function obterFaturamento(
     valorTotal: Number(item.valorTotal).toFixed(2),
   }));
 
-  return { inicio, fim, valorTotal, quantidade, ticketMedio, porServico };
+  const dto: FaturamentoResumoDTO = { inicio, fim, valorTotal, quantidade, ticketMedio, porServico };
+
+  // DECISÃO DE SEGURANÇA: os campos financeiros só são anexados quando o
+  // solicitante possui a permissão efetiva `ver_financeiro`. Sem isso, os
+  // campos são OMITIDOS do JSON — nunca retornados como "0.00" fake.
+  if (await temPermissao({ id: usuarioId, role }, 'ver_financeiro')) {
+    const rawDespesa = await somarDespesasPeriodo({ inicio, fim });
+    const despesaTotal = normalizarDecimal(rawDespesa);
+    const despesaCents = paraCentavos(despesaTotal);
+    const valorCents = paraCentavos(valorTotal);
+    const lucroCents = valorCents - despesaCents;
+    const lucroLiquido = deCentavos(lucroCents);
+    const margem =
+      valorCents !== 0n
+        ? ((Number(lucroCents) / Number(valorCents)) * 100).toFixed(2)
+        : '0.00';
+    dto.despesaTotal = despesaTotal;
+    dto.lucroLiquido = lucroLiquido;
+    dto.margem = margem;
+  }
+
+  return dto;
 }

@@ -235,6 +235,18 @@ const agendamentoRoutes = Router();
  *                       servicoNome: { type: string }
  *                       quantidade: { type: integer }
  *                       valorTotal: { type: string, example: '90.00' }
+ *                 despesaTotal:
+ *                   type: string
+ *                   example: '57.50'
+ *                   description: Soma das despesas do periodo. SOMENTE para quem possui a permissao ver_financeiro (admin por padrao); caso contrario o campo e omitido.
+ *                 lucroLiquido:
+ *                   type: string
+ *                   example: '42.50'
+ *                   description: valorTotal - despesaTotal. SOMENTE para quem possui ver_financeiro; caso contrario o campo e omitido.
+ *                 margem:
+ *                   type: string
+ *                   example: '42.50'
+ *                   description: Percentual de lucro sobre o faturamento (lucro / valorTotal * 100). SOMENTE para quem possui ver_financeiro; caso contrario o campo e omitido.
  *       '403':
  *         $ref: '#/components/responses/Erro403'
  */
