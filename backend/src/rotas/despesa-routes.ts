@@ -17,7 +17,7 @@ const despesaRoutes = Router();
  *   schemas:
  *     Despesa:
  *       type: object
- *       required: [id, descricao, tipo_despesa, valor, data, recorrente, funcionario_id, automatica]
+ *       required: [id, descricao, tipo_despesa, valor, data, recorrente, funcionario_id, agendamento_id, automatica]
  *       properties:
  *         id: { type: string, format: uuid }
  *         descricao: { type: string, example: 'Aluguel' }
@@ -26,10 +26,34 @@ const despesaRoutes = Router();
  *         data: { type: string, format: date }
  *         recorrente: { type: boolean, example: true }
  *         funcionario_id: { type: string, format: uuid, nullable: true }
+ *         agendamento_id:
+ *           type: string
+ *           format: uuid
+ *           nullable: true
+ *           description: ID do agendamento que gerou a despesa (preenchido SOMENTE em despesas automaticas de comissao; null em manuais). Usado pelo Frontend para montar o link "Ver atendimento".
  *         automatica:
  *           type: boolean
  *           example: false
  *           description: true quando a despesa foi gerada pelo hook de comissao (agendamento_id preenchido); despesas manuais sao sempre false.
+ *     DespesaPaginada:
+ *       type: object
+ *       required: [items, total, page, limit, totalPages]
+ *       properties:
+ *         items:
+ *           type: array
+ *           items: { $ref: '#/components/schemas/Despesa' }
+ *         total:
+ *           type: number
+ *           description: Total de itens considerando apenas os filtros aplicados.
+ *         page:
+ *           type: number
+ *           description: Página atual (1-based).
+ *         limit:
+ *           type: number
+ *           description: Limit efetivo usado na consulta (após normalização do teto).
+ *         totalPages:
+ *           type: number
+ *           description: Total de páginas = ceil(total / limit).
  *     DespesaResumo:
  *       type: object
  *       required: [inicio, fim, despesaTotal]
@@ -73,19 +97,27 @@ const despesaRoutes = Router();
  * /api/despesas:
  *   get:
  *     tags: [Despesas]
- *     summary: Lista despesas do periodo (requer permissao ver_financeiro).
+ *     summary: Lista paginada de despesas do periodo (requer permissao ver_financeiro).
  *     description: >
  *       Acesso restrito a quem possui a permissao efetiva `ver_financeiro`
  *       (admin por padrao; overrides no banco contam). Recepcionista sem a
  *       permissao recebe 403.
  *
  *       Retorna a tabela da tela Financeiro › Despesas, ordenada por data
- *       (mais recentes primeiro). Filtros opcionais:
+ *       (mais recentes primeiro), paginada. Filtros opcionais:
  *       - `inicio`/`fim` devem vir JUNTOS (intervalo de datas);
  *       - `tipo_despesa` filtra por categoria.
  *
+ *       Paginacao:
+ *       - `page` (padrao 1) e `limit` (padrao 20, teto maximo 100);
+ *       - valores invalidos sao normalizados para o padrao (nao retornam 400);
+ *       - pagina acima do total retorna `items: []` sem erro;
+ *       - `total` considera apenas os filtros aplicados (base para totalPages).
+ *
  *       Despesas com `automatica: true` (comissao gerada pelo hook) aparecem
  *       na listagem para leitura, mas nao podem ser editadas/excluídas aqui.
+ *       `agendamento_id` identifica o atendimento que gerou a despesa e deve
+ *       ser usado pelo Frontend para montar o link "Ver atendimento".
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -103,14 +135,22 @@ const despesaRoutes = Router();
  *         name: tipo_despesa
  *         required: false
  *         schema: { type: string, enum: [fixa, variavel, comissao, outro] }
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *         description: Pagina (1-based). Valores invalidos caem no padrao 1.
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+ *         description: Itens por pagina (teto maximo 100). Valores invalidos caem no padrao 20; acima do teto sao limitados a 100.
  *     responses:
  *       '200':
- *         description: Lista de despesas
+ *         description: Lista paginada de despesas
  *         content:
  *           application/json:
- *             schema:
- *               type: array
- *               items: { $ref: '#/components/schemas/Despesa' }
+ *             schema: { $ref: '#/components/schemas/DespesaPaginada' }
  *       '400':
  *         $ref: '#/components/responses/Erro400'
  *       '401':

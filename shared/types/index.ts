@@ -267,6 +267,12 @@ export interface DespesaDTO {
   /** Funcionário vinculado (opcional, ex.: despesa por profissional). */
   funcionario_id: string | null;
   /**
+   * ID do agendamento que GEROU esta despesa (preenchido somente em despesas
+   * automáticas de comissão). `null` em despesas manuais. O Frontend usa este
+   * campo para montar o link "Ver atendimento" de despesas automáticas.
+   */
+  agendamento_id: string | null;
+  /**
    * `true` quando a despesa foi GERADA AUTOMATICAMENTE pelo sistema
    * (comissão criada pelo hook do Passo 5 — requer `agendamento_id`
    * preenchido). Despesas manuais (POST/PUT) SEMPRE vêm com `false`.
@@ -298,8 +304,37 @@ export interface UpdateDespesaRequest {
   funcionario_id?: string | null;
 }
 
-/** Resposta da listagem de despesas. */
-export type ListarDespesasResponse = DespesaDTO[];
+/**
+ * Envelope de listagem páginada reaproveitável.
+ *
+ * DECISÃO DE REUSO (documentada): qualquer listagem futura do sistema que
+ * precise de paginação deve usar este mesmo contrato (items + total + page +
+ * limit + totalPages). Mantém o Frontend com um único formato de resposta
+ * paginada e permite componentes genéricos de paginação no futuro.
+ */
+export interface PaginatedResponse<T> {
+  /** Itens da página atual. */
+  items: T[];
+  /** Total de itens considerando APENAS os filtros aplicados (não é o tamanho da página). */
+  total: number;
+  /** Página atual devolvida (1-based). */
+  page: number;
+  /** Limit efetivo usado no backend (após normalização do teto). */
+  limit: number;
+  /** Total de páginas = ceil(total / limit). 0 quando não há itens. */
+  totalPages: number;
+}
+
+/**
+ * Resposta da listagem de despesas (paginada).
+ * Endpoint: `GET /api/despesas`.
+ * Acesso: somente usuários com a permissão efetiva `ver_financeiro`.
+ *
+ * Parâmetros de paginação: `page` (padrão 1) e `limit` (padrão 20, teto 100).
+ * Valores inválidos são normalizados para o padrão pelo backend (não → 400);
+ * página acima do total retorna `items: []` sem erro.
+ */
+export type ListarDespesasResponse = PaginatedResponse<DespesaDTO>;
 
 /**
  * Resumo de despesas de um período.
