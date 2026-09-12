@@ -8,26 +8,28 @@ import { showToast } from "../ui/toast.js";
 import { attachCurrencyMask, currencyToNumber } from "../ui/mask.js";
 import {
   criarDespesa,
-  DESPESA_CATEGORIAS,
   listarDespesas,
   removerDespesa,
+  TIPO_DESPESA_LABEL,
+  TIPO_DESPESA_MANUAL,
   type Despesa,
 } from "../services/despesas.js";
 
-const CATEGORIA_BADGE: Record<string, "info" | "warning" | "success" | "danger" | "neutral"> = {
-  INSUMOS: "info",
-  EQUIPAMENTOS: "info",
-  ALUGUEL: "warning",
-  FUNCIONÁRIOS: "success",
-  MARKETING: "info",
-  UTILIDADES: "warning",
-  MANUTENÇÃO: "danger",
-  OUTROS: "neutral",
+const TIPO_BADGE: Record<string, "info" | "warning" | "success" | "danger" | "neutral"> = {
+  fixa: "warning",
+  variavel: "info",
+  comissao: "success",
+  outro: "neutral",
 };
 
-function categoriaBadge(categoria: string): string {
-  const variant = CATEGORIA_BADGE[categoria] ?? "neutral";
-  return `<span class="badge badge--${variant}">${escapeHtml(categoria)}</span>`;
+function tipoBadge(tipo: string): string {
+  const variant = TIPO_BADGE[tipo] ?? "neutral";
+  const label = TIPO_DESPESA_LABEL[tipo as Despesa["tipo_despesa"]] ?? tipo;
+  return `<span class="badge badge--${variant}">${escapeHtml(label)}</span>`;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim() !== "" ? error.message : fallback;
 }
 
 function recorrenteBadge(recorrente: boolean): string {
@@ -60,7 +62,23 @@ export function renderFinanceiro(container: HTMLElement): () => void {
 
   const cleanups: Array<() => void> = [];
 
-  function renderTabela(): void {
+  async function renderTabela(): Promise<void> {
+    let despesas: Despesa[];
+    try {
+      despesas = await listarDespesas();
+    } catch (error) {
+      content.innerHTML = `
+        <div class="panel__section manage-head">
+          <div class="manage-head__titles">
+            <h3 class="panel__section-title">Despesas</h3>
+            <p class="manage-head__sub">Controle as saídas financeiras do salão</p>
+          </div>
+        </div>
+        <p class="panel__empty" role="alert">${escapeHtml(errorMessage(error, "Não foi possível carregar as despesas."))}</p>
+      `;
+      return;
+    }
+
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -76,7 +94,7 @@ export function renderFinanceiro(container: HTMLElement): () => void {
           <thead>
             <tr>
               <th>Descrição</th>
-              <th>Categoria</th>
+              <th>Tipo</th>
               <th>Valor (R$)</th>
               <th>Data</th>
               <th>Recorrente</th>
@@ -84,18 +102,22 @@ export function renderFinanceiro(container: HTMLElement): () => void {
             </tr>
           </thead>
           <tbody>
-            ${listarDespesas()
+            ${despesas
               .map(
                 (d) => `
                   <tr>
                     <td><strong>${escapeHtml(d.descricao)}</strong></td>
-                    <td>${categoriaBadge(d.categoria)}</td>
+                    <td>${tipoBadge(d.tipo_despesa)}</td>
                     <td>${formatCurrency(d.valor)}</td>
                     <td>${formatDateShort(d.data)}</td>
                     <td>${recorrenteBadge(d.recorrente)}</td>
                     <td>
                       <span class="cell-actions">
-                        <button type="button" class="btn btn--sm btn--danger-outline" data-delete-despesa="${escapeHtml(d.id)}">Excluir</button>
+                        ${
+                          d.automatica
+                            ? `<span class="muted-note">Gerada pelo sistema</span>`
+                            : `<button type="button" class="btn btn--sm btn--danger-outline" data-delete-despesa="${escapeHtml(d.id)}">Excluir</button>`
+                        }
                       </span>
                     </td>
                   </tr>`,
@@ -103,7 +125,7 @@ export function renderFinanceiro(container: HTMLElement): () => void {
               .join("")}
           </tbody>
         </table>
-        ${listarDespesas().length === 0 ? `<p class="panel__empty">Nenhuma despesa cadastrada.</p>` : ""}
+        ${despesas.length === 0 ? `<p class="panel__empty">Nenhuma despesa cadastrada.</p>` : ""}
       </div>
     `;
 
@@ -117,7 +139,7 @@ export function renderFinanceiro(container: HTMLElement): () => void {
     $$("[data-delete-despesa]", content).forEach((btn) => {
       const id = btn.getAttribute("data-delete-despesa")!;
       const h = (): void => {
-        const despesa = listarDespesas().find((d) => d.id === id);
+        const despesa = despesas.find((d) => d.id === id);
         if (!despesa) return;
         void handleDeleteDespesa(despesa);
       };
@@ -134,9 +156,18 @@ export function renderFinanceiro(container: HTMLElement): () => void {
       danger: true,
     });
     if (!confirmed) return;
-    removerDespesa(despesa.id);
+    try {
+      const ok = await removerDespesa(despesa.id);
+      if (!ok) {
+        showToast("Não foi possível excluir a despesa.", "error");
+        return;
+      }
+    } catch (error) {
+      showToast(errorMessage(error, "Não foi possível excluir a despesa."), "error");
+      return;
+    }
     showToast("Despesa removida.");
-    renderTabela();
+    await renderTabela();
   }
 
   function openNovaDespesa(): void {
@@ -157,12 +188,12 @@ export function renderFinanceiro(container: HTMLElement): () => void {
           </div>
           <div class="form-grid">
             <div class="field">
-              <label class="field__label" for="fin-cat">Categoria *</label>
-              <select id="fin-cat" class="uppercase" required>
+              <label class="field__label" for="fin-tipo">Tipo *</label>
+              <select id="fin-tipo" class="uppercase" required>
                 <option value="">Selecione...</option>
-                ${DESPESA_CATEGORIAS.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("")}
+                ${TIPO_DESPESA_MANUAL.map((t) => `<option value="${t}">${escapeHtml(TIPO_DESPESA_LABEL[t])}</option>`).join("")}
               </select>
-              <span class="field__error">Selecione a categoria.</span>
+              <span class="field__error">Selecione o tipo.</span>
             </div>
             <div class="field">
               <label class="field__label" for="fin-valor">Valor (R$) *</label>
@@ -201,7 +232,8 @@ export function renderFinanceiro(container: HTMLElement): () => void {
       const descricao = (overlay.querySelector<HTMLInputElement>("#fin-desc")?.value ?? "")
         .trim()
         .toUpperCase();
-      const categoria = overlay.querySelector<HTMLSelectElement>("#fin-cat")?.value ?? "";
+      const tipoRaw = overlay.querySelector<HTMLSelectElement>("#fin-tipo")?.value ?? "";
+      const tipo = TIPO_DESPESA_MANUAL.find((t) => t === tipoRaw) ?? null;
       const valor = currencyToNumber(overlay.querySelector<HTMLInputElement>("#fin-valor")?.value ?? "");
       const data = (overlay.querySelector<HTMLInputElement>("#fin-data")?.value ?? "").trim();
       const recorrente = overlay.querySelector<HTMLInputElement>("#fin-recorrente")?.checked ?? false;
@@ -210,8 +242,8 @@ export function renderFinanceiro(container: HTMLElement): () => void {
         showToast("Informe a descrição da despesa.", "error");
         return;
       }
-      if (!categoria) {
-        showToast("Selecione a categoria.", "error");
+      if (!tipo) {
+        showToast("Selecione o tipo.", "error");
         return;
       }
       if (!Number.isFinite(valor) || valor <= 0) {
@@ -229,11 +261,22 @@ export function renderFinanceiro(container: HTMLElement): () => void {
         submitBtn.classList.add("is-loading");
       }
 
-      // Mock em memória (serviço compartilhado): adiciona a despesa e re-renderiza.
-      criarDespesa({ descricao, categoria, valor, data, recorrente });
-      showToast("Despesa criada!");
-      finish();
-      renderTabela();
+      // Persiste a despesa no Backend (POST /api/despesas) e re-renderiza.
+      void (async () => {
+        try {
+          await criarDespesa({ descricao, tipo_despesa: tipo, valor, data, recorrente });
+        } catch (error) {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.classList.remove("is-loading");
+          }
+          showToast(errorMessage(error, "Não foi possível criar a despesa."), "error");
+          return;
+        }
+        showToast("Despesa criada!");
+        finish();
+        await renderTabela();
+      })();
     };
 
     form.addEventListener("submit", submitHandler);
@@ -246,7 +289,7 @@ export function renderFinanceiro(container: HTMLElement): () => void {
     openModal(overlay);
   }
 
-  renderTabela();
+  void renderTabela();
 
   return () => {
     cleanups.forEach((fn) => fn());

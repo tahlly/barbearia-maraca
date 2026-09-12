@@ -195,7 +195,7 @@ const funcionarioRoutes = Router();
  *         $ref: '#/components/responses/Erro404'
 *   put:
   *     tags: [Funcionarios]
-  *     summary: Atualiza um funcionario (admin: qualquer cargo exceto o próprio; recepcionista: somente barbeiros)
+  *     summary: 'Atualiza um funcionario (admin: qualquer cargo exceto o proprio; recepcionista: somente barbeiros)'
   *     description: |
   *       Regras de permissão:
   *       - Ninguém pode editar o próprio cadastro pela tela de gestão (bloqueado com 403).
@@ -227,7 +227,7 @@ const funcionarioRoutes = Router();
   * /api/funcionarios/{id}/status:
  *   patch:
  *     tags: [Funcionarios]
- *     summary: Alterna status ativo/inativo (admin: qualquer cargo exceto o próprio; recepcionista: somente barbeiros)
+ *     summary: 'Alterna status ativo/inativo (admin: qualquer cargo exceto o proprio; recepcionista: somente barbeiros)'
  *     description: |
  *       Regras de permissão:
  *       - Ninguém pode alterar o próprio status (auto-desativação/auto-ativação é bloqueada com 403).

@@ -1,3 +1,5 @@
+import { ValidationError } from '../errors/ValidationError';
+
 /**
  * Validações de formato de data e hora usadas nos contratos HTTP.
  *
@@ -30,4 +32,19 @@ export function validarDataISO(valor: string): boolean {
     data.getUTCMonth() === mes - 1 &&
     data.getUTCDate() === dia
   );
+}
+
+/**
+ * Valida um intervalo de datas no formato "YYYY-MM-DD" e lança
+ * `ValidationError` quando o formato é inválido ou `inicio` é maior que `fim`.
+ *
+ * Usada pelos resumos financeiros (`obterFaturamento`, `obterResumoDespesas`).
+ */
+export function validarIntervaloData(inicio: string, fim: string): void {
+  if (!validarDataISO(inicio) || !validarDataISO(fim)) {
+    throw new ValidationError('Intervalo de datas inválido');
+  }
+  if (inicio > fim) {
+    throw new ValidationError('Data inicial não pode ser maior que a final');
+  }
 }
