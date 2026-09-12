@@ -10,6 +10,8 @@ import {
   resumirFaturamento,
   type AgendamentoRow,
 } from '../repositories/agendamento-repository';
+import db from '../database/connection';
+import { aplicarComissaoNaConclusao, removerComissaoDaConclusao } from './comissao-service';
 import type { AgendamentoDTO, AgendamentoStatus, CreateAgendamentoRequest } from '../dtos/agendamento-dto';
 import type { FaturamentoResumoDTO } from '../dtos/faturamento-dto';
 import { ForbiddenError } from '../errors/ForbiddenError';
@@ -293,7 +295,25 @@ async function alterarStatusOperacional(
   }
 
   validarTransicao(row.status, destino);
-  await atualizarStatus(id, destino);
+
+  // ATOMICIDADE (Regras de Comissão, Passo 5): mudança de status + gancho de
+  // comissão rodam na MESMA transação. Concluir (destino 'concluido') gera a
+  // despesa automática de comissão; reverter conclusão ('confirmado' vindo de
+  // 'concluido') remove a despesa vinculada. Se a transação falhar, NADA é
+  // persistido — nunca fica agendamento concluído sem despesa correspondente,
+  // nem despesa para agendamento não concluído.
+  await db.transaction(async (trx) => {
+    await atualizarStatus(id, destino, trx);
+
+    if (destino === 'concluido') {
+      await aplicarComissaoNaConclusao({ agendamentoId: id, trx });
+    } else if (row.status === 'concluido') {
+      // Só remove comissão quando a reversão vem de 'concluido'; confirmar a
+      // partir de 'pendente' ('confirmarAgendamento') não gera/remove nada.
+      await removerComissaoDaConclusao({ agendamentoId: id, trx });
+    }
+  });
+
   return toDTO({ ...row, status: destino });
 }
 

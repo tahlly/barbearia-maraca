@@ -559,3 +559,54 @@ export interface ResumoFinanceiroDTO {
   /** Receita realizada vs. prevista por semana, no período base. */
   receitaRealizadaPrevista: ReceitaRealizadaPrevistaDTO[];
 }
+
+// --- Contratos HTTP de Regras de Comissão (seções 3.4/3.5) ---
+// Acesso: somente usuários com a permissão efetiva `ver_financeiro`
+// (admin por padrão; overrides no banco contam). Caso contrário → 403.
+// Endpoints sob `/api/financeiro/comissao`.
+// `percentual` na RESPOSTA é string decimal normalizada (ex.: "40.00"), mesmo
+// padrão dos valores monetários/percentuais do módulo financeiro.
+
+/**
+ * Interruptor global de comissão (spec 3.4).
+ * GET/PUT `/api/financeiro/comissao/configuracao`.
+ * Quando a linha singleton ainda não existe, o GET devolve `comissao_ativa: false`
+ * (não inventa linha no banco).
+ */
+export interface ConfiguracaoComissaoDTO {
+  comissao_ativa: boolean;
+}
+
+/** Body de atualização do interruptor global (upsert na linha singleton). */
+export interface RequestAtualizarConfiguracaoComissao {
+  comissao_ativa: boolean;
+}
+
+/**
+ * Percentual de comissão de um serviço para um funcionário (spec 3.5).
+ * GET `.../comissao/funcionarios/{funcionarioId}` e resposta do PUT (lista salva).
+ * `servico_nome` vem do JOIN com a tabela `servico`.
+ */
+export interface ComissaoServicoDTO {
+  servico_id: string;
+  servico_nome: string;
+  /** Percentual 0..100, string decimal normalizada (ex.: "40.00"). */
+  percentual: string;
+}
+
+/** Item da lista de comissões enviada no PUT (percentual numérico 0..100). */
+export interface ItemComissaoServicoRequest {
+  servico_id: string;
+  percentual: number;
+}
+
+/**
+ * Body de salvar as comissões de um funcionário (REPLACE em transação).
+ * PUT `.../comissao/funcionarios/{funcionarioId}`.
+ */
+export interface RequestSalvarComissoesFuncionario {
+  comissoes: ItemComissaoServicoRequest[];
+}
+
+/** Resposta da listagem/salvamento de comissões de um funcionário. */
+export type ResponseListarComissoesFuncionario = ComissaoServicoDTO[];

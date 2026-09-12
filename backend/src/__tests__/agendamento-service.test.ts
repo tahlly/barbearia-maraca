@@ -4,6 +4,9 @@ import { ValidationError } from '../errors/ValidationError';
 import {
   criarAgendamento,
   cancelarAgendamento,
+  confirmarAgendamento,
+  concluirAgendamento,
+  reverterConclusaoAgendamento,
 } from '../services/agendamento-service';
 import type { CreateAgendamentoRequest } from '../dtos/agendamento-dto';
 import type { AgendamentoRow } from '../repositories/agendamento-repository';
@@ -71,6 +74,54 @@ vi.mock('../repositories/cliente-repository', () => ({
   buscarClientePorId: (...args: unknown[]) => buscarClientePorIdMock(...args),
 }));
 
+// database/connection: agendamento-service agora usa db.transaction para
+// aplicar/remover comissão na MESMA transação da mudança de status.
+const transactionMock = vi.fn();
+
+vi.mock('../database/connection', () => ({
+  default: {
+    transaction: (...args: unknown[]) => transactionMock(...args),
+  },
+}));
+
+// Hook de comissão: os testes de conclusão exercitam o comissao-service REAL,
+// portanto comissao-repository (e os repositórios que ele consulta) são mockados
+// para que nenhum teste toque no banco. upsert/listar/substituir não participam
+// do hook, mas precisam existir no módulo mockado para o import não falhar.
+const buscarConfiguracaoComissaoMock = vi.fn();
+const buscarDespesaComissaoPorAgendamentoMock = vi.fn();
+const buscarDadosParaComissaoDeAgendamentoMock = vi.fn();
+const buscarPercentualComissaoMock = vi.fn();
+const criarDespesaComissaoAutomaticaMock = vi.fn();
+const removerDespesaComissaoPorAgendamentoMock = vi.fn();
+
+vi.mock('../repositories/comissao-repository', () => ({
+  buscarConfiguracaoComissao: (...args: unknown[]) => buscarConfiguracaoComissaoMock(...args),
+  upsertConfiguracaoComissao: vi.fn(),
+  listarComissoesDoFuncionario: vi.fn(),
+  substituirComissoesDoFuncionario: vi.fn(),
+  buscarPercentualComissao: (...args: unknown[]) => buscarPercentualComissaoMock(...args),
+  buscarDadosParaComissaoDeAgendamento: (...args: unknown[]) =>
+    buscarDadosParaComissaoDeAgendamentoMock(...args),
+  buscarDespesaComissaoPorAgendamento: (...args: unknown[]) =>
+    buscarDespesaComissaoPorAgendamentoMock(...args),
+  criarDespesaComissaoAutomatica: (...args: unknown[]) => criarDespesaComissaoAutomaticaMock(...args),
+  removerDespesaComissaoPorAgendamento: (...args: unknown[]) =>
+    removerDespesaComissaoPorAgendamentoMock(...args),
+}));
+
+const buscarFuncionarioPorIdMock = vi.fn();
+
+vi.mock('../repositories/funcionario-repository', () => ({
+  buscarPorId: (...args: unknown[]) => buscarFuncionarioPorIdMock(...args),
+}));
+
+const buscarServicoPorIdMock = vi.fn();
+
+vi.mock('../repositories/servico-repository', () => ({
+  buscarServicoPorId: (...args: unknown[]) => buscarServicoPorIdMock(...args),
+}));
+
 // ── Helpers ───────────────────────────────────────────────────
 
 function diaFuturo(): string {
@@ -113,6 +164,12 @@ function overridePermissaoNegada(usuarioId: string) {
   return [{ usuario_id: usuarioId, permissao: 'agendar_para_cliente', concedida: false }];
 }
 
+const trxObj = { transacao: true };
+
+// Acompanha se a transação fake "commitou": só vira true quando o callback da
+// transação termina SEM erro. Usada no teste de rollback do hook de comissão.
+let transacaoCommitada = false;
+
 beforeEach(() => {
   vi.clearAllMocks();
   // Defaults: gates de existência liberados e matriz default aplicada
@@ -120,6 +177,20 @@ beforeEach(() => {
   funcionarioExisteAtivoMock.mockResolvedValue(true);
   servicoExisteAtivoMock.mockResolvedValue(true);
   listarPermissoesPorUsuariosMock.mockResolvedValue([]);
+  // Transação fake: executa o callback passando o trxObj (mesmo padrão do
+  // database/connection real do Knex). Quando o callback FALHA, simula o
+  // rollback do Knex: nada é commitado e o erro propaga para o chamador.
+  transacaoCommitada = false;
+  transactionMock.mockImplementation(async (cb: (trx: unknown) => Promise<unknown>) => {
+    try {
+      const resultado = await cb(trxObj);
+      transacaoCommitada = true;
+      return resultado;
+    } catch (error) {
+      transacaoCommitada = false;
+      throw error;
+    }
+  });
 });
 
 // ── criarAgendamento ──────────────────────────────────────────
@@ -383,5 +454,124 @@ describe('cancelarAgendamento', () => {
       cancelarAgendamento('user-x', 'fantasma', 'ag-1'),
     ).rejects.toBeInstanceOf(ForbiddenError);
     expect(atualizarStatusMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── conclusão / reversão — hook automático de comissão (Passo 5) ──
+
+function dadosComissaoHook(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    funcionario_id: 'func-1',
+    funcionario_nome: 'Funcionario Teste',
+    servico_id: 'svc-1',
+    servico_preco: '45.00',
+    data: agendamentoRow().data,
+    ...overrides,
+  };
+}
+
+describe('concluirAgendamento — hook de comissão', () => {
+  beforeEach(() => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ status: 'confirmado' }));
+    atualizarStatusMock.mockResolvedValue(undefined);
+    buscarConfiguracaoComissaoMock.mockResolvedValue(true);
+    buscarDespesaComissaoPorAgendamentoMock.mockResolvedValue(false);
+    buscarDadosParaComissaoDeAgendamentoMock.mockResolvedValue(dadosComissaoHook());
+    buscarPercentualComissaoMock.mockResolvedValue('40.00');
+    criarDespesaComissaoAutomaticaMock.mockResolvedValue(undefined);
+  });
+
+  it('conclui e cria despesa de comissão com valor = preço × percentual / 100 na MESMA transação', async () => {
+    const resultado = await concluirAgendamento('user-recep', 'recepcionista', 'ag-1');
+
+    expect(resultado.status).toBe('concluido');
+    expect(transactionMock).toHaveBeenCalledTimes(1);
+    expect(atualizarStatusMock).toHaveBeenCalledWith('ag-1', 'concluido', trxObj);
+    expect(criarDespesaComissaoAutomaticaMock).toHaveBeenCalledTimes(1);
+    expect(criarDespesaComissaoAutomaticaMock).toHaveBeenCalledWith(
+      {
+        descricao: 'Comissão Funcionario Teste',
+        valor: '18.00',
+        data: agendamentoRow().data,
+        funcionarioId: 'func-1',
+        agendamentoId: 'ag-1',
+      },
+      trxObj,
+    );
+  });
+
+  it('não duplica: despesa de comissão já existente para o agendamento → não cria', async () => {
+    buscarDespesaComissaoPorAgendamentoMock.mockResolvedValue(true);
+
+    await concluirAgendamento('user-recep', 'recepcionista', 'ag-1');
+
+    expect(criarDespesaComissaoAutomaticaMock).not.toHaveBeenCalled();
+  });
+
+  it('sem percentual configurado (linha ou percentual null) → não cria despesa', async () => {
+    buscarPercentualComissaoMock.mockResolvedValue(null);
+
+    await concluirAgendamento('user-recep', 'recepcionista', 'ag-1');
+
+    expect(criarDespesaComissaoAutomaticaMock).not.toHaveBeenCalled();
+  });
+
+  it('comissão inativa → não cria despesa', async () => {
+    buscarConfiguracaoComissaoMock.mockResolvedValue(false);
+
+    await concluirAgendamento('user-recep', 'recepcionista', 'ag-1');
+
+    expect(criarDespesaComissaoAutomaticaMock).not.toHaveBeenCalled();
+  });
+
+  it('hook de comissão falha → operação rejeita E mudança de status não é persistida (rollback)', async () => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ status: 'confirmado' }));
+    atualizarStatusMock.mockResolvedValue(undefined);
+    buscarConfiguracaoComissaoMock.mockResolvedValue(true);
+    buscarDespesaComissaoPorAgendamentoMock.mockResolvedValue(false);
+    buscarDadosParaComissaoDeAgendamentoMock.mockResolvedValue(dadosComissaoHook());
+    buscarPercentualComissaoMock.mockResolvedValue('40.00');
+    criarDespesaComissaoAutomaticaMock.mockRejectedValue(new Error('erro simulado no hook'));
+
+    await expect(
+      concluirAgendamento('user-recep', 'recepcionista', 'ag-1'),
+    ).rejects.toThrow('erro simulado no hook');
+
+    // A mudança de status foi emitida DENTRO da transação (com o trx), porém o
+    // Knex executa rollback quando o callback falha: nada é persistido e a
+    // operação rejeita — nunca fica agendamento concluído sem despesa de
+    // comissão correspondente.
+    expect(transactionMock).toHaveBeenCalledTimes(1);
+    expect(atualizarStatusMock).toHaveBeenCalledWith('ag-1', 'concluido', trxObj);
+    expect(criarDespesaComissaoAutomaticaMock).toHaveBeenCalledTimes(1);
+    expect(transacaoCommitada).toBe(false);
+  });
+});
+
+describe('confirmarAgendamento / reverterConclusaoAgendamento — hook de comissão', () => {
+  beforeEach(() => {
+    atualizarStatusMock.mockResolvedValue(undefined);
+    removerDespesaComissaoPorAgendamentoMock.mockResolvedValue(undefined);
+  });
+
+  it('confirmar a partir de pendente não gera nem remove comissão', async () => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ status: 'pendente' }));
+
+    const resultado = await confirmarAgendamento('user-recep', 'recepcionista', 'ag-1');
+
+    expect(resultado.status).toBe('confirmado');
+    expect(atualizarStatusMock).toHaveBeenCalledWith('ag-1', 'confirmado', trxObj);
+    expect(buscarConfiguracaoComissaoMock).not.toHaveBeenCalled();
+    expect(removerDespesaComissaoPorAgendamentoMock).not.toHaveBeenCalled();
+  });
+
+  it('reverter conclusão remove a despesa de comissão do agendamento', async () => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ status: 'concluido' }));
+
+    const resultado = await reverterConclusaoAgendamento('user-recep', 'recepcionista', 'ag-1');
+
+    expect(resultado.status).toBe('confirmado');
+    expect(atualizarStatusMock).toHaveBeenCalledWith('ag-1', 'confirmado', trxObj);
+    expect(removerDespesaComissaoPorAgendamentoMock).toHaveBeenCalledWith('ag-1', trxObj);
   });
 });

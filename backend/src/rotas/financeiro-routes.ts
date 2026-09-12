@@ -2,6 +2,12 @@ import { Router } from 'express';
 import { authenticate } from '../middlewares/authenticate';
 import { requerPermissao } from '../middlewares/requerPermissao';
 import { resumoFinanceiroHandler } from '../controllers/resumo-financeiro-controller';
+import {
+  obterConfiguracaoHandler,
+  atualizarConfiguracaoHandler,
+  listarComissoesHandler,
+  salvarComissoesHandler,
+} from '../controllers/comissao-controller';
 
 const financeiroRoutes = Router();
 
@@ -88,6 +94,42 @@ const financeiroRoutes = Router();
  *         receitaRealizadaPrevista:
  *           type: array
  *           items: { $ref: '#/components/schemas/ReceitaRealizadaPrevista' }
+ *     ConfiguracaoComissao:
+ *       type: object
+ *       required: [comissao_ativa]
+ *       properties:
+ *         comissao_ativa:
+ *           type: boolean
+ *           example: true
+ *           description: Interruptor global de comissao (spec 3.4).
+ *     RequestAtualizarConfiguracaoComissao:
+ *       type: object
+ *       required: [comissao_ativa]
+ *       properties:
+ *         comissao_ativa: { type: boolean }
+ *     ComissaoServico:
+ *       type: object
+ *       required: [servico_id, servico_nome, percentual]
+ *       properties:
+ *         servico_id: { type: string, format: uuid }
+ *         servico_nome: { type: string, example: 'Corte' }
+ *         percentual:
+ *           type: string
+ *           example: '40.00'
+ *           description: Percentual 0..100 (string decimal normalizada).
+ *     ItemComissaoServicoRequest:
+ *       type: object
+ *       required: [servico_id, percentual]
+ *       properties:
+ *         servico_id: { type: string, format: uuid }
+ *         percentual: { type: number, minimum: 0, maximum: 100, example: 40 }
+ *     RequestSalvarComissoesFuncionario:
+ *       type: object
+ *       required: [comissoes]
+ *       properties:
+ *         comissoes:
+ *           type: array
+ *           items: { $ref: '#/components/schemas/ItemComissaoServicoRequest' }
  *
  * /api/financeiro/resumo:
  *   get:
@@ -133,10 +175,155 @@ const financeiroRoutes = Router();
  *         $ref: '#/components/responses/Erro403'
  *       '400':
  *         $ref: '#/components/responses/Erro400'
+ *
+ * /api/financeiro/comissao/configuracao:
+ *   get:
+ *     tags: [Financeiro]
+ *     summary: Interruptor global de comissao (spec 3.4; requer ver_financeiro).
+ *     description: >
+ *       Acesso restrito a quem possui a permissao efetiva `ver_financeiro`.
+ *
+ *       Retorna `{ comissao_ativa }`. Quando a linha singleton ainda nao
+ *       existe, devolve `false` — nao inventa linha no banco.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       '200':
+ *         description: Estado do interruptor
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ConfiguracaoComissao' }
+ *       '401':
+ *         $ref: '#/components/responses/Erro401'
+ *       '403':
+ *         $ref: '#/components/responses/Erro403'
+ *   put:
+ *     tags: [Financeiro]
+ *     summary: Liga/desliga a comissao global (upsert; requer ver_financeiro).
+ *     description: >
+ *       Acesso restrito a `ver_financeiro`.
+ *
+ *       Upsert na linha singleton `id='global'`. Desligar NUNCA apaga as
+ *       linhas de `comissao_servico` — elas sao mantidas e param de ser
+ *       aplicadas (spec 3.4).
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/RequestAtualizarConfiguracaoComissao' }
+ *     responses:
+ *       '200':
+ *         description: Estado salvo
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/ConfiguracaoComissao' }
+ *       '400':
+ *         $ref: '#/components/responses/Erro400'
+ *       '401':
+ *         $ref: '#/components/responses/Erro401'
+ *       '403':
+ *         $ref: '#/components/responses/Erro403'
+ *
+ * /api/financeiro/comissao/funcionarios/{funcionarioId}:
+ *   get:
+ *     tags: [Financeiro]
+ *     summary: Comissoes por servico de um funcionario (spec 3.5; requer ver_financeiro).
+ *     description: >
+ *       Acesso restrito a `ver_financeiro`. Lista as linhas de `comissao_servico`
+ *       do funcionario (com nome do servico), ordenadas por nome do servico.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: funcionarioId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       '200':
+ *         description: Lista de comissoes do funcionario
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/ComissaoServico' }
+ *       '401':
+ *         $ref: '#/components/responses/Erro401'
+ *       '403':
+ *         $ref: '#/components/responses/Erro403'
+ *       '404':
+ *         $ref: '#/components/responses/Erro404'
+ *   put:
+ *     tags: [Financeiro]
+ *     summary: Salva as comissoes de um funcionario (REPLACE; requer ver_financeiro).
+ *     description: >
+ *       Acesso restrito a `ver_financeiro`.
+ *
+ *       Substitui TODAS as linhas de `comissao_servico` do funcionario pelas
+ *       informadas (lista vazia limpa as linhas). A operacao e atomica
+ *       (transacao): delete + insert. Valida servicos (existentes e ativos),
+ *       percentuais (numericos 0..100, max. 2 casas) e rejeita servico
+ *       duplicado na lista.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: funcionarioId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/RequestSalvarComissoesFuncionario' }
+ *     responses:
+ *       '200':
+ *         description: Lista salva (com nome do servico)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items: { $ref: '#/components/schemas/ComissaoServico' }
+ *       '400':
+ *         $ref: '#/components/responses/Erro400'
+ *       '401':
+ *         $ref: '#/components/responses/Erro401'
+ *       '403':
+ *         $ref: '#/components/responses/Erro403'
+ *       '404':
+ *         $ref: '#/components/responses/Erro404'
  */
 
 // Negação por padrão: qualquer usuário autenticado, mas apenas quem tem a
 // permissão efetiva `ver_financeiro` chega ao handler (403 caso contrário).
 financeiroRoutes.get('/resumo', authenticate, requerPermissao('ver_financeiro'), resumoFinanceiroHandler);
+
+// ── Regras de Comissão (spec 3.4/3.5) ─────────────────────────────────
+// Mesma proteção do módulo financeiro: somente `ver_financeiro`.
+financeiroRoutes.get(
+  '/comissao/configuracao',
+  authenticate,
+  requerPermissao('ver_financeiro'),
+  obterConfiguracaoHandler,
+);
+financeiroRoutes.put(
+  '/comissao/configuracao',
+  authenticate,
+  requerPermissao('ver_financeiro'),
+  atualizarConfiguracaoHandler,
+);
+financeiroRoutes.get(
+  '/comissao/funcionarios/:funcionarioId',
+  authenticate,
+  requerPermissao('ver_financeiro'),
+  listarComissoesHandler,
+);
+financeiroRoutes.put(
+  '/comissao/funcionarios/:funcionarioId',
+  authenticate,
+  requerPermissao('ver_financeiro'),
+  salvarComissoesHandler,
+);
 
 export default financeiroRoutes;

@@ -1,3 +1,4 @@
+import type { Knex } from 'knex';
 import db from '../database/connection';
 import type { AgendamentoStatus } from '../dtos/agendamento-dto';
 
@@ -145,8 +146,21 @@ export async function listar(opcoes: {
   return query;
 }
 
-export async function atualizarStatus(id: string, status: AgendamentoStatus): Promise<void> {
-  await db('agendamento').where('id', id).update({ status });
+/**
+ * Atualiza o status de um agendamento.
+ *
+ * `trx` é opcional e usado pelo fluxo de conclusão/reversão: a mudança de
+ * status e o gancho de comissão rodam na MESMA transação (atomicidade — ver
+ * agendamento-service.alterarStatusOperacional). Os demais fluxos
+ * (cancelar/confirmar simples) continuam usando o pool padrão.
+ */
+export async function atualizarStatus(
+  id: string,
+  status: AgendamentoStatus,
+  trx?: Knex.Transaction,
+): Promise<void> {
+  const base = trx ?? db;
+  await base('agendamento').where('id', id).update({ status });
 }
 
 /**
