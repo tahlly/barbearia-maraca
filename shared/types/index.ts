@@ -250,6 +250,58 @@ export interface UpdateClienteRequest {
 export type TipoDespesa = 'fixa' | 'variavel' | 'comissao' | 'outro';
 
 /**
+ * Despesa do módulo financeiro (tabela da tela Financeiro › Despesas).
+ * Endpoint: `GET /api/despesas`.
+ * Acesso: somente usuários com a permissão efetiva `ver_financeiro`.
+ */
+export interface DespesaDTO {
+  id: string;
+  descricao: string;
+  tipo_despesa: TipoDespesa;
+  /** Valor em R$, string decimal normalizada (ex.: "45.90"). */
+  valor: string;
+  /** Data do lançamento (YYYY-MM-DD). */
+  data: string;
+  /** Indica se a despesa repete todo mês. */
+  recorrente: boolean;
+  /** Funcionário vinculado (opcional, ex.: despesa por profissional). */
+  funcionario_id: string | null;
+  /**
+   * `true` quando a despesa foi GERADA AUTOMATICAMENTE pelo sistema
+   * (comissão criada pelo hook do Passo 5 — requer `agendamento_id`
+   * preenchido). Despesas manuais (POST/PUT) SEMPRE vêm com `false`.
+   */
+  automatica: boolean;
+}
+
+/** Body de criação de despesa MANUAL. */
+export interface CreateDespesaRequest {
+  descricao: string;
+  tipo_despesa: Exclude<TipoDespesa, 'comissao'>;
+  /** Valor em R$, string decimal (ex.: "45.90") ou número. */
+  valor: string | number;
+  /** Data do lançamento (YYYY-MM-DD). */
+  data: string;
+  /** Indica se a despesa repete todo mês. */
+  recorrente: boolean;
+  /** Funcionário vinculado (opcional). */
+  funcionario_id?: string | null;
+}
+
+/** Body de atualização de despesa MANUAL (mesmos campos, todos opcionais). */
+export interface UpdateDespesaRequest {
+  descricao?: string;
+  tipo_despesa?: Exclude<TipoDespesa, 'comissao'>;
+  valor?: string | number;
+  data?: string;
+  recorrente?: boolean;
+  funcionario_id?: string | null;
+}
+
+/** Resposta da listagem de despesas. */
+export type ListarDespesasResponse = DespesaDTO[];
+
+/**
  * Resumo de despesas de um período.
  * Endpoint: `GET /api/despesas/resumo`.
  * Acesso: somente usuários com a permissão efetiva `ver_financeiro`
