@@ -4,17 +4,12 @@ import type {
   HorarioExcecao,
   CreateHorarioExcecaoInput,
   UpdateHorarioExcecaoInput,
-  TipoExcecaoHorario,
 } from '../dtos/horario-excecao-dto';
-
-// Reaproveita as buscas de funcionário do repositório de horários de trabalho
-// (mesmo domínio de agenda), evitando duplicar consultas à tabela funcionario.
-export { buscarFuncionarioPorId, buscarFuncionarioPorUsuarioId } from './horario-repository';
 
 export interface ListarExcecoesParams {
   funcionarioId?: string;
   data?: string;
-  tipo?: TipoExcecaoHorario;
+  tipo?: string;
 }
 
 const excecaoColunas = [
@@ -62,8 +57,10 @@ export async function buscarExcecaoPorId(id: string): Promise<HorarioExcecao | n
   return (row as HorarioExcecao) ?? null;
 }
 
-export async function criarExcecao(data: CreateHorarioExcecaoInput): Promise<HorarioExcecao> {
-  const [id] = await db('horario_excecao')
+export async function criarExcecao(
+  data: CreateHorarioExcecaoInput
+): Promise<HorarioExcecao> {
+  const [{ id }] = await db('horario_excecao')
     .insert({
       funcionario_id: data.funcionario_id,
       data: data.data,
@@ -71,7 +68,7 @@ export async function criarExcecao(data: CreateHorarioExcecaoInput): Promise<Hor
       hora_fim: data.hora_fim,
       tipo: data.tipo,
       motivo: data.motivo ?? null,
-      updated_at: new Date(),
+      updated_at: db.fn.now(),
     })
     .returning('id');
 
@@ -86,7 +83,9 @@ export async function atualizarExcecao(
   id: string,
   data: UpdateHorarioExcecaoInput
 ): Promise<HorarioExcecao> {
-  const patch: Record<string, unknown> = { updated_at: new Date() };
+  const patch: Record<string, unknown> = {
+    updated_at: db.fn.now(),
+  };
   if (data.data !== undefined) patch.data = data.data;
   if (data.hora_inicio !== undefined) patch.hora_inicio = data.hora_inicio;
   if (data.hora_fim !== undefined) patch.hora_fim = data.hora_fim;

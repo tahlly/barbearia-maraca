@@ -8,12 +8,14 @@ import {
 import {
   listarExcecoes as listarExcecoesRepo,
   buscarExcecaoPorId,
-  buscarFuncionarioPorId,
-  buscarFuncionarioPorUsuarioId,
   criarExcecao as criarExcecaoRepo,
   atualizarExcecao as atualizarExcecaoRepo,
   excluirExcecao as excluirExcecaoRepo,
 } from '../repositories/horario-excecao-repository';
+import {
+  buscarFuncionarioPorId,
+  buscarFuncionarioPorUsuarioId,
+} from '../repositories/horario-repository';
 import type { HorarioExcecao } from '../dtos/horario-excecao-dto';
 import type { FuncionarioMin } from '../dtos/horario-dto';
 import { ForbiddenError } from '../errors/ForbiddenError';
@@ -23,11 +25,14 @@ import { ValidationError } from '../errors/ValidationError';
 vi.mock('../repositories/horario-excecao-repository', () => ({
   listarExcecoes: vi.fn(),
   buscarExcecaoPorId: vi.fn(),
-  buscarFuncionarioPorId: vi.fn(),
-  buscarFuncionarioPorUsuarioId: vi.fn(),
   criarExcecao: vi.fn(),
   atualizarExcecao: vi.fn(),
   excluirExcecao: vi.fn(),
+}));
+
+vi.mock('../repositories/horario-repository', () => ({
+  buscarFuncionarioPorId: vi.fn(),
+  buscarFuncionarioPorUsuarioId: vi.fn(),
 }));
 
 const funcionario: FuncionarioMin = {
