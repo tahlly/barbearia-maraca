@@ -1,8 +1,9 @@
 /**
  * Camada de integração de Despesas do módulo financeiro.
  *
- * Agora consome a API real do Backend (PR #76 / feat/modulo-financeiro-comissao):
- * - `GET /api/despesas`      → listagem (filtros opcionais inicio+fim, tipo)
+ * Consome a API real do Backend (PR #76 / feat/modulo-financeiro-comissao):
+ * - `GET /api/despesas`      → listagem paginada (filtros opcionais inicio+fim,
+ *                              tipo; envelope { items, total, page, limit, totalPages })
  * - `POST /api/despesas`     → criação manual (tipo_despesa NUNCA comissao)
  * - `DELETE /api/despesas/:id` → exclusão manual (automatica/comissao é bloqueada)
  * - `GET /api/despesas/resumo` → soma de despesas de um período
@@ -10,6 +11,14 @@
  * Valores monetários vêm do Backend como strings decimais normalizadas
  * ("45.90"); convertidos para `number` na origem do dado, já que o resto do
  * Frontend (formatCurrency) trabalha com number.
+ *
+ * DECISÃO (paginação): o Backend passou a responder `GET /api/despesas` com um
+ * envelope paginado. A tela ainda não tem controles de paginação visual e hoje
+ * lista todas as despesas, então `listarDespesas()` mantém a assinatura
+ * `Promise<Despesa[]>` (sem quebrar quem chama) e internamente pede `limit=100`
+ * (teto máximo do Backend) para preservar o comportamento atual de listar tudo
+ * enquanto não houver paginação visual. Quando a paginação visual for construída,
+ * migramos para o envelope (items/total/page/limit/totalPages) — fora de escopo.
  */
 
 import { apiFetch, httpJson } from "./api.js";
@@ -42,6 +51,11 @@ export interface Despesa {
   recorrente: boolean;
   /** `true` quando gerada automaticamente (comissão) — não pode ser excluída. */
   automatica: boolean;
+  /**
+   * Vínculo com o atendimento que gerou a despesa automática (comissão).
+   * `null` para despesas manuais. Usado pelo link "Ver atendimento".
+   */
+  agendamento_id: string | null;
 }
 
 interface DespesaDTO {
@@ -53,6 +67,7 @@ interface DespesaDTO {
   recorrente: boolean;
   funcionario_id: string | null;
   automatica: boolean;
+  agendamento_id: string | null;
 }
 
 interface DespesaResumoDTO {
@@ -70,6 +85,7 @@ function toDespesa(dto: DespesaDTO): Despesa {
     data: dto.data,
     recorrente: dto.recorrente,
     automatica: dto.automatica,
+    agendamento_id: dto.agendamento_id,
   };
 }
 
@@ -83,10 +99,26 @@ export interface NovaDespesa {
   recorrente: boolean;
 }
 
-/** Lista todas as despesas (o Backend ordena por data, mais recentes primeiro). */
+interface DespesaPaginada {
+  items: DespesaDTO[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+/**
+ * Lista as despesas (o Backend ordena por data, mais recentes primeiro).
+ *
+ * DECISÃO: mantém a assinatura `Promise<Despesa[]>` (quem chama não muda) e
+ * internamente extrai `items` do envelope paginado, pedindo `limit=100` (teto
+ * máximo) para continuar listando tudo enquanto não existir paginação visual.
+ * Ver comentário do módulo. Parâmetros `page`/`limit` ficam para a futura tela
+ * paginada — fora de escopo.
+ */
 export async function listarDespesas(): Promise<Despesa[]> {
-  const dtos = await httpJson<DespesaDTO[]>("/despesas");
-  return dtos.map(toDespesa);
+  const envelope = await httpJson<DespesaPaginada>("/despesas?limit=100");
+  return envelope.items.map(toDespesa);
 }
 
 /** Cria uma despesa manual no Backend e devolve a despesa persistida. */

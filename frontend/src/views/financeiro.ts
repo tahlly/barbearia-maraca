@@ -114,9 +114,17 @@ export function renderFinanceiro(container: HTMLElement): () => void {
                     <td>
                       <span class="cell-actions">
                         ${
-                          d.automatica
-                            ? `<span class="muted-note">Gerada pelo sistema</span>`
-                            : `<button type="button" class="btn btn--sm btn--danger-outline" data-delete-despesa="${escapeHtml(d.id)}">Excluir</button>`
+                          // NOTA FUTURA: o ideal é abrir direto no agendamento específico
+                          // (d.agendamento_id). Hoje o router só casa rotas exatas e o modal de
+                          // detalhe (manage.ts) não é exportado — deep-link por ID exige mexer
+                          // em router.ts/manage.ts, fora de escopo desta tarefa. Usamos o padrão
+                          // atual: link para a tela de Agendamentos. Quando implementado, trocar
+                          // "#/admin/agendamentos" por uma rota parametrizada.
+                          d.automatica && d.agendamento_id
+                            ? `<a class="btn btn--sm btn--ghost btn--ghost-gold" href="#/admin/agendamentos">Ver atendimento</a>`
+                            : d.automatica
+                              ? `<span class="muted-note">Gerada pelo sistema</span>`
+                              : `<button type="button" class="btn btn--sm btn--danger-outline" data-delete-despesa="${escapeHtml(d.id)}">Excluir</button>`
                         }
                       </span>
                     </td>
