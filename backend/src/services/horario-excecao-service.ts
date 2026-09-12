@@ -1,13 +1,15 @@
 import {
   listarExcecoes as listarExcecoesRepo,
   buscarExcecaoPorId,
-  buscarFuncionarioPorId,
-  buscarFuncionarioPorUsuarioId,
   criarExcecao as criarExcecaoRepo,
   atualizarExcecao as atualizarExcecaoRepo,
   excluirExcecao as excluirExcecaoRepo,
   type ListarExcecoesParams,
 } from '../repositories/horario-excecao-repository';
+import {
+  buscarFuncionarioPorId,
+  buscarFuncionarioPorUsuarioId,
+} from '../repositories/horario-repository';
 import type {
   HorarioExcecao,
   CreateHorarioExcecaoInput,
