@@ -36,6 +36,9 @@ function toDTO(row: DespesaRow): DespesaDTO {
     data: row.data instanceof Date ? row.data.toISOString().slice(0, 10) : String(row.data).slice(0, 10),
     recorrente: Boolean(row.recorrente),
     funcionario_id: row.funcionario_id,
+    // ID do agendamento que gerou a despesa (só comissão automática tem).
+    // O Frontend usa para montar o link "Ver atendimento".
+    agendamento_id: row.agendamento_id,
     // Despesa automática = gerada pelo hook de comissão (agendamento_id
     // preenchido). Despesas manuais SEMPRE têm agendamento_id NULL.
     automatica: row.agendamento_id !== null,
@@ -72,13 +75,20 @@ export async function somarDespesasPeriodo(opcoes: {
 }
 
 /**
- * Lista despesas ordenadas por data (mais recentes primeiro).
+ * Lista despesas ordenadas por data (mais recentes primeiro), dentro de uma
+ * página (`limit`/`offset`).
  *
  * Filtros:
  * - `inicio`/`fim`: apenas despesas com `data` no intervalo;
  * - `tipoDespesa`: apenas despesas do tipo informado (opcional).
+ *
+ * O retorno carrega apenas os itens da página atual + o total de itens que
+ * obedecem aos filtros (para o cálculo de `totalPages` na service). O limite
+ * máximo (100) e a página mínima (1) são decisões de aplicação na service.
  */
-export async function listarDespesas(opcoes: ListarDespesasFiltros): Promise<DespesaDTO[]> {
+export async function listarDespesas(
+  opcoes: ListarDespesasFiltros & { page: number; limit: number },
+): Promise<{ items: DespesaDTO[]; total: number }> {
   const query = db<DespesaRow>('despesa');
 
   if (opcoes.inicio !== undefined && opcoes.fim !== undefined) {
@@ -87,6 +97,11 @@ export async function listarDespesas(opcoes: ListarDespesasFiltros): Promise<Des
   if (opcoes.tipoDespesa !== undefined) {
     query.where('tipo_despesa', opcoes.tipoDespesa);
   }
+
+  const totalRow = await query
+    .clone()
+    .count<{ total: string | number }>({ total: '*' })
+    .first();
 
   const rows = await query
     .select(
@@ -102,9 +117,14 @@ export async function listarDespesas(opcoes: ListarDespesasFiltros): Promise<Des
       'updated_at',
     )
     .orderBy('data', 'desc')
-    .orderBy('created_at', 'desc');
+    .orderBy('created_at', 'desc')
+    .limit(opcoes.limit)
+    .offset((opcoes.page - 1) * opcoes.limit);
 
-  return rows.map(toDTO);
+  return {
+    items: rows.map(toDTO),
+    total: Number(totalRow?.total ?? 0),
+  };
 }
 
 /** Busca uma despesa por id (para edição/exclusão). */

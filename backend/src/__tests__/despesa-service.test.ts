@@ -52,6 +52,7 @@ function despesaDto(overrides: Partial<ReturnType<typeof criarDespesaMockReturn>
     data: '2026-09-01',
     recorrente: true,
     funcionario_id: null,
+    agendamento_id: null,
     automatica: false,
     ...overrides,
   };
@@ -67,8 +68,14 @@ function criarDespesaMockReturn() {
     data: '2026-09-01',
     recorrente: true,
     funcionario_id: null,
+    agendamento_id: null,
     automatica: false,
   };
+}
+
+// Retorno padrão da listagem paginada do repositório.
+function listarDespesasMockReturn(items: ReturnType<typeof despesaDto>[] = [despesaDto()]) {
+  return { items, total: items.length };
 }
 
 beforeEach(() => {
@@ -176,8 +183,8 @@ describe('obterResumoDespesas', () => {
 });
 
 describe('listarDespesasDoProjeto', () => {
-  it('lista despesas repassando os filtros de período e tipo', async () => {
-    vi.mocked(listarDespesas).mockResolvedValue([despesaDto()]);
+  it('lista despesas repassando os filtros de período e tipo com paginação padrão', async () => {
+    vi.mocked(listarDespesas).mockResolvedValue(listarDespesasMockReturn());
 
     const resultado = await listarDespesasDoProjeto(usuario('admin'), 'admin', {
       inicio: '2026-01-01',
@@ -189,17 +196,100 @@ describe('listarDespesasDoProjeto', () => {
       inicio: '2026-01-01',
       fim: '2026-12-31',
       tipoDespesa: 'comissao',
+      page: 1,
+      limit: 20,
     });
-    expect(resultado).toHaveLength(1);
-    expect(resultado[0].automatica).toBe(false);
+    expect(resultado).toEqual({
+      items: [despesaDto()],
+      total: 1,
+      page: 1,
+      limit: 20,
+      totalPages: 1,
+    });
+    expect(resultado.items[0].automatica).toBe(false);
+    expect(resultado.items[0].agendamento_id).toBeNull();
   });
 
-  it('lista sem filtros quando nenhum é informado', async () => {
-    vi.mocked(listarDespesas).mockResolvedValue([]);
+  it('lista sem filtros quando nenhum é informado (padrões page 1 / limit 20)', async () => {
+    vi.mocked(listarDespesas).mockResolvedValue(listarDespesasMockReturn([]));
 
-    await listarDespesasDoProjeto(usuario('admin'), 'admin', {});
+    const resultado = await listarDespesasDoProjeto(usuario('admin'), 'admin', {});
 
-    expect(listarDespesas).toHaveBeenCalledWith({});
+    expect(listarDespesas).toHaveBeenCalledWith({ page: 1, limit: 20 });
+    expect(resultado.page).toBe(1);
+    expect(resultado.limit).toBe(20);
+    expect(resultado.totalPages).toBe(0);
+    expect(resultado.items).toHaveLength(0);
+  });
+
+  it('usa page e limit informados e calcula totalPages', async () => {
+    vi.mocked(listarDespesas).mockResolvedValue(
+      listarDespesasMockReturn([despesaDto(), despesaDto({ id: 'd-2' })]),
+    );
+
+    const resultado = await listarDespesasDoProjeto(usuario('admin'), 'admin', {
+      page: 2,
+      limit: 2,
+    });
+
+    expect(listarDespesas).toHaveBeenCalledWith({ page: 2, limit: 2 });
+    expect(resultado.page).toBe(2);
+    expect(resultado.total).toBe(2);
+    expect(resultado.totalPages).toBe(1);
+  });
+
+  it('limita limit acima do teto (100) sem erro', async () => {
+    vi.mocked(listarDespesas).mockResolvedValue(listarDespesasMockReturn());
+
+    await listarDespesasDoProjeto(usuario('admin'), 'admin', { limit: 500 });
+
+    expect(listarDespesas).toHaveBeenCalledWith({ page: 1, limit: 100 });
+  });
+
+  it('página além do total retorna lista vazia sem erro', async () => {
+    vi.mocked(listarDespesas).mockResolvedValue(listarDespesasMockReturn([]));
+
+    const resultado = await listarDespesasDoProjeto(usuario('admin'), 'admin', {
+      page: 99,
+      limit: 20,
+    });
+
+    expect(listarDespesas).toHaveBeenCalledWith({ page: 99, limit: 20 });
+    expect(resultado.items).toHaveLength(0);
+    expect(resultado.page).toBe(99);
+    expect(resultado.total).toBe(0);
+    expect(resultado.totalPages).toBe(0);
+  });
+
+  it('combina filtros com paginação na mesma chamada', async () => {
+    vi.mocked(listarDespesas).mockResolvedValue(
+      listarDespesasMockReturn([despesaDto({ tipo_despesa: 'fixa' })]),
+    );
+
+    const resultado = await listarDespesasDoProjeto(usuario('admin'), 'admin', {
+      inicio: '2026-09-01',
+      fim: '2026-09-30',
+      tipoDespesa: 'fixa',
+      page: 1,
+      limit: 10,
+    });
+
+    expect(listarDespesas).toHaveBeenCalledWith({
+      inicio: '2026-09-01',
+      fim: '2026-09-30',
+      tipoDespesa: 'fixa',
+      page: 1,
+      limit: 10,
+    });
+    expect(resultado.totalPages).toBe(1);
+  });
+
+  it('normaliza page/limit inválidos para os padrões', async () => {
+    vi.mocked(listarDespesas).mockResolvedValue(listarDespesasMockReturn([]));
+
+    await listarDespesasDoProjeto(usuario('admin'), 'admin', { page: 0, limit: -5 });
+
+    expect(listarDespesas).toHaveBeenCalledWith({ page: 1, limit: 20 });
   });
 
   it('exige inicio e fim juntos', async () => {

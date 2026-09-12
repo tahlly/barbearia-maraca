@@ -19,6 +19,8 @@ const resumoSchema = z.object({
 });
 
 // Query da listagem: filtros de período (opcionais, JUNTOS) e tipo opcional.
+// `page`/`limit` NÃO são validados aqui de propósito: valores inválidos caem
+// no padrão dentro da service (decisão da tarefa — usar padrão em vez de 400).
 const listarSchema = z.object({
   inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inicial inválida').optional(),
   fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data final inválida').optional(),
@@ -93,10 +95,18 @@ export async function resumoHandler(req: Request, res: Response): Promise<void> 
 export async function listarDespesasHandler(req: Request, res: Response): Promise<void> {
   const user = exigirUsuario(req);
   const query = listarSchema.parse(req.query);
+
+  // `page`/`limit` chegam como string na query string e são repassados crus:
+  // a service normaliza (padrões 1/20, teto 100, página inválida → padrão).
+  const page = typeof req.query.page === 'string' ? req.query.page : undefined;
+  const limit = typeof req.query.limit === 'string' ? req.query.limit : undefined;
+
   const despesas = await listarDespesasDoProjeto(user.id, user.role, {
     inicio: query.inicio,
     fim: query.fim,
     tipoDespesa: query.tipo_despesa,
+    page,
+    limit,
   });
   res.json(despesas);
 }

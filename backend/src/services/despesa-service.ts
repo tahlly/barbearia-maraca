@@ -1,6 +1,7 @@
 import type {
   CreateDespesaInput,
   DespesaDTO,
+  DespesaPaginadaDTO,
   DespesaResumoDTO,
   ListarDespesasFiltros,
   TipoDespesa,
@@ -63,17 +64,44 @@ export async function obterResumoDespesas(
 }
 
 /**
- * Lista despesas (tabela da tela Financeiro › Despesas).
+ * Padrões e limites de paginação (decisão de API documentada):
+ * - `page` padrão = 1; valores < 1 ou NaN são normalizados para 1;
+ * - `limit` padrão = 20; valores < 1 ou NaN são normalizados para 20;
+ * - `limit` acima do teto (100) é limitado ao teto — nunca 500+ itens.
+ * Não rejeitamos página/limite inválidos com 400: usamos padrão (opção
+ * escolhida e documentada na tarefa). Página acima do total retorna lista
+ * vazia SEM erro (o Frontend apenas deixa de ter mais páginas).
+ */
+const PAGINA_PADRAO = 1;
+const LIMITE_PADRAO = 20;
+const LIMITE_TETO = 100;
+
+function normalizarPagina(page?: number | string): number {
+  const n = Number(page);
+  return Number.isInteger(n) && n >= 1 ? n : PAGINA_PADRAO;
+}
+
+function normalizarLimite(range?: number | string): number {
+  const n = Number(range);
+  if (!Number.isInteger(n) || n < 1) {
+    return LIMITE_PADRAO;
+  }
+  return Math.min(n, LIMITE_TETO);
+}
+
+/**
+ * Lista despesas (tabela da tela Financeiro › Despesas) com paginação.
  *
- * Filtros opcionais: `inicio`/`fim` devem vir JUNTOS (intervalo) e
- * `tipoDespesa` é um valor do enum `tipo_despesa`. Sem filtros, lista
- * todas as despesas (mais recentes primeiro).
+ * Filtros opcionais: `inicio`/`fim` devem vir JUNTOS (intervalo),
+ * `tipoDespesa` é um valor do enum `tipo_despesa`, `page`/`limit` controlam
+ * a página (padrão 1/20, teto 100). Sem filtros, lista todas as despesas
+ * (mais recentes primeiro), respeitando sempre a paginação.
  */
 export async function listarDespesasDoProjeto(
   usuarioId: string,
   role: string,
   filtros: ListarDespesasFiltros,
-): Promise<DespesaDTO[]> {
+): Promise<DespesaPaginadaDTO> {
   await exigirPermissao({ id: usuarioId, role }, 'ver_financeiro');
 
   if (filtros.inicio !== undefined && filtros.fim !== undefined) {
@@ -82,7 +110,24 @@ export async function listarDespesasDoProjeto(
     throw new ValidationError('Informe inicio e fim juntos para filtrar por período');
   }
 
-  return listarDespesas(filtros);
+  const page = normalizarPagina(filtros.page);
+  const limit = normalizarLimite(filtros.limit);
+
+  const { items, total } = await listarDespesas({
+    inicio: filtros.inicio,
+    fim: filtros.fim,
+    tipoDespesa: filtros.tipoDespesa,
+    page,
+    limit,
+  });
+
+  return {
+    items,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
+  };
 }
 
 /** Busca uma despesa por id (para edição/exclusão); lança 404 se ausente. */
