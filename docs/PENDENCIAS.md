@@ -44,21 +44,26 @@ QA.
 
 ## P-002 — OpenAPI gerado (`openapi.json`) não inclui o módulo Financeiro
 
-**Estado:** aberta
+**Estado:** resolvida
 
 **Origem:** revisão de QA da rodada 3.4+3.5 (Regras de Comissão). O gerador
-`backend/swagger.ts` (lista `apis`) não inclui `financeiro-routes.ts` (nem
-`despesa-routes.ts`, `dashboard-routes.ts`, `permissao-routes.ts`) — portanto o
-`openapi.json` produzido por `npm run swagger` não contém nenhuma rota/schema
-do módulo financeiro (3.1–3.5), mesmo com o bloco OpenAPI interno dos arquivos
-correto e validado.
+`backend/swagger.ts` (lista `apis`) não incluía `financeiro-routes.ts` (nem
+`despesa-routes.ts`, `dashboard-routes.ts`) — portanto o `openapi.json`
+produzido por `npm run swagger` não continha nenhuma rota/schema do módulo
+financeiro (3.1–3.5), mesmo com o bloco OpenAPI interno dos arquivos correto e
+validado.
 
-**Impacto:** documentação de API oficial omite Financeiro; não afeta runtime.
+**Resolução (rodada de encerramento 3.1–3.5):**
+- `backend/swagger.ts`: adicionados à lista `apis` os arquivos
+  `dashboard-routes.ts`, `despesa-routes.ts` e `financeiro-routes.ts`.
+- `backend/src/rotas/funcionario-routes.ts`: corrigidos dois `summary` YAML
+  que continham `:` sem aspas (`YAMLSemanticError: Nested mappings are not
+  allowed in compact mappings`), que faziam o swagger-jsdoc descartar parte do
+  input — agora todos os 38 paths entram no catálogo.
+- `backend/openapi.json`: regenerado com `npm run swagger`; 38 paths
+  (31 anteriores + 7 do financeiro), nenhuma rota antiga removida.
+- Validação: rotas `/api/dashboard/graficos`, `/api/despesas*`,
+  `/api/financeiro/resumo` e `/api/financeiro/comissao/*` presentes no
+  catálogo servido em `http://localhost:3000/api/docs`.
 
-**Decisão:** adiar — fora do escopo da rodada de comissão. Ao retomar:
-- adicionar os arquivos de rota do módulo financeiro em `backend/swagger.ts`;
-- corrigir o YAML de `funcionario-routes.ts` (mappings compactos geram
-  `YAMLSemanticError` no swagger-jsdoc), pré-existente;
-- regenerar `backend/openapi.json` e validar o diff.
-
-**Próximo responsável:** Backend (ajuste do `swagger.ts`) → QA.
+**Próximo responsável:** — (fechada)

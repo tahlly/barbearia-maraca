@@ -883,7 +883,8 @@
         "tags": [
           "Funcionarios"
         ],
-        "summary": "Atualiza um funcionario (recepcionista/admin)",
+        "summary": "Atualiza um funcionario (admin: qualquer cargo exceto o proprio; recepcionista: somente barbeiros)",
+        "description": "Regras de permissão:\n- Ninguém pode editar o próprio cadastro pela tela de gestão (bloqueado com 403).\n- Administrador pode editar qualquer funcionário, exceto o próprio.\n- Recepcionista pode editar somente funcionários com cargo `barbeiro`.\n",
         "security": [
           {
             "bearerAuth": []
@@ -934,7 +935,8 @@
         "tags": [
           "Funcionarios"
         ],
-        "summary": "Alterna status ativo/inativo de um funcionario (recepcionista/admin)",
+        "summary": "Alterna status ativo/inativo (admin: qualquer cargo exceto o proprio; recepcionista: somente barbeiros)",
+        "description": "Regras de permissão:\n- Ninguém pode alterar o próprio status (auto-desativação/auto-ativação é bloqueada com 403).\n- Administrador pode alterar o status de qualquer funcionário, exceto o próprio.\n- Recepcionista pode alterar o status somente de funcionários com cargo `barbeiro`.\n",
         "security": [
           {
             "bearerAuth": []
@@ -1343,6 +1345,21 @@
                           }
                         }
                       }
+                    },
+                    "despesaTotal": {
+                      "type": "string",
+                      "example": "57.50",
+                      "description": "Soma das despesas do periodo. SOMENTE para quem possui a permissao ver_financeiro (admin por padrao); caso contrario o campo e omitido."
+                    },
+                    "lucroLiquido": {
+                      "type": "string",
+                      "example": "42.50",
+                      "description": "valorTotal - despesaTotal. SOMENTE para quem possui ver_financeiro; caso contrario o campo e omitido."
+                    },
+                    "margem": {
+                      "type": "string",
+                      "example": "42.50",
+                      "description": "Percentual de lucro sobre o faturamento (lucro / valorTotal * 100). SOMENTE para quem possui ver_financeiro; caso contrario o campo e omitido."
                     }
                   }
                 }
@@ -1734,6 +1751,591 @@
           },
           "400": {
             "$ref": "#/components/responses/Erro400"
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404"
+          }
+        }
+      }
+    },
+    "/api/dashboard/graficos": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Graficos do Dashboard (requer permissao ver_financeiro).",
+        "description": "Acesso restrito a quem possui a permissao efetiva `ver_financeiro` (admin por padrao; overrides no banco contam). Recepcionista sem a permissao recebe 403.\nO período base (`inicio`/`fim`, default ano corrente) rege a Distribuicao por status, os Horarios de pico e os Servicos mais vendidos. O grafico de Agendamentos por dia usa a janela propria `dias` (7 ou 30), terminando em hoje.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "inicio",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Data inicial do periodo base (YYYY-MM-DD); se ausente, primeiro dia do ano corrente."
+          },
+          {
+            "in": "query",
+            "name": "fim",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Data final do periodo base (YYYY-MM-DD); se ausente, ultimo dia do ano corrente."
+          },
+          {
+            "in": "query",
+            "name": "dias",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "enum": [
+                7,
+                30
+              ],
+              "default": 7
+            },
+            "description": "Janela (em dias) do grafico de agendamentos por dia, terminando em hoje."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agrupamentos dos 4 graficos do Dashboard",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardGraficos"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/despesas": {
+      "get": {
+        "tags": [
+          "Despesas"
+        ],
+        "summary": "Lista despesas do periodo (requer permissao ver_financeiro).",
+        "description": "Acesso restrito a quem possui a permissao efetiva `ver_financeiro` (admin por padrao; overrides no banco contam). Recepcionista sem a permissao recebe 403.\nRetorna a tabela da tela Financeiro › Despesas, ordenada por data (mais recentes primeiro). Filtros opcionais: - `inicio`/`fim` devem vir JUNTOS (intervalo de datas); - `tipo_despesa` filtra por categoria.\nDespesas com `automatica: true` (comissao gerada pelo hook) aparecem na listagem para leitura, mas nao podem ser editadas/excluídas aqui.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "inicio",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Data inicial do periodo (YYYY-MM-DD); exige fim junto."
+          },
+          {
+            "in": "query",
+            "name": "fim",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Data final do periodo (YYYY-MM-DD); exige inicio junto."
+          },
+          {
+            "in": "query",
+            "name": "tipo_despesa",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "fixa",
+                "variavel",
+                "comissao",
+                "outro"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de despesas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Despesa"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Despesas"
+        ],
+        "summary": "Cria uma despesa MANUAL (requer permissao ver_financeiro).",
+        "description": "Acesso restrito a `ver_financeiro`.\nREGRA DE PROTECAO: `tipo_despesa` NAO pode ser `comissao`. Despesas de comissao sao geradas EXCLUSIVAMENTE pelo hook automatico de Regras de Comissao (que preenche `agendamento_id` e marca `automatica`). Tentativa de criar comissão manual → 400 com mensagem explicativa.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDespesaRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Despesa criada (automatica sempre false)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Despesa"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/despesas/{id}": {
+      "put": {
+        "tags": [
+          "Despesas"
+        ],
+        "summary": "Edita uma despesa MANUAL existente (requer permissao ver_financeiro).",
+        "description": "Acesso restrito a `ver_financeiro`.\nREGRA DE PROTECAO: NAO permite editar despesa ja marcada como `comissao` (automatica) nem mudar o tipo para `comissao` → 400.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDespesaRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Despesa atualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Despesa"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Despesas"
+        ],
+        "summary": "Exclui uma despesa MANUAL (requer permissao ver_financeiro).",
+        "description": "Acesso restrito a `ver_financeiro`.\nREGRA DE PROTECAO: NAO permite excluir despesa de `comissao` (automatica) — essas so podem ser removidas pelo fluxo que as gerou (Regras de Comissao). → 400.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Despesa excluída"
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404"
+          }
+        }
+      }
+    },
+    "/api/despesas/resumo": {
+      "get": {
+        "tags": [
+          "Despesas"
+        ],
+        "summary": "Soma as despesas de um periodo (requer permissao ver_financeiro).",
+        "description": "Acesso restrito a quem possui a permissao efetiva `ver_financeiro` (admin por padrao; overrides no banco contam). Recepcionista sem a permissao recebe 403. Apenas leitura/soma — CRUD e rodada futura.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "inicio",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Data inicial do periodo (YYYY-MM-DD); se ausente, primeiro dia do ano corrente."
+          },
+          {
+            "in": "query",
+            "name": "fim",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Data final do periodo (YYYY-MM-DD); se ausente, ultimo dia do ano corrente."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Soma das despesas no periodo (string decimal normalizada)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DespesaResumo"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/financeiro/resumo": {
+      "get": {
+        "tags": [
+          "Financeiro"
+        ],
+        "summary": "Resumo financeiro completo da tela Financeiro › Resumo (requer permissao ver_financeiro).",
+        "description": "Acesso restrito a quem possui a permissao efetiva `ver_financeiro` (admin por padrao; overrides no banco contam). Recepcionista sem a permissao recebe 403 — e, mesmo com override, permanece negado porque o bloco reusa o resumo de faturamento (regra existente).\nResposta única com todos os blocos da tela: - `kpis`: Receita, Despesas, Lucro Liquido e Margem do período; - `comparativoMensal`: mesmo período vs. o equivalente anterior\n  (mesma duração em dias, imediatamente antes), com variações em %;\n- `evolucaoMensal`: Receita x Despesa x Lucro, ultimos 12 meses; - `despesasPorCategoria`: soma por tipo (fixa/variavel/comissao/outro),\n  sempre com as 4 categorias (zeros preenchidos);\n- `receitaRealizadaPrevista`: receita concluida (realizada) vs.\n  pendente/confirmado (prevista), por semana de calendario.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "inicio",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Data inicial do periodo (YYYY-MM-DD); se ausente, primeiro dia do ano corrente."
+          },
+          {
+            "in": "query",
+            "name": "fim",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Data final do periodo (YYYY-MM-DD); se ausente, ultimo dia do ano corrente."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resumo financeiro completo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumoFinanceiro"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/financeiro/comissao/configuracao": {
+      "get": {
+        "tags": [
+          "Financeiro"
+        ],
+        "summary": "Interruptor global de comissao (spec 3.4; requer ver_financeiro).",
+        "description": "Acesso restrito a quem possui a permissao efetiva `ver_financeiro`.\nRetorna `{ comissao_ativa }`. Quando a linha singleton ainda nao existe, devolve `false` — nao inventa linha no banco.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado do interruptor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracaoComissao"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Financeiro"
+        ],
+        "summary": "Liga/desliga a comissao global (upsert; requer ver_financeiro).",
+        "description": "Acesso restrito a `ver_financeiro`.\nUpsert na linha singleton `id='global'`. Desligar NUNCA apaga as linhas de `comissao_servico` — elas sao mantidas e param de ser aplicadas (spec 3.4).\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestAtualizarConfiguracaoComissao"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Estado salvo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfiguracaoComissao"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          }
+        }
+      }
+    },
+    "/api/financeiro/comissao/funcionarios/{funcionarioId}": {
+      "get": {
+        "tags": [
+          "Financeiro"
+        ],
+        "summary": "Comissoes por servico de um funcionario (spec 3.5; requer ver_financeiro).",
+        "description": "Acesso restrito a `ver_financeiro`. Lista as linhas de `comissao_servico` do funcionario (com nome do servico), ordenadas por nome do servico.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "funcionarioId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de comissoes do funcionario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComissaoServico"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Erro404"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Financeiro"
+        ],
+        "summary": "Salva as comissoes de um funcionario (REPLACE; requer ver_financeiro).",
+        "description": "Acesso restrito a `ver_financeiro`.\nSubstitui TODAS as linhas de `comissao_servico` do funcionario pelas informadas (lista vazia limpa as linhas). A operacao e atomica (transacao): delete + insert. Valida servicos (existentes e ativos), percentuais (numericos 0..100, max. 2 casas) e rejeita servico duplicado na lista.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "funcionarioId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestSalvarComissoesFuncionario"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Lista salva (com nome do servico)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ComissaoServico"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Erro400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Erro401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Erro403"
           },
           "404": {
             "$ref": "#/components/responses/Erro404"
@@ -2231,6 +2833,14 @@
           "nome": {
             "type": "string"
           },
+          "cargo": {
+            "type": "string",
+            "enum": [
+              "barbeiro",
+              "recepcionista",
+              "administrador"
+            ]
+          },
           "especialidade": {
             "type": "string",
             "nullable": true
@@ -2699,6 +3309,597 @@
           "motivo": {
             "type": "string",
             "nullable": true
+          }
+        }
+      },
+      "DashboardGraficos": {
+        "type": "object",
+        "required": [
+          "inicio",
+          "fim",
+          "distribuicaoStatus",
+          "agendamentosPorDia",
+          "horariosPico",
+          "servicosMaisVendidos"
+        ],
+        "properties": {
+          "inicio": {
+            "type": "string",
+            "format": "date"
+          },
+          "fim": {
+            "type": "string",
+            "format": "date"
+          },
+          "distribuicaoStatus": {
+            "type": "object",
+            "required": [
+              "pendente",
+              "confirmado",
+              "cancelado",
+              "concluido"
+            ],
+            "properties": {
+              "pendente": {
+                "type": "integer",
+                "example": 2
+              },
+              "confirmado": {
+                "type": "integer",
+                "example": 5
+              },
+              "cancelado": {
+                "type": "integer",
+                "example": 1
+              },
+              "concluido": {
+                "type": "integer",
+                "example": 8
+              }
+            },
+            "description": "Contagem BRUTA por status do enum `status_agendamento`; o mapa SEMPRE contém as 4 chaves (status sem agendamento vêm com 0). NÃO agrupa status visualmente (ex.: confirmado + pendente) — a decisão de renderização é do Frontend.\n"
+          },
+          "agendamentosPorDia": {
+            "type": "object",
+            "required": [
+              "inicio",
+              "fim",
+              "dias"
+            ],
+            "properties": {
+              "inicio": {
+                "type": "string",
+                "format": "date"
+              },
+              "fim": {
+                "type": "string",
+                "format": "date"
+              },
+              "dias": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "quantidade"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "string",
+                      "format": "date"
+                    },
+                    "quantidade": {
+                      "type": "integer",
+                      "example": 3
+                    }
+                  }
+                },
+                "description": "Todos os dias da janela, com zero para dias sem agendamento."
+              }
+            }
+          },
+          "horariosPico": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "hora",
+                "quantidade"
+              ],
+              "properties": {
+                "hora": {
+                  "type": "string",
+                  "example": "09:30",
+                  "description": "HH:MM real da coluna hora (time), sem arredondar."
+                },
+                "quantidade": {
+                  "type": "integer",
+                  "example": 4
+                }
+              }
+            }
+          },
+          "servicosMaisVendidos": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "servicoId",
+                "servicoNome",
+                "quantidade"
+              ],
+              "properties": {
+                "servicoId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "servicoNome": {
+                  "type": "string"
+                },
+                "quantidade": {
+                  "type": "integer",
+                  "example": 6
+                }
+              }
+            },
+            "description": "Agendamentos CONCLUÍDOS por serviço, do mais vendido."
+          }
+        }
+      },
+      "Despesa": {
+        "type": "object",
+        "required": [
+          "id",
+          "descricao",
+          "tipo_despesa",
+          "valor",
+          "data",
+          "recorrente",
+          "funcionario_id",
+          "automatica"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "descricao": {
+            "type": "string",
+            "example": "Aluguel"
+          },
+          "tipo_despesa": {
+            "type": "string",
+            "enum": [
+              "fixa",
+              "variavel",
+              "comissao",
+              "outro"
+            ]
+          },
+          "valor": {
+            "type": "string",
+            "example": "45.90"
+          },
+          "data": {
+            "type": "string",
+            "format": "date"
+          },
+          "recorrente": {
+            "type": "boolean",
+            "example": true
+          },
+          "funcionario_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "automatica": {
+            "type": "boolean",
+            "example": false,
+            "description": "true quando a despesa foi gerada pelo hook de comissao (agendamento_id preenchido); despesas manuais sao sempre false."
+          }
+        }
+      },
+      "DespesaResumo": {
+        "type": "object",
+        "required": [
+          "inicio",
+          "fim",
+          "despesaTotal"
+        ],
+        "properties": {
+          "inicio": {
+            "type": "string",
+            "format": "date"
+          },
+          "fim": {
+            "type": "string",
+            "format": "date"
+          },
+          "despesaTotal": {
+            "type": "string",
+            "example": "57.50"
+          }
+        }
+      },
+      "CreateDespesaRequest": {
+        "type": "object",
+        "required": [
+          "descricao",
+          "tipo_despesa",
+          "valor",
+          "data",
+          "recorrente"
+        ],
+        "properties": {
+          "descricao": {
+            "type": "string",
+            "example": "Aluguel"
+          },
+          "tipo_despesa": {
+            "type": "string",
+            "enum": [
+              "fixa",
+              "variavel",
+              "outro"
+            ],
+            "description": "NUNCA comissao: despesas de comissao sao geradas automaticamente pelo sistema (ver descricao do endpoint)."
+          },
+          "valor": {
+            "oneOf": [
+              {
+                "type": "number",
+                "example": 45.9
+              },
+              {
+                "type": "string",
+                "example": "45.90"
+              }
+            ]
+          },
+          "data": {
+            "type": "string",
+            "format": "date"
+          },
+          "recorrente": {
+            "type": "boolean",
+            "example": false
+          },
+          "funcionario_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        }
+      },
+      "UpdateDespesaRequest": {
+        "type": "object",
+        "minProperties": 1,
+        "properties": {
+          "descricao": {
+            "type": "string"
+          },
+          "tipo_despesa": {
+            "type": "string",
+            "enum": [
+              "fixa",
+              "variavel",
+              "outro"
+            ],
+            "description": "NUNCA comissao (ver descricao do endpoint)."
+          },
+          "valor": {
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "data": {
+            "type": "string",
+            "format": "date"
+          },
+          "recorrente": {
+            "type": "boolean"
+          },
+          "funcionario_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        }
+      },
+      "ComparativoMensal": {
+        "type": "object",
+        "required": [
+          "periodoAtual",
+          "periodoAnterior",
+          "variacaoReceitaPercentual",
+          "variacaoDespesaPercentual",
+          "variacaoLucroPercentual",
+          "variacaoMargemPontosPercentuais"
+        ],
+        "properties": {
+          "periodoAtual": {
+            "type": "object",
+            "required": [
+              "inicio",
+              "fim"
+            ],
+            "properties": {
+              "inicio": {
+                "type": "string",
+                "format": "date"
+              },
+              "fim": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          },
+          "periodoAnterior": {
+            "type": "object",
+            "required": [
+              "inicio",
+              "fim"
+            ],
+            "properties": {
+              "inicio": {
+                "type": "string",
+                "format": "date"
+              },
+              "fim": {
+                "type": "string",
+                "format": "date"
+              }
+            }
+          },
+          "variacaoReceitaPercentual": {
+            "type": "string",
+            "nullable": true,
+            "example": "12.50",
+            "description": "Variação RELATIVA da receita em % (null quando o período anterior é zero — sem base de comparação)."
+          },
+          "variacaoDespesaPercentual": {
+            "type": "string",
+            "nullable": true,
+            "example": "-3.20"
+          },
+          "variacaoLucroPercentual": {
+            "type": "string",
+            "nullable": true,
+            "example": "25.00"
+          },
+          "variacaoMargemPontosPercentuais": {
+            "type": "string",
+            "nullable": true,
+            "example": "2.10",
+            "description": "Diferença de margem em PONTOS PERCENTUAIS (margemAtual − margemAnterior). A margem já é percentual; variação relativa distorceria a leitura."
+          }
+        }
+      },
+      "EvolucaoMensal": {
+        "type": "object",
+        "required": [
+          "mes",
+          "receita",
+          "despesa",
+          "lucro"
+        ],
+        "properties": {
+          "mes": {
+            "type": "string",
+            "example": "2026-09"
+          },
+          "receita": {
+            "type": "string",
+            "example": "45.90"
+          },
+          "despesa": {
+            "type": "string",
+            "example": "12.00"
+          },
+          "lucro": {
+            "type": "string",
+            "example": "33.90"
+          }
+        }
+      },
+      "DespesaPorCategoria": {
+        "type": "object",
+        "required": [
+          "tipo_despesa",
+          "valor"
+        ],
+        "properties": {
+          "tipo_despesa": {
+            "type": "string",
+            "enum": [
+              "fixa",
+              "variavel",
+              "comissao",
+              "outro"
+            ]
+          },
+          "valor": {
+            "type": "string",
+            "example": "30.00"
+          }
+        }
+      },
+      "ReceitaRealizadaPrevista": {
+        "type": "object",
+        "required": [
+          "semanaInicio",
+          "realizada",
+          "prevista"
+        ],
+        "properties": {
+          "semanaInicio": {
+            "type": "string",
+            "format": "date",
+            "description": "Segunda-feira da semana (YYYY-MM-DD)."
+          },
+          "realizada": {
+            "type": "string",
+            "example": "45.90"
+          },
+          "prevista": {
+            "type": "string",
+            "example": "100.00"
+          }
+        }
+      },
+      "ResumoFinanceiro": {
+        "type": "object",
+        "required": [
+          "inicio",
+          "fim",
+          "kpis",
+          "comparativoMensal",
+          "evolucaoMensal",
+          "despesasPorCategoria",
+          "receitaRealizadaPrevista"
+        ],
+        "properties": {
+          "inicio": {
+            "type": "string",
+            "format": "date"
+          },
+          "fim": {
+            "type": "string",
+            "format": "date"
+          },
+          "kpis": {
+            "type": "object",
+            "required": [
+              "receita",
+              "despesa",
+              "lucroLiquido",
+              "margem"
+            ],
+            "properties": {
+              "receita": {
+                "type": "string",
+                "example": "200.00"
+              },
+              "despesa": {
+                "type": "string",
+                "example": "57.50"
+              },
+              "lucroLiquido": {
+                "type": "string",
+                "example": "142.50"
+              },
+              "margem": {
+                "type": "string",
+                "example": "71.25"
+              }
+            }
+          },
+          "comparativoMensal": {
+            "$ref": "#/components/schemas/ComparativoMensal"
+          },
+          "evolucaoMensal": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvolucaoMensal"
+            }
+          },
+          "despesasPorCategoria": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DespesaPorCategoria"
+            }
+          },
+          "receitaRealizadaPrevista": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceitaRealizadaPrevista"
+            }
+          }
+        }
+      },
+      "ConfiguracaoComissao": {
+        "type": "object",
+        "required": [
+          "comissao_ativa"
+        ],
+        "properties": {
+          "comissao_ativa": {
+            "type": "boolean",
+            "example": true,
+            "description": "Interruptor global de comissao (spec 3.4)."
+          }
+        }
+      },
+      "RequestAtualizarConfiguracaoComissao": {
+        "type": "object",
+        "required": [
+          "comissao_ativa"
+        ],
+        "properties": {
+          "comissao_ativa": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ComissaoServico": {
+        "type": "object",
+        "required": [
+          "servico_id",
+          "servico_nome",
+          "percentual"
+        ],
+        "properties": {
+          "servico_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "servico_nome": {
+            "type": "string",
+            "example": "Corte"
+          },
+          "percentual": {
+            "type": "string",
+            "example": "40.00",
+            "description": "Percentual 0..100 (string decimal normalizada)."
+          }
+        }
+      },
+      "ItemComissaoServicoRequest": {
+        "type": "object",
+        "required": [
+          "servico_id",
+          "percentual"
+        ],
+        "properties": {
+          "servico_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "percentual": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100,
+            "example": 40
+          }
+        }
+      },
+      "RequestSalvarComissoesFuncionario": {
+        "type": "object",
+        "required": [
+          "comissoes"
+        ],
+        "properties": {
+          "comissoes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemComissaoServicoRequest"
+            }
           }
         }
       }
