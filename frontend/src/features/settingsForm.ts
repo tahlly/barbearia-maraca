@@ -1,6 +1,6 @@
 import { $, escapeHtml, initials } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
-import { getSession, updateSessionAvatar } from "../services/auth.js";
+import { getSession, logout, updateSessionAvatar } from "../services/auth.js";
 import { showToast } from "../ui/toast.js";
 
 /**
@@ -97,6 +97,10 @@ export function renderSettingsForm(
           <button type="submit" class="btn btn--success">Salvar alterações</button>
         </div>
       </form>
+
+      <div class="config-actions config-actions--logout">
+        <button type="button" class="btn btn--danger-outline" data-profile-logout>${icon("logout", 18)} Sair da conta</button>
+      </div>
     </div>
   `;
 
@@ -233,6 +237,16 @@ export function renderSettingsForm(
     };
     form.addEventListener("submit", submit);
     cleanups.push(() => form.removeEventListener("submit", submit));
+  }
+
+  // --- Logout ---
+  const logoutBtn = $<HTMLButtonElement>("[data-profile-logout]", container);
+  if (logoutBtn) {
+    const onLogout = (): void => {
+      logout(); // limpa a sessão e navega para a landing (#/)
+    };
+    logoutBtn.addEventListener("click", onLogout);
+    cleanups.push(() => logoutBtn.removeEventListener("click", onLogout));
   }
 
   return () => {

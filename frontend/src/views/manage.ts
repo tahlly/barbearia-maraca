@@ -277,13 +277,13 @@ export function renderManage(container: HTMLElement): () => void {
         { href: `#${base}/servicos`, label: "Serviços", icon: "scissors" },
         { href: `#${base}/profissionais`, label: "Profissionais", icon: "users" },
         { href: `#${base}/financeiro`, label: "Financeiro", icon: "dollar" },
-        { href: `#${base}/configuracoes`, label: "Configurações", icon: "cog" }
+        { href: `#${base}/configuracoes`, label: "Configurações", icon: "cog" },
       ]
     : [
         { href: `#${base}`, label: "Agendamentos", icon: "calendar" },
         { href: `#${base}/servicos`, label: "Serviços", icon: "scissors" },
         { href: `#${base}/profissionais`, label: "Profissionais", icon: "users" },
-        { href: `#${base}/configuracoes`, label: "Configurações", icon: "cog" }
+        { href: `#${base}/configuracoes`, label: "Configurações", icon: "cog" },
       ];
 
   const { content, cleanup: cleanupPanel } = renderPanel(container, {

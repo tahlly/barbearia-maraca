@@ -113,17 +113,32 @@
                     <input type="text" id="client-create-nome" maxlength="80" placeholder="Nome completo" autocomplete="off" required>
                   </div>
                   <div class="field">
-                    <label class="field__label" for="client-create-email">E-mail *</label>
-                    <input type="email" id="client-create-email" maxlength="100" placeholder="cliente@email.com" autocapitalize="none" spellcheck="false" autocomplete="off" required>
-                  </div>
-                  <div class="field">
                     <label class="field__label" for="client-create-telefone">Telefone</label>
                     <input type="tel" id="client-create-telefone" maxlength="20" placeholder="(91) 99999-0000" autocomplete="off">
                   </div>
                   <div class="field">
+                    <label class="field__label" for="client-create-email">E-mail *</label>
+                    <input type="email" id="client-create-email" maxlength="100" placeholder="cliente@email.com" autocapitalize="none" spellcheck="false" autocomplete="off" required>
+                  </div>
+                  <div class="field">
+                    <label class="field__label" for="client-create-email-confirm">Confirmar e-mail *</label>
+                    <input type="email" id="client-create-email-confirm" maxlength="100" placeholder="Repita o e-mail" autocapitalize="none" spellcheck="false" autocomplete="off" required>
+                  </div>
+                  <div class="field">
                     <label class="field__label" for="client-create-senha">Senha de acesso *</label>
-                    <input type="password" id="client-create-senha" minlength="6" maxlength="100" placeholder="Mínimo de 6 caracteres" autocomplete="off" required>
+                    <div class="input-wrap">
+                      <input type="password" id="client-create-senha" minlength="8" maxlength="100" placeholder="Mínimo de 8 caracteres" autocomplete="off" required>
+                      <button type="button" class="input-suffix" id="toggle-client-create-senha" aria-label="Mostrar senha"></button>
+                    </div>
                     <span class="field__hint">O cliente usará este e-mail e senha para acessar a área do cliente.</span>
+                    <span class="field__hint">Senha deve ter no mínimo 8 caracteres, com letra maiúscula e caractere especial</span>
+                  </div>
+                  <div class="field">
+                    <label class="field__label" for="client-create-senha-confirm">Confirmar senha *</label>
+                    <div class="input-wrap">
+                      <input type="password" id="client-create-senha-confirm" maxlength="100" placeholder="Repita a senha" autocomplete="off" required>
+                      <button type="button" class="input-suffix" id="toggle-client-create-senha-confirm" aria-label="Mostrar senha"></button>
+                    </div>
                   </div>
                 </div>
                 <div class="client-create__actions">

@@ -277,6 +277,13 @@ body.light-theme textarea.input {
   color-scheme: light;
 }
 
+.field__hint {
+  display: block;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
 .input-wrap {
   position: relative;
 }

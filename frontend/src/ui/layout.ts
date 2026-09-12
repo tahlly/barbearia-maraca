@@ -83,9 +83,6 @@ export function renderPanel(container: HTMLElement, options: PanelOptions): Pane
               <small>${escapeHtml(options.roleLabel)}</small>
             </div>
           </div>
-          <button type="button" class="panel__logout" data-panel-logout title="Sair">
-            ${icon("logout", 18)}<span>Sair</span>
-          </button>
         </div>
       </aside>
       <div class="panel__backdrop" data-panel-backdrop></div>
@@ -165,7 +162,7 @@ export function renderPanel(container: HTMLElement, options: PanelOptions): Pane
   window.addEventListener("hashchange", markActive);
   cleanups.push(() => window.removeEventListener("hashchange", markActive));
 
-  // Reatividade do avatar: ao persistir nova foto (settings), atualiza o
+// Reatividade do avatar: ao persistir nova foto (settings), atualiza o
   // avatar da sidebar imediatamente, sem re-render de rota.
   const onSessionUpdated = (): void => {
     const s = getSession();

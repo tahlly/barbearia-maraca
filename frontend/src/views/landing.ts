@@ -1,7 +1,7 @@
 import { $, clearElement, escapeHtml } from "../ui/dom.js";
 import { initBookingWizard, type BookingWizardHandle } from "../features/bookingWizard.js";
 import { loadServices } from "../services/catalog.js";
-import { getSession } from "../services/auth.js";
+import { getSession, redirectForRole } from "../services/auth.js";
 import { navigateTo } from "../router.js";
 import { formatCurrency } from "../ui/format.js";
 import { syncHeroImages } from "../theme.js";
@@ -49,6 +49,13 @@ function renderServicesSection(wizard: BookingWizardHandle): void {
 }
 
 export function renderLanding(container: HTMLElement): () => void {
+  // Usuário autenticado não volta à landing: redireciona para o painel do papel.
+  const session = getSession();
+  if (session) {
+    redirectForRole(session.role);
+    return () => {};
+  }
+
   // Embed oficial do Google Maps (sem API key). Substitui o embed de terceiros
   // que injetava um link oculto de spam no rodapé do mapa.
   const mapaEmbed = `https://www.google.com/maps?q=${encodeURIComponent(

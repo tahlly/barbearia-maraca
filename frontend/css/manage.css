@@ -624,8 +624,34 @@ body.light-theme .manage-toolbar select.input {
   white-space: nowrap;
 }
 
-.actions-cell .btn--danger-outline {
-  white-space: nowrap;
+/* ----- Coluna Ações da agenda compartilhada (Recepção/Admin) -----
+   Os botões .btn--sm ficam empilhados na largura real da célula (coluna Ações
+   ~11%), sem estourá-la em viewports médias/estreitas:
+   - min-width 0 + flex: 1 1 auto: lado a lado quando a coluna permite e, no
+     caso comum (coluna estreita), botões com a mesma largura por linha;
+   - white-space normal permite o texto quebrar dentro do botão (ex.: o
+     label longo "Reverter conclusão");
+   - linhas alinhadas à esquerda, sem quebra torta, e alturas uniformes. */
+#manage-agenda-table .actions-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: flex-start;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+}
+
+#manage-agenda-table .actions-cell .btn--sm {
+  min-width: 0;
+  flex: 1 1 auto;
+  width: auto;
+  padding: 6px 10px;
+  justify-content: center;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .muted-note {
@@ -1106,6 +1132,16 @@ body.light-theme .manage-toolbar select.input {
 
   .manage-search {
     min-width: 100%;
+  }
+}
+
+/* Tabela da agenda compartilhada em telas estreitas: mantém os botões com
+   largura confortável e usa o scroll horizontal já previsto no .table-wrap
+   (mesmo padrão do .table base, min-width 640px + overflow-x auto). Fora do
+   mobile a tabela continua "fit" (ocupando a largura disponível). */
+@media (max-width: 640px) {
+  #manage-agenda-table .table {
+    min-width: 640px;
   }
 }
 
