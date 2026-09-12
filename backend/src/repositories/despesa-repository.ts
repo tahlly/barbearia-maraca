@@ -185,3 +185,53 @@ export async function excluirDespesa(id: string): Promise<boolean> {
   const removidos = await db('despesa').where('id', id).del();
   return removidos > 0;
 }
+
+// ── Agregações do Resumo (seção 3.3) ──────────────────────────────────
+
+interface DespesaPorCategoriaRow {
+  tipo_despesa: TipoDespesa;
+  total: string | number | null;
+}
+
+interface DespesaPorMesRow {
+  mes: string;
+  total: string | number | null;
+}
+
+/**
+ * Soma `valor` das despesas por `tipo_despesa` no período.
+ * Usado pelo gráfico "Despesas por categoria" do Resumo. A service completa
+ * as 4 categorias do enum com zero — aqui retorna apenas as que têm despesa.
+ */
+export async function somarDespesasPorCategoria(opcoes: {
+  inicio: string;
+  fim: string;
+}): Promise<DespesaPorCategoriaRow[]> {
+  const rows = await db('despesa')
+    .select('tipo_despesa')
+    .sum({ total: 'valor' })
+    .whereBetween('data', [opcoes.inicio, opcoes.fim])
+    .groupBy('tipo_despesa')
+    .orderBy('tipo_despesa', 'asc');
+
+  return rows as unknown as DespesaPorCategoriaRow[];
+}
+
+/**
+ * Soma `valor` das despesas agrupado por mês (YYYY-MM).
+ * Base do gráfico de evolução mensal do Resumo (Receita × Despesa × Lucro).
+ */
+export async function somarDespesasPorMes(opcoes: {
+  inicio: string;
+  fim: string;
+}): Promise<DespesaPorMesRow[]> {
+  const exprMes = db.raw("to_char(data, 'YYYY-MM') as mes");
+  const rows = await db('despesa')
+    .select(exprMes)
+    .sum({ total: 'valor' })
+    .whereBetween('data', [opcoes.inicio, opcoes.fim])
+    .groupBy(db.raw("to_char(data, 'YYYY-MM')"))
+    .orderBy(db.raw("to_char(data, 'YYYY-MM')"), 'asc');
+
+  return rows as unknown as DespesaPorMesRow[];
+}

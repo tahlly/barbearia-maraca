@@ -442,3 +442,120 @@ export interface DashboardGraficosDTO {
   /** Agendamentos concluídos por serviço no período base (mais vendidos). */
   servicosMaisVendidos: ServicoMaisVendidoDTO[];
 }
+
+// --- Contratos HTTP do Resumo Financeiro (seção 3.3) ---
+// Endpoint único: `GET /api/financeiro/resumo` — devolve todos os blocos da
+// tela Financeiro › Resumo em uma única resposta (mesmo padrão dos gráficos
+// do Dashboard). Acesso: somente usuários com a permissão efetiva
+// `ver_financeiro` (admin por padrão; overrides no banco contam).
+// Valores monetários SEMPRE como strings decimais normalizadas ("45.90").
+
+/**
+ * Variação entre o período atual e o anterior (comparativo da tela Resumo).
+ *
+ * - Período anterior = mesmo tamanho de janela (em dias) imediatamente anterior
+ *   ao período atual (`inicio`/`fim`).
+ * - `variacaoReceitaPercentual`, `variacaoDespesaPercentual` e
+ *   `variacaoLucroPercentual` são variações RELATIVAS ((atual − anterior) /
+ *   anterior × 100), com 2 casas decimais e sinal. `null` quando o período
+ *   anterior é zero (não há base de comparação).
+ * - `variacaoMargemPontosPercentuais` é a diferença em PONTOS PERCENTUAIS
+ *   (margemAtual − margemAnterior) — comparar margem com variação relativa
+ *   distorceria a leitura (margem é um percentual).
+ */
+export interface ComparativoMensalDTO {
+  /** Período atual (YYYY-MM-DD). */
+  periodoAtual: { inicio: string; fim: string };
+  /** Período anterior equivalente (YYYY-MM-DD). */
+  periodoAnterior: { inicio: string; fim: string };
+  /** Variação relativa da receita, em % (2 casas). Null sem base (anterior = 0). */
+  variacaoReceitaPercentual: string | null;
+  /** Variação relativa das despesas, em % (2 casas). Null sem base. */
+  variacaoDespesaPercentual: string | null;
+  /** Variação relativa do lucro, em % (2 casas). Null sem base. */
+  variacaoLucroPercentual: string | null;
+  /** Diferença de margem em pontos percentuais (2 casas). Constantemente calculável. */
+  variacaoMargemPontosPercentuais: string | null;
+}
+
+/**
+ * Um mês da evolução de Receita × Despesa × Lucro.
+ * Endpoint: `GET /api/financeiro/resumo`.
+ * Janela: últimos 12 meses terminando no mês corrente (janela própria,
+ * independente do filtro `inicio`/`fim` — padrão dos gráficos com janela
+ * própria do Dashboard). Meses sem dados vêm com "0.00".
+ */
+export interface EvolucaoMensalDTO {
+  /** Mês no formato YYYY-MM. */
+  mes: string;
+  /** Receita (agendamentos concluídos) no mês, string decimal ("45.90"). */
+  receita: string;
+  /** Despesas do mês, string decimal ("45.90"). */
+  despesa: string;
+  /** Lucro líquido (receita − despesa), string decimal ("45.90"). */
+  lucro: string;
+}
+
+/**
+ * Despesa somada por categoria em um período.
+ * Endpoint: `GET /api/financeiro/resumo`.
+ * O array SEMPRE contém as 4 categorias do enum `tipo_despesa`
+ * (fixa, variavel, comissao, outro) — categorias sem despesas vêm com "0.00",
+ * para o gráfico não precisar completar lacunas.
+ */
+export interface DespesaPorCategoriaDTO {
+  /** Categoria do enum `tipo_despesa`. */
+  tipo_despesa: TipoDespesa;
+  /** Soma das despesas da categoria no período, string decimal ("45.90"). */
+  valor: string;
+}
+
+/**
+ * Receita realizada vs. prevista em uma semana de calendário.
+ * Endpoint: `GET /api/financeiro/resumo`.
+ * - Realizada = soma do preço dos serviços de agendamentos `concluido`.
+ * - Prevista = soma do preço dos serviços de agendamentos `pendente` ou
+ *   `confirmado` (agendados, ainda não acontecidos).
+ * Agrupamento: por semana de calendário (segunda a domingo), cobrindo todo o
+ * período `inicio`/`fim` (semanas sem dados vêm com "0.00").
+ */
+export interface ReceitaRealizadaPrevistaDTO {
+  /** Data (YYYY-MM-DD) da segunda-feira que inicia a semana. */
+  semanaInicio: string;
+  /** Receita realizada na semana, string decimal ("45.90"). */
+  realizada: string;
+  /** Receita prevista na semana, string decimal ("45.90"). */
+  prevista: string;
+}
+
+/**
+ * Resposta completa da tela Financeiro › Resumo.
+ * Endpoint: `GET /api/financeiro/resumo`.
+ * Acesso: somente usuários com a permissão efetiva `ver_financeiro`
+ * (admin por padrão; overrides no banco contam). Caso contrário → 403.
+ */
+export interface ResumoFinanceiroDTO {
+  /** Data inicial do período base (YYYY-MM-DD; default ano corrente). */
+  inicio: string;
+  /** Data final do período base (YYYY-MM-DD; default ano corrente). */
+  fim: string;
+  /** KPIs do período: Receita, Despesas, Lucro Líquido e Margem. */
+  kpis: {
+    /** Receita (agendamentos concluídos), string decimal ("45.90"). */
+    receita: string;
+    /** Soma das despesas, string decimal ("45.90"). */
+    despesa: string;
+    /** Lucro líquido (receita − despesa), string decimal ("45.90"). */
+    lucroLiquido: string;
+    /** Margem (lucro / receita × 100), string decimal ("45.90"). */
+    margem: string;
+  };
+  /** Comparativo do período atual contra o equivalente anterior. */
+  comparativoMensal: ComparativoMensalDTO;
+  /** Evolução mensal (Receita × Despesa × Lucro), últimos 12 meses. */
+  evolucaoMensal: EvolucaoMensalDTO[];
+  /** Despesas por categoria no período base (4 categorias, zeros preenchidos). */
+  despesasPorCategoria: DespesaPorCategoriaDTO[];
+  /** Receita realizada vs. prevista por semana, no período base. */
+  receitaRealizadaPrevista: ReceitaRealizadaPrevistaDTO[];
+}

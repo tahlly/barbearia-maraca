@@ -236,3 +236,61 @@ export async function buscarHorariosOcupados(
 
   return rows.map((r: { hora: string }) => r.hora);
 }
+
+// ── Agregações financeiras do Resumo (seção 3.3) ─────────────────────
+
+interface ReceitaPorPeriodoRow {
+  periodo: string;
+  valorTotal: string | number | null;
+}
+
+/**
+ * Soma o preço dos serviços de agendamentos com os `status` informados,
+ * agrupado por semana de calendário (segunda-feira, via `date_trunc('week')`).
+ *
+ * Usado pelo bloco "Receita realizada vs. prevista" do Resumo:
+ * - realizada = `['concluido']` (mesma base do `resumirFaturamento`);
+ * - prevista = `['pendente', 'confirmado']` (agendados, ainda não concluídos).
+ * A service completa as semanas sem dados com zero — aqui retorna apenas as
+ * semanas com pelo menos um agendamento.
+ */
+export async function somarReceitaPorSemana(opcoes: {
+  status: AgendamentoStatus[];
+  inicio: string;
+  fim: string;
+}): Promise<ReceitaPorPeriodoRow[]> {
+  const exprSemana = db.raw("to_char(date_trunc('week', a.data), 'YYYY-MM-DD') as periodo");
+  const rows = await db('agendamento as a')
+    .join('servico as s', 's.id', 'a.servico_id')
+    .select(exprSemana)
+    .sum({ valorTotal: 's.preco' })
+    .whereIn('a.status', opcoes.status)
+    .whereBetween('a.data', [opcoes.inicio, opcoes.fim])
+    .groupBy(db.raw("date_trunc('week', a.data)"))
+    .orderBy(db.raw("date_trunc('week', a.data)"), 'asc');
+
+  return rows as unknown as ReceitaPorPeriodoRow[];
+}
+
+/**
+ * Soma o preço dos serviços de agendamentos com os `status` informados,
+ * agrupado por mês (YYYY-MM). Base do gráfico de evolução mensal do Resumo
+ * (Receita × Despesa × Lucro) — chamado com `['concluido']` para a receita.
+ */
+export async function somarReceitaPorMes(opcoes: {
+  status: AgendamentoStatus[];
+  inicio: string;
+  fim: string;
+}): Promise<ReceitaPorPeriodoRow[]> {
+  const exprMes = db.raw("to_char(a.data, 'YYYY-MM') as periodo");
+  const rows = await db('agendamento as a')
+    .join('servico as s', 's.id', 'a.servico_id')
+    .select(exprMes)
+    .sum({ valorTotal: 's.preco' })
+    .whereIn('a.status', opcoes.status)
+    .whereBetween('a.data', [opcoes.inicio, opcoes.fim])
+    .groupBy(db.raw("to_char(a.data, 'YYYY-MM')"))
+    .orderBy(db.raw("to_char(a.data, 'YYYY-MM')"), 'asc');
+
+  return rows as unknown as ReceitaPorPeriodoRow[];
+}
