@@ -83,7 +83,8 @@ export async function criarCliente(data: {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      nome: data.nome,
+      // Nomes cadastrais padronizados em CAIXA ALTA (e-mail e senha preservados).
+      nome: data.nome.trim().toUpperCase(),
       email: data.email,
       telefone: data.telefone?.trim() || undefined,
       senha: data.senha,
@@ -129,7 +130,8 @@ export async function registerCliente(data: {
     body: JSON.stringify({
       email: data.email,
       senha: data.senha,
-      nome: data.nome,
+      // Nome padronizado em CAIXA ALTA; e-mail e senha preservados.
+      nome: data.nome.trim().toUpperCase(),
       telefone: data.telefone,
     }),
   });

@@ -2,14 +2,23 @@ import { renderPanel } from "../ui/layout.js";
 import { requireRole, updateSessionUser } from "../services/auth.js";
 import { $, $$, escapeHtml } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
-import { formatDateMedium } from "../ui/format.js";
-import { loadProfessionals } from "../services/catalog.js";
+import { formatCurrency, formatDateMedium } from "../ui/format.js";
+import { fetchServices, loadProfessionals } from "../services/catalog.js";
 import { listAppointments, cancelAppointment } from "../services/booking.js";
 import { showToast } from "../ui/toast.js";
 import { confirmDialog } from "../ui/modal.js";
 import { initBookingWizard } from "../features/bookingWizard.js";
 import { renderSettingsForm } from "../features/settingsForm.js";
-import type { Appointment, Professional } from "../types.js";
+import { contactSectionHtml } from "../features/contactSection.js";
+import { dependentesDialog } from "../features/dependentesDialog.js";
+import {
+  atualizarDependente,
+  criarDependente,
+  excluirDependente,
+  listarDependentes,
+  PARENTESCO_LABEL,
+} from "../services/dependentesService.js";
+import type { Appointment, Dependente, Professional, Service } from "../types.js";
 
 const STATUS_LABEL: Record<Appointment["status"], string> = {
   confirmado: "Confirmado",
@@ -35,9 +44,12 @@ export function renderMinhaConta(container: HTMLElement): () => void {
 
   const { content, cleanup: cleanupPanel } = renderPanel(container, {
     title: "Minha Conta",
-    roleLabel: "Cliente",
+    roleLabel: "CLIENTE",
     links: [
       { href: "#/minha-conta", label: "Agendamentos", icon: "calendar" },
+      { href: "#/minha-conta/servicos", label: "Serviços Ofertados", icon: "scissors" },
+      { href: "#/minha-conta/contatos", label: "Contatos", icon: "phone" },
+      { href: "#/minha-conta/dependentes", label: "Dependentes", icon: "users" },
       { href: "#/minha-conta/configuracoes", label: "Configurações", icon: "cog" },
     ],
   });
@@ -51,12 +63,15 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     return prosCache.find((p) => p.id === id)?.name ?? "-";
   }
 
-  type ManageTab = "agendamentos" | "configuracoes";
+  type ManageTab = "agendamentos" | "servicos" | "contatos" | "dependentes" | "configuracoes";
 
   const base = "/minha-conta";
 
   function handleTab(tab: ManageTab): void {
     if (tab === "agendamentos") renderAgendamentos();
+    else if (tab === "servicos") renderServicos();
+    else if (tab === "contatos") renderContatos();
+    else if (tab === "dependentes") renderDependentes();
     else renderConfiguracoes();
   }
 
@@ -97,7 +112,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
           <p class="manage-head__sub">Histórico completo das suas reservas</p>
         </div>
         <div class="toolbar">
-          <select class="input" data-status-filter aria-label="Filtrar por status">
+          <select class="input uppercase" data-status-filter aria-label="Filtrar por status">
             <option value="todos">Todos Status</option>
             <option value="pendente">Pendente</option>
             <option value="confirmado">Confirmado</option>
@@ -106,7 +121,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
           </select>
           <div class="manage-search">
             ${icon("search", 16)}
-            <input type="search" data-search-app placeholder="Buscar por serviço..." aria-label="Buscar por serviço">
+            <input type="search" class="uppercase" data-search-app placeholder="Buscar por serviço..." aria-label="Buscar por serviço">
           </div>
         </div>
       </div>
@@ -296,6 +311,251 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     }
   }
 
+  // ---------------------------------------------------- Serviços Disponíveis
+  function renderServicos(): void {
+    content.innerHTML = `
+      <div class="panel__section manage-head">
+        <div class="manage-head__titles">
+          <h3 class="panel__section-title">SERVIÇOS DISPONÍVEIS</h3>
+          <p class="manage-head__sub">Escolha um serviço e agende seu horário</p>
+        </div>
+      </div>
+      <div class="table-wrap" data-servicos-wrap>
+        <p class="panel__empty">Carregando serviços...</p>
+      </div>
+    `;
+
+    const wrap = $<HTMLElement>("[data-servicos-wrap]", content);
+
+    // Área do cliente: sem CRUD. A tabela tem uma única ação por linha —
+    // AGENDAR — que pré-seleciona o serviço e abre o wizard de agendamento
+    // direto na etapa de data/profissional.
+    function buildTable(services: Service[]): string {
+      if (services.length === 0) {
+        return `<p class="panel__empty">Nenhum serviço disponível no momento.</p>`;
+      }
+      return `
+        <table class="table table--fit">
+          <thead>
+            <tr>
+              <th>Nome do Serviço</th>
+              <th>Duração</th>
+              <th>Preço</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${services
+              .map(
+                (s) => `
+                  <tr>
+                    <td><strong>${escapeHtml(s.name)}</strong></td>
+                    <td>${s.durationMin} min</td>
+                    <td>${formatCurrency(s.price)}</td>
+                    <td><span class="cell-actions">
+                      <button type="button" class="btn btn--sm btn--primary" data-book-service="${escapeHtml(s.id)}">${icon("calendar", 14)} Agendar</button>
+                    </span></td>
+                  </tr>`,
+              )
+              .join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    async function load(): Promise<void> {
+      try {
+        const services = await fetchServices();
+        if (wrap) wrap.innerHTML = buildTable(services);
+        bindBookButtons(services);
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.trim() !== ""
+            ? error.message
+            : "Não foi possível carregar os serviços. Tente novamente.";
+        if (wrap) {
+          wrap.innerHTML = `<p class="panel__empty" role="alert">${escapeHtml(message)}</p>`;
+        }
+      }
+    }
+
+    function bindBookButtons(services: Service[]): void {
+      $$("[data-book-service]", content).forEach((btn) => {
+        const id = btn.getAttribute("data-book-service")!;
+        const service = services.find((s) => s.id === id);
+        if (!service) return;
+        const h = (): void => wizard.openForService(id);
+        btn.addEventListener("click", h);
+        cleanups.push(() => btn.removeEventListener("click", h));
+      });
+    }
+
+    void load();
+  }
+
+  // ---------------------------------------------------------------- Contatos
+  // Consome o MESMO componente da Home (contactSectionHtml): mudanças de dados
+  // ou layout refletem automaticamente nas duas telas. O wrapper
+  // .contact-section--panel aplica apenas a cascata de cards responsivos.
+  function renderContatos(): void {
+    content.innerHTML = `
+      <div class="panel__section manage-head">
+        <div class="manage-head__titles">
+          <h3 class="panel__section-title">CONTATOS</h3>
+          <p class="manage-head__sub">Contato, endereço e horários da barbearia</p>
+        </div>
+      </div>
+      <div class="contact-section contact-section--panel">${contactSectionHtml()}</div>
+    `;
+  }
+
+  // -------------------------------------------------------------- Dependentes
+  // Fluxo em MODO MOCK: dados persistidos em localStorage via
+  // dependentesService (assinatura async pronta para a API).
+  function renderDependentes(): void {
+    content.innerHTML = `
+      <div class="panel__section manage-head">
+        <div class="manage-head__titles">
+          <h3 class="panel__section-title">DEPENDENTES</h3>
+          <p class="manage-head__sub">Família e acompanhantes que podem ser atendidos</p>
+        </div>
+        <div class="toolbar">
+          <button type="button" class="btn btn--primary btn--sm" data-add-dependente>${icon("plus", 16)} NOVO DEPENDENTE</button>
+        </div>
+      </div>
+      <div class="panel__section">
+        <div class="table-wrap" data-dependentes-wrap>
+          <p class="panel__empty">Carregando dependentes...</p>
+        </div>
+      </div>
+    `;
+
+    const wrap = $<HTMLElement>("[data-dependentes-wrap]", content);
+    if (!wrap) return;
+
+    function buildTable(dependentes: Dependente[]): string {
+      if (dependentes.length === 0) {
+        return `<p class="panel__empty">Nenhum dependente cadastrado ainda. Use “NOVO DEPENDENTE” para adicionar.</p>`;
+      }
+      return `
+        <table class="table table--fit table--dependentes">
+          <thead>
+            <tr>
+              <th>Nome do dependente</th>
+              <th>Parentesco</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${dependentes
+              .map(
+                (d) => `
+                  <tr>
+                    <td><strong>${escapeHtml(d.nome)}</strong></td>
+                    <td><span class="parentesco-label">${PARENTESCO_LABEL[d.parentesco]}</span></td>
+                    <td><span class="cell-actions">
+                      <button type="button" class="btn btn--sm btn--ghost" data-edit-dependente="${escapeHtml(d.id)}">${icon("edit", 14)} Editar</button>
+                      <button type="button" class="btn btn--sm btn--ghost btn--danger-text" data-delete-dependente="${escapeHtml(d.id)}">${icon("trash", 14)} Excluir</button>
+                    </span></td>
+                  </tr>`,
+              )
+              .join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function bindActions(dependentes: Dependente[]): void {
+      $$("[data-edit-dependente]", wrap!).forEach((btn) => {
+        const id = btn.getAttribute("data-edit-dependente")!;
+        const dependente = dependentes.find((d) => d.id === id);
+        if (!dependente) return;
+        const h = (): void => {
+          void (async () => {
+            const saved = await dependentesDialog({
+              title: "Editar dependente",
+              confirmLabel: "Salvar alterações",
+              dependente,
+              onSubmit: async (input) => {
+                await atualizarDependente(id, input);
+              },
+            });
+            if (saved) {
+              showToast("Dependente atualizado.", "success");
+              renderDependentes();
+            }
+          })();
+        };
+        btn.addEventListener("click", h);
+        cleanups.push(() => btn.removeEventListener("click", h));
+      });
+
+      $$("[data-delete-dependente]", wrap!).forEach((btn) => {
+        const id = btn.getAttribute("data-delete-dependente")!;
+        const dependente = dependentes.find((d) => d.id === id);
+        if (!dependente) return;
+        const h = (): void => {
+          void (async () => {
+            const confirmed = await confirmDialog({
+              title: "Excluir dependente",
+              message: `Excluir “${dependente.nome}”? Essa ação não pode ser desfeita.`,
+              confirmLabel: "Excluir",
+              danger: true,
+            });
+            if (!confirmed) return;
+            try {
+              await excluirDependente(id);
+              showToast("Dependente excluído.", "success");
+              renderDependentes();
+            } catch (error) {
+              showToast(
+                error instanceof Error ? error.message : "Não foi possível excluir.",
+                "error",
+              );
+            }
+          })();
+        };
+        btn.addEventListener("click", h);
+        cleanups.push(() => btn.removeEventListener("click", h));
+      });
+    }
+
+    const addBtn = $<HTMLButtonElement>("[data-add-dependente]", content)!;
+    const addHandler = (): void => {
+      void (async () => {
+        const saved = await dependentesDialog({
+          title: "Novo dependente",
+          confirmLabel: "Salvar dependente",
+          onSubmit: async (input) => {
+            await criarDependente(input);
+          },
+        });
+        if (saved) {
+          showToast("Dependente cadastrado.", "success");
+          renderDependentes();
+        }
+      })();
+    };
+    addBtn.addEventListener("click", addHandler);
+    cleanups.push(() => addBtn.removeEventListener("click", addHandler));
+
+    void (async () => {
+      try {
+        const dependentes = await listarDependentes();
+        if (wrap) wrap.innerHTML = buildTable(dependentes);
+        bindActions(dependentes);
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.trim() !== ""
+            ? error.message
+            : "Não foi possível carregar os dependentes. Tente novamente.";
+        if (wrap) {
+          wrap.innerHTML = `<p class="panel__empty" role="alert">${escapeHtml(message)}</p>`;
+        }
+      }
+    })();
+  }
+
   // ------------------------------------------------------------- Configurações
   function renderConfiguracoes(): void {
     content.innerHTML = `
@@ -324,7 +584,11 @@ export function renderMinhaConta(container: HTMLElement): () => void {
   // ------------------------------------------------------------- Tab routing
   const linkHandler = (): void => {
     const path = window.location.hash.slice(1);
-    if (path === `${base}/configuracoes`) handleTab("configuracoes");
+    // Alias "/cliente/dependentes" (pedido original) redireciona para a mesma aba.
+    if (path === `${base}/servicos` || path === "/cliente/servicos") handleTab("servicos");
+    else if (path === `${base}/contatos` || path === "/cliente/contatos") handleTab("contatos");
+    else if (path === `${base}/dependentes` || path === "/cliente/dependentes") handleTab("dependentes");
+    else if (path === `${base}/configuracoes` || path === "/cliente/configuracoes") handleTab("configuracoes");
     else handleTab("agendamentos");
   };
   linkHandler();

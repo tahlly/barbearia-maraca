@@ -24,6 +24,28 @@ function logoSource(light: boolean): string {
   return light ? "assets/images/logo-maraca-green.png" : "assets/images/logo-maraca.png";
 }
 
+function heroSource(light: boolean): { desktop: string; mobile: string } {
+  return light
+    ? {
+        desktop: "assets/images/desktop-hero-image-white.jpg",
+        mobile: "assets/images/mobile-hero-image-white.jpg",
+      }
+    : {
+        desktop: "assets/images/desktop-hero-image.jpg",
+        mobile: "assets/images/mobile-hero-image.jpg",
+      };
+}
+
+export function syncHeroImages(root: ParentNode = document): void {
+  root.querySelectorAll<HTMLPictureElement>(".hero picture").forEach((picture) => {
+    const { desktop, mobile } = heroSource(isLightTheme());
+    const source = picture.querySelector<HTMLSourceElement>("source");
+    const img = picture.querySelector<HTMLImageElement>("img");
+    if (source) source.srcset = desktop;
+    if (img) img.src = mobile;
+  });
+}
+
 export function syncLogoImages(root: ParentNode = document): void {
   root.querySelectorAll<HTMLImageElement>("[data-logo]").forEach((img) => {
     img.src = logoSource(isLightTheme());
@@ -34,6 +56,7 @@ function applyTheme(light: boolean): void {
   document.body.classList.toggle("light-theme", light);
   syncToggleStates(light);
   syncLogoImages();
+  syncHeroImages();
 }
 
 function saveTheme(light: boolean): void {

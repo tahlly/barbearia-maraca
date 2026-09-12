@@ -51,6 +51,8 @@ const BOXICON_MAP: Record<string, string> = {
   wallet: "bx-wallet",
   "trending-up": "bx-trending-up",
   "trending-down": "bx-trending-down",
+  "pie-chart": "bx-pie-chart-alt",
+  "bar-chart": "bx-bar-chart-alt-2",
 };
 
 export function icon(name: string, size = 20): string {

@@ -31,7 +31,10 @@ export function initials(name: string): string {
   return (first + last).toUpperCase();
 }
 
-export function setFieldError(input: HTMLInputElement, message: string | null): void {
+export function setFieldError(
+  input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+  message: string | null,
+): void {
   const field = input.closest(".field");
   if (!field) return;
   const errorEl = field.querySelector<HTMLElement>(".field__error");

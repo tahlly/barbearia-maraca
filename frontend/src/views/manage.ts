@@ -2,7 +2,7 @@ import { renderPanel } from "../ui/layout.js";
 import { requireRole, updateSessionUser } from "../services/auth.js";
 import { $, $$, clearFormErrors, escapeHtml, initials, setFieldError } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
-import { formatCurrency, formatDateMedium } from "../ui/format.js";
+import { formatCurrency, formatDateMedium, formatDateShort } from "../ui/format.js";
 import {
   loadServices,
   loadProfessionals,
@@ -41,6 +41,7 @@ import { renderSettingsForm } from "../features/settingsForm.js";
 import { initBookingWizard } from "../features/bookingWizard.js";
 import { attachUppercaseMask } from "../ui/mask.js";
 import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
+import { totalDespesasFiltro } from "../services/despesas.js";
 import type { CargoFuncionario, Service, Appointment, Professional, UserRole } from "../types.js";
 
 type ManageTab = "dashboard" | "servicos" | "profissionais" | "agendamentos" | "configuracoes";
@@ -54,6 +55,8 @@ interface DashboardFilter {
   inicio: string;
   fim: string;
   professionalId: string;
+  /** Período do gráfico "Agendamentos por dia": 7 ou 30 dias. */
+  diasGrafico: 7 | 30;
 }
 
 const STATUS_LABEL: Record<Appointment["status"], string> = {
@@ -134,6 +137,120 @@ function serviceTotal(serviceId: string): number {
   return servicesCache.find((s) => s.id === serviceId)?.price ?? 0;
 }
 
+/* ------------------------------------------------------------- Gráficos -- */
+
+/** Gera as datas ISO (YYYY-MM-DD) dos últimos `n` dias, do mais antigo a hoje. */
+function lastNDaysIso(n: number): string[] {
+  const out: string[] = [];
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    out.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+    );
+  }
+  return out;
+}
+
+/** Conta agendamentos por data, respeitando a lista de dias fornecida. */
+function countAppointmentsByDay(list: Appointment[], days: string[]): number[] {
+  const map = new Map<string, number>();
+  for (const a of list) map.set(a.data, (map.get(a.data) ?? 0) + 1);
+  return days.map((d) => map.get(d) ?? 0);
+}
+
+/** Horários com mais agendamentos (top `max`), desempatando por horário. */
+function peakHours(list: Appointment[], max = 6): Array<{ hora: string; total: number }> {
+  const map = new Map<string, number>();
+  for (const a of list) map.set(a.hora, (map.get(a.hora) ?? 0) + 1);
+  return [...map.entries()]
+    .map(([hora, total]) => ({ hora, total }))
+    .sort((x, y) => y.total - x.total || x.hora.localeCompare(y.hora))
+    .slice(0, max);
+}
+
+/** Donut SVG de distribuição por status (circunferência do círculo = 100). */
+function statusDonutHTML(counts: Record<Appointment["status"], number>): string {
+  const total = counts.pendente + counts.concluido + counts.cancelado;
+  if (total === 0) {
+    return `<p class="panel__empty chart-card__empty">Sem agendamentos nesse recorte.</p>`;
+  }
+  const R = 15.91549430918953; // raio com circunferência ≈ 100
+  const order: Appointment["status"][] = ["pendente", "concluido", "cancelado"];
+  let acc = 0;
+  const circles = order
+    .filter((s) => counts[s] > 0)
+    .map((s) => {
+      const pct = (counts[s] / total) * 100;
+      const circle = `<circle class="donut__segment donut__segment--${s}" cx="21" cy="21" r="${R}" stroke-dasharray="${pct} ${100 - pct}" stroke-dashoffset="${-acc}"></circle>`;
+      acc += pct;
+      return circle;
+    })
+    .join("");
+  const legend = order
+    .map(
+      (s) => `
+        <li class="donut__legend-item">
+          <span class="donut__legend-dot donut__legend-dot--${s}"></span>
+          <span class="donut__legend-label--${s}">${STATUS_LABEL[s]}</span>
+          <strong class="donut__legend-value">${counts[s]}</strong>
+        </li>`,
+    )
+    .join("");
+  return `
+    <svg class="donut" viewBox="0 0 42 42" role="img" aria-label="Distribuição de agendamentos por status">
+      <g transform="rotate(-90 21 21)">${circles}</g>
+    </svg>
+    <ul class="donut__legend">${legend}</ul>
+  `;
+}
+
+/** Barras verticais (ex.: agendamentos por dia, horários de pico). */
+function barChartHTML(
+  items: Array<{ label: string; value: string; amount: number }>,
+  ariaLabel: string,
+): string {
+  const max = Math.max(...items.map((i) => i.amount), 1);
+  return `
+    <div class="bar-chart" role="img" aria-label="${escapeHtml(ariaLabel)}">
+      ${items
+        .map(
+          (i) => `
+        <div class="bar-chart__item">
+          <span class="bar-chart__value">${escapeHtml(i.value)}</span>
+          <span class="bar-chart__track"><span class="bar-chart__bar" style="--bar: ${i.amount / max}"></span></span>
+          <span class="bar-chart__label">${escapeHtml(i.label)}</span>
+        </div>`,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+/** Barras horizontais (ex.: serviços mais vendidos, largura total). */
+function hbarChartHTML(
+  items: Array<{ label: string; value: string; amount: number }>,
+  ariaLabel: string,
+): string {
+  const max = Math.max(...items.map((i) => i.amount), 1);
+  return `
+    <div class="hbar-chart" role="img" aria-label="${escapeHtml(ariaLabel)}">
+      ${items
+        .map(
+          (i) => `
+        <div class="hbar-chart__item">
+          <span class="hbar-chart__name">${escapeHtml(i.label)}</span>
+          <span class="hbar-chart__track"><span class="hbar-chart__bar" style="--bar: ${i.amount / max}"></span></span>
+          <strong class="hbar-chart__count">${escapeHtml(i.value)}</strong>
+        </div>`,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 /**
  * Infere o cargo de um funcionário a partir do rótulo visual (`role`).
  * Usado como fallback quando `Professional.cargo` não está disponível.
@@ -159,6 +276,7 @@ export function renderManage(container: HTMLElement): () => void {
         { href: `#${base}/agendamentos`, label: "Agendamentos", icon: "calendar" },
         { href: `#${base}/servicos`, label: "Serviços", icon: "scissors" },
         { href: `#${base}/profissionais`, label: "Profissionais", icon: "users" },
+        { href: `#${base}/financeiro`, label: "Financeiro", icon: "dollar" },
         { href: `#${base}/configuracoes`, label: "Configurações", icon: "cog" },
       ]
     : [
@@ -170,7 +288,7 @@ export function renderManage(container: HTMLElement): () => void {
 
   const { content, cleanup: cleanupPanel } = renderPanel(container, {
     title: isAdmin ? "Administração" : "Recepção",
-    roleLabel: isAdmin ? "Administrador" : "Recepcionista",
+    roleLabel: isAdmin ? "ADMINISTRADOR" : "RECEPCIONISTA",
     links,
   });
 
@@ -189,6 +307,7 @@ export function renderManage(container: HTMLElement): () => void {
     inicio: "",
     fim: "",
     professionalId: "todos",
+    diasGrafico: 7,
   };
 
   function handleTab(tab: ManageTab): void {
@@ -224,47 +343,49 @@ export function renderManage(container: HTMLElement): () => void {
 
     content.innerHTML = `
       <div class="panel__section dashboard-filter">
-        <div class="dashboard-filter__row">
-          <div class="field">
+        <div class="dashboard-filter__grid">
+          <div class="dashboard-filter__col">
             <label class="field__label" for="dashboard-mode">Período</label>
-            <select class="input" id="dashboard-mode" aria-label="Tipo de filtro">
+            <select class="input uppercase" id="dashboard-mode" aria-label="Tipo de filtro">
               <option value="todos" ${state.mode === "todos" ? "selected" : ""}>Todos os registros</option>
               <option value="ano" ${state.mode === "ano" ? "selected" : ""}>Por ano</option>
               <option value="mes" ${state.mode === "mes" ? "selected" : ""}>Por mês de um ano</option>
               <option value="periodo" ${state.mode === "periodo" ? "selected" : ""}>Por período</option>
             </select>
+            <div class="dashboard-filter__subfields">
+              <div class="field" id="dashboard-ano-wrap" ${state.mode === "ano" || state.mode === "mes" ? "" : "hidden"}>
+                <label class="field__label" for="dashboard-ano">Ano</label>
+                <select class="input uppercase" id="dashboard-ano" aria-label="Selecionar ano">
+                  ${years
+                    .map(
+                      (y) =>
+                        `<option value="${y}" ${y === state.ano ? "selected" : ""}>${y}</option>`,
+                    )
+                    .join("")}
+                </select>
+              </div>
+              <div class="field" id="dashboard-mes-wrap" ${state.mode === "mes" ? "" : "hidden"}>
+                <label class="field__label" for="dashboard-mes">Mês</label>
+                <select class="input uppercase" id="dashboard-mes" aria-label="Selecionar mês">
+                  ${MONTHS.map(
+                    (name, i) =>
+                      `<option value="${i + 1}" ${i + 1 === state.mes ? "selected" : ""}>${name}</option>`,
+                  ).join("")}
+                </select>
+              </div>
+              <div class="field" id="dashboard-periodo-wrap" ${state.mode === "periodo" ? "" : "hidden"}>
+                <label class="field__label" for="dashboard-inicio">De</label>
+                <input type="date" class="input" id="dashboard-inicio" value="${state.inicio}">
+              </div>
+              <div class="field" id="dashboard-fim-wrap" ${state.mode === "periodo" ? "" : "hidden"}>
+                <label class="field__label" for="dashboard-fim">Até</label>
+                <input type="date" class="input" id="dashboard-fim" value="${state.fim}">
+              </div>
+            </div>
           </div>
-          <div class="field" id="dashboard-ano-wrap" ${state.mode === "ano" || state.mode === "mes" ? "" : "hidden"}>
-            <label class="field__label" for="dashboard-ano">Ano</label>
-            <select class="input" id="dashboard-ano" aria-label="Selecionar ano">
-              ${years
-                .map(
-                  (y) =>
-                    `<option value="${y}" ${y === state.ano ? "selected" : ""}>${y}</option>`,
-                )
-                .join("")}
-            </select>
-          </div>
-          <div class="field" id="dashboard-mes-wrap" ${state.mode === "mes" ? "" : "hidden"}>
-            <label class="field__label" for="dashboard-mes">Mês</label>
-            <select class="input" id="dashboard-mes" aria-label="Selecionar mês">
-              ${MONTHS.map(
-                (name, i) =>
-                  `<option value="${i + 1}" ${i + 1 === state.mes ? "selected" : ""}>${name}</option>`,
-              ).join("")}
-            </select>
-          </div>
-          <div class="field" id="dashboard-periodo-wrap" ${state.mode === "periodo" ? "" : "hidden"}>
-            <label class="field__label" for="dashboard-inicio">De</label>
-            <input type="date" class="input" id="dashboard-inicio" value="${state.inicio}">
-          </div>
-          <div class="field" id="dashboard-fim-wrap" ${state.mode === "periodo" ? "" : "hidden"}>
-            <label class="field__label" for="dashboard-fim">Até</label>
-            <input type="date" class="input" id="dashboard-fim" value="${state.fim}">
-          </div>
-          <div class="field">
+          <div class="dashboard-filter__col">
             <label class="field__label" for="dashboard-profissional">Profissional</label>
-            <select class="input" id="dashboard-profissional" aria-label="Filtrar por profissional">
+            <select class="input uppercase" id="dashboard-profissional" aria-label="Filtrar por profissional">
               <option value="todos" ${state.professionalId === "todos" ? "selected" : ""}>Todos os profissionais</option>
               ${prosCache
                 .map(
@@ -358,6 +479,21 @@ export function renderManage(container: HTMLElement): () => void {
     cleanups.push(() => inicioInput?.removeEventListener("change", inicioHandler));
     cleanups.push(() => fimInput?.removeEventListener("change", fimHandler));
     cleanups.push(() => profissionalSelect?.removeEventListener("change", profissionalHandler));
+
+    // Toggle 7/30 dias do gráfico "Agendamentos por dia".
+    // Delegação no `content` (persistente) porque `#dashboard-metrics` é
+    // re-renderizado a cada mudança de filtro.
+    const diasHandler = (ev: Event): void => {
+      const btn = (ev.target as HTMLElement | null)?.closest<HTMLElement>("[data-dias]");
+      if (!btn) return;
+      const value = Number(btn.dataset.dias);
+      if (value === 7 || value === 30) {
+        state.diasGrafico = value;
+        refresh();
+      }
+    };
+    content.addEventListener("click", diasHandler);
+    cleanups.push(() => content.removeEventListener("click", diasHandler));
   }
 
   function matchesFilter(a: Appointment): boolean {
@@ -422,30 +558,108 @@ export function renderManage(container: HTMLElement): () => void {
       destaqueConcluidos = count;
     }
 
+    // Caixas financeiras (Linha 3 do wireframe): 4 colunas iguais.
+    // Faturamento é o valor já existente; Despesas soma o período filtrado;
+    // Lucro Líquido = Faturamento - Despesas; Margem = (Lucro / Faturamento) * 100.
+    // PENDÊNCIA: a regra de comissão citada no wireframe não está definida no
+    // sistema (sem taxa/origem aprovada); o cálculo atual não desconta comissão.
+    const despesasTotal = totalDespesasFiltro(state);
+    const lucroLiquido = financial ? financial.revenue - despesasTotal : 0;
+    const margemPercent =
+      financial && financial.revenue > 0 ? (lucroLiquido / financial.revenue) * 100 : null;
+
+    const lucroCls =
+      financial === null
+        ? ""
+        : lucroLiquido >= 0
+          ? "kpi-card--lucro-positivo"
+          : "kpi-card--lucro-negativo";
+    const lucroValueCls =
+      financial === null
+        ? ""
+        : lucroLiquido >= 0
+          ? "kpi-card__value--success"
+          : "kpi-card__value--danger";
+
+    // Linha 5: gráficos — distribuição por status (donut, usa `counts`),
+    // agendamentos por dia (últimos 7 ou 30 dias) e horários de pico.
+    const daySeries = lastNDaysIso(state.diasGrafico);
+    const byDay = countAppointmentsByDay(filtered, daySeries);
+    const peak = peakHours(filtered);
+    const daysBars = daySeries.map((d, i) => ({
+      label: formatDateShort(d),
+      value: String(byDay[i] ?? 0),
+      amount: byDay[i] ?? 0,
+    }));
+    const peakBars = peak.map((p) => ({
+      label: p.hora.slice(0, 5),
+      value: String(p.total),
+      amount: p.total,
+    }));
+    // Linha 6: serviços mais vendidos como barras horizontais (largura total).
+    const topBars = (financial?.top ?? []).map(([id, count]) => ({
+      label: serviceName(id),
+      value: `${count}×`,
+      amount: count,
+    }));
+    const hasAny = filtered.length > 0;
+
     return `
       <div class="kpi-grid">
         <div class="kpi-card"><span class="kpi-card__label">${icon("calendar", 16)} Total</span><span class="kpi-card__value">${filtered.length}</span></div>
-        <div class="kpi-card"><span class="kpi-card__label">${icon("check-circle", 16)} Confirmados</span><span class="kpi-card__value kpi-card__value--success">${counts.confirmado}</span></div>
+        <div class="kpi-card"><span class="kpi-card__label">${icon("check-circle", 16)} Concluídos</span><span class="kpi-card__value kpi-card__value--success">${counts.concluido}</span></div>
         <div class="kpi-card"><span class="kpi-card__label">${icon("clock", 16)} Pendentes</span><span class="kpi-card__value kpi-card__value--gold">${counts.pendente}</span></div>
         <div class="kpi-card"><span class="kpi-card__label">${icon("x", 16)} Cancelados</span><span class="kpi-card__value kpi-card__value--danger">${counts.cancelado}</span></div>
-        ${financial ? `<div class="kpi-card"><span class="kpi-card__label">${icon("dollar", 16)} Faturamento</span><span class="kpi-card__value kpi-card__value--gold">${formatCurrency(financial.revenue)}</span></div>` : ""}
+      </div>
+      ${financial ? `
+      <div class="fin-grid">
+        <div class="kpi-card">
+          <span class="kpi-card__label">${icon("dollar", 16)} Faturamento</span>
+          <span class="kpi-card__value kpi-card__value--gold">${formatCurrency(financial.revenue)}</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-card__label">${icon("trending-down", 16)} Despesas</span>
+          <span class="kpi-card__value">${formatCurrency(despesasTotal)}</span>
+        </div>
+        <div class="kpi-card kpi-card--lucro ${lucroCls}">
+          <span class="kpi-card__label">${icon("wallet", 16)} Lucro Líquido</span>
+          <span class="kpi-card__value ${lucroValueCls}">${formatCurrency(lucroLiquido)}</span>
+        </div>
+        <div class="kpi-card">
+          <span class="kpi-card__label">${icon("trending-up", 16)} Margem</span>
+          <span class="kpi-card__value">${margemPercent === null ? "—" : `${margemPercent.toFixed(1).replace(".", ",")}%`}</span>
+        </div>
+      </div>` : ""}
+      <div class="kpi-grid kpi-grid--destaque">
         <div class="kpi-card kpi-card--destaque">
           <span class="kpi-card__label">${icon("star", 16)} Profissional destaque do mês</span>
           ${destaque ? destaqueCardHTML(destaque, destaqueConcluidos) : `<p class="panel__empty kpi-card__empty">${concluidos === 0 ? "Sem atendimentos concluídos nesse recorte." : "Nenhum profissional encontrado."}</p>`}
         </div>
       </div>
-      ${financial ? `
-      <div class="panel__section">
-        <h3 class="panel__section-title">Serviços mais vendidos</h3>
-        <div class="card">
-          ${financial.top.length === 0 ? `<p class="panel__empty">Ainda não há dados suficientes.</p>` : ""}
-          ${financial.top
-            .map(
-              ([id, count]) =>
-                `<div class="top-service"><span>${escapeHtml(serviceName(id))}</span><strong>${count}×</strong></div>`,
-            )
-            .join("")}
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3 class="chart-card__title">${icon("pie-chart", 16)} Distribuição por status</h3>
+          ${statusDonutHTML(counts)}
         </div>
+        <div class="chart-card">
+          <div class="chart-card__head">
+            <h3 class="chart-card__title">${icon("bar-chart", 16)} Agendamentos por dia</h3>
+            <div class="chart-toggle" role="group" aria-label="Período do gráfico de agendamentos por dia">
+              <button type="button" class="chart-toggle__btn ${state.diasGrafico === 7 ? "is-active" : ""}" data-dias="7">7 dias</button>
+              <button type="button" class="chart-toggle__btn ${state.diasGrafico === 30 ? "is-active" : ""}" data-dias="30">30 dias</button>
+            </div>
+          </div>
+          ${hasAny ? barChartHTML(daysBars, "Agendamentos por dia nos últimos " + state.diasGrafico + " dias") : `<p class="panel__empty chart-card__empty">Sem agendamentos nesse recorte.</p>`}
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-card__title">${icon("clock", 16)} Horários de pico</h3>
+          ${hasAny ? barChartHTML(peakBars, "Horários com mais agendamentos") : `<p class="panel__empty chart-card__empty">Sem agendamentos nesse recorte.</p>`}
+        </div>
+      </div>
+      ${financial ? `
+      <div class="chart-card chart-card--full">
+        <h3 class="chart-card__title">${icon("scissors", 16)} Serviços mais vendidos</h3>
+        ${topBars.length === 0 ? `<p class="panel__empty">Ainda não há dados suficientes.</p>` : hbarChartHTML(topBars, "Serviços mais vendidos")}
       </div>` : ""}
     `;
   }
@@ -535,9 +749,9 @@ export function renderManage(container: HTMLElement): () => void {
       <div class="manage-toolbar">
         <div class="manage-search">
           ${icon("search", 16)}
-          <input type="search" data-search-app placeholder="Buscar cliente..." aria-label="Buscar cliente">
+          <input type="search" class="uppercase" data-search-app placeholder="Buscar cliente..." aria-label="Buscar cliente">
         </div>
-        <select class="input" data-status-filter aria-label="Filtrar por status">
+        <select class="input uppercase" data-status-filter aria-label="Filtrar por status">
           <option value="todos">Todos os status</option>
           <option value="confirmado">Confirmados</option>
           <option value="pendente">Pendentes</option>
@@ -665,6 +879,29 @@ export function renderManage(container: HTMLElement): () => void {
       cleanups.push(() => btn.removeEventListener("click", h));
     });
 
+    // Ação REAGENDAR: busca o agendamento atual e abre o wizard no fluxo de
+    // reagendamento (edição de data, hora, serviço e profissional).
+    $$("[data-reagendar-app]", content).forEach((btn) => {
+      const id = btn.getAttribute("data-id")!;
+      const h = (): void => {
+        void (async () => {
+          try {
+            const appts = await listAppointments();
+            const app = appts.find((a) => a.id === id) ?? null;
+            if (!app) {
+              showToast("Agendamento não encontrado.", "error");
+              return;
+            }
+            await wizard.openForReschedule(app);
+          } catch (error) {
+            showToast(errorMessage(error, "Não foi possível carregar o agendamento para reagendar."), "error");
+          }
+        })();
+      };
+      btn.addEventListener("click", h);
+      cleanups.push(() => btn.removeEventListener("click", h));
+    });
+
     $$("[data-cancel-app]", content).forEach((btn) => {
       const id = btn.getAttribute("data-id")!;
       const h = (): void => {
@@ -763,7 +1000,7 @@ if (status === "cancelado") {
       return `<p class="panel__empty">Nenhum agendamento encontrado.</p>`;
     }
     return `
-      <table class="table table--fit">
+      <table class="table table--fit table--agenda">
         <thead>
           <tr>
             <th>Cliente</th>
@@ -784,16 +1021,18 @@ if (status === "cancelado") {
               if (a.status === "pendente") {
                 actions = `<span class="actions-cell">
                   <button type="button" class="btn btn--sm btn--success" data-confirm-app data-id="${escapeHtml(a.id)}">CONFIRMAR</button>
+                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-reagendar-app data-id="${escapeHtml(a.id)}">REAGENDAR</button>
                   <button type="button" class="btn btn--sm btn--danger-outline" data-cancel-app data-id="${escapeHtml(a.id)}">Cancelar</button>
                 </span>`;
               } else if (a.status === "confirmado") {
                 actions = `<span class="actions-cell">
                   <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-conclude-app data-id="${escapeHtml(a.id)}">CONCLUIR</button>
+                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-reagendar-app data-id="${escapeHtml(a.id)}">REAGENDAR</button>
                   <button type="button" class="btn btn--sm btn--danger-outline" data-cancel-app data-id="${escapeHtml(a.id)}">Cancelar</button>
                 </span>`;
               } else if (a.status === "concluido") {
                 actions = `<span class="actions-cell">
-                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-revert-app data-id="${escapeHtml(a.id)}">Reverter conclusão</button>
+                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-revert-app data-id="${escapeHtml(a.id)}">REVERTER</button>
                 </span>`;
               } else {
                 actions = `<span class="actions-cell"><span class="muted-note">Sem ações</span></span>`;
@@ -1165,12 +1404,12 @@ if (status === "cancelado") {
         <form class="modal__body" id="svc-form" novalidate>
           <div class="field">
             <label class="field__label" for="svc-name">Nome *</label>
-            <input type="text" id="svc-name" value="${escapeHtml(service?.name ?? "")}" maxlength="60" placeholder="CORTE DE CABELO" required>
+            <input type="text" id="svc-name" class="uppercase" value="${escapeHtml(service?.name ?? "")}" maxlength="60" placeholder="CORTE DE CABELO" required>
             <span class="field__error">Informe o nome.</span>
           </div>
           <div class="field">
             <label class="field__label" for="svc-desc">Descrição</label>
-            <textarea id="svc-desc" rows="3" maxlength="200" placeholder="Descreva o serviço (opcional)">${escapeHtml(service?.description ?? "")}</textarea>
+            <textarea id="svc-desc" class="uppercase" rows="3" maxlength="200" placeholder="Descreva o serviço (opcional)">${escapeHtml(service?.description ?? "")}</textarea>
           </div>
           <div class="form-grid">
             <div class="field">
@@ -1418,10 +1657,10 @@ if (status === "cancelado") {
 
     const roleOptions = isAdmin
       ? `
-        <option value="barbeiro" ${cargoAtual === "barbeiro" ? "selected" : ""}>Barbeiro</option>
-        <option value="recepcionista" ${cargoAtual === "recepcionista" ? "selected" : ""}>Recepcionista</option>
-        <option value="administrador" ${cargoAtual === "administrador" ? "selected" : ""}>Administrador</option>`
-      : `<option value="barbeiro" selected>Barbeiro</option>`;
+        <option value="barbeiro" ${cargoAtual === "barbeiro" ? "selected" : ""}>BARBEIRO</option>
+        <option value="recepcionista" ${cargoAtual === "recepcionista" ? "selected" : ""}>RECEPCIONISTA</option>
+        <option value="administrador" ${cargoAtual === "administrador" ? "selected" : ""}>ADMINISTRADOR</option>`
+      : `<option value="barbeiro" selected>BARBEIRO</option>`;
 
     // RBAC-F3: categorias visíveis somente para barbeiro.
     const showCategories = cargoAtual === "barbeiro";
@@ -1442,19 +1681,19 @@ if (status === "cancelado") {
         <form class="modal__body" id="pro-form" novalidate>
           <div class="field">
             <label class="field__label" for="pro-name">Nome completo *</label>
-            <input type="text" id="pro-name" value="${escapeHtml(pro?.name ?? "")}" maxlength="80" required>
+            <input type="text" id="pro-name" class="uppercase" value="${escapeHtml(pro?.name ?? "")}" maxlength="80" required>
             <span class="field__error">Informe o nome.</span>
           </div>
           <div class="form-grid">
             <div class="field">
               <label class="field__label" for="pro-role">Cargo / Função *</label>
-              <select id="pro-role">
+              <select id="pro-role" class="uppercase">
                 ${roleOptions}
               </select>
             </div>
             <div class="field">
               <label class="field__label" for="pro-especialidade">Especialidade</label>
-              <input type="text" id="pro-especialidade" value="" maxlength="40" placeholder="Ex.: Corte e barba">
+              <input type="text" id="pro-especialidade" class="uppercase" value="" maxlength="40" placeholder="Ex.: Corte e barba">
             </div>
           </div>
           <fieldset class="field" id="pro-categorias-wrap" ${showCategories ? "" : "hidden"}>
@@ -1696,13 +1935,13 @@ if (status === "cancelado") {
       return;
     }
 
-    // A ordem das colunas vem do catálogo; os rótulos usam a descrição do
-    // catálogo com fallback para PERMISSOES_LABELS (e a própria chave como
-    // último recurso, caso o backend venha a adicionar chaves novas).
+    // A ordem das colunas vem do catálogo; os rótulos das chaves conhecidas
+    // usam PERMISSOES_LABELS (texto canônico do cabeçalho aprovado). Chaves
+    // novas do backend caem para a descrição do catálogo e, por fim, a chave.
     const chaves =
       catalogo.length > 0 ? catalogo.map((c) => c.chave) : Object.keys(PERMISSOES_LABELS);
     const rotulo = (chave: string): string =>
-      catalogo.find((c) => c.chave === chave)?.descricao ?? PERMISSOES_LABELS[chave] ?? chave;
+      PERMISSOES_LABELS[chave] ?? catalogo.find((c) => c.chave === chave)?.descricao ?? chave;
     const cargoLabel = (cargo: string): string => {
       if (cargo === "administrador") return "Administrador";
       if (cargo === "recepcionista") return "Recepcionista";

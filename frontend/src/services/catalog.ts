@@ -86,10 +86,10 @@ function mapProfissional(dto: FuncionarioPublicoDTO): Professional {
     role:
       dto.especialidade ??
       (dto.cargo === "recepcionista"
-        ? "Recepcionista"
+        ? "RECEPCIONISTA"
         : dto.cargo === "administrador"
-          ? "Administrador"
-          : "Barbeiro"),
+          ? "ADMINISTRADOR"
+          : "BARBEIRO"),
     categories: dto.categorias ?? [],
     active: true,
     photo: dto.foto ?? undefined,
@@ -164,7 +164,8 @@ export async function createServico(data: {
   const dto = await httpJson<ServicoAdminDTO>("/servicos", {
     method: "POST",
     body: JSON.stringify({
-      nome: data.name,
+      // Nome do serviço padronizado em CAIXA ALTA (descrição preservada).
+      nome: data.name.trim().toUpperCase(),
       descricao: data.description || null,
       duracao_minutos: data.durationMin,
       preco: data.price,
@@ -186,13 +187,14 @@ export async function updateServico(
   const dto = await httpJson<ServicoAdminDTO>(
     `/servicos/${encodeURIComponent(id)}`,
     {
-      method: "PUT",
-      body: JSON.stringify({
-        nome: data.name,
-        descricao: data.description || null,
-        duracao_minutos: data.durationMin,
-        preco: data.price,
-      }),
+method: "PUT",
+    body: JSON.stringify({
+      // Nome do serviço padronizado em CAIXA ALTA (descrição preservada).
+      nome: data.name.trim().toUpperCase(),
+      descricao: data.description || null,
+      duracao_minutos: data.durationMin,
+      preco: data.price,
+    }),
     },
   );
   await fetchServices();

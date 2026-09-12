@@ -1,4 +1,4 @@
-import { getSession } from "../services/auth.js";
+import { SESSION_UPDATED_EVENT, getSession, logout } from "../services/auth.js";
 import { $, escapeHtml, initials } from "./dom.js";
 import { bindThemeToggles, syncLogoImages } from "../theme.js";
 import { icon } from "./icons.js";
@@ -22,18 +22,31 @@ export interface PanelHandle {
 
 function roleLabel(role: string): string {
   const map: Record<string, string> = {
-    admin: "Administrador",
-    recepcionista: "Recepcionista",
-    profissional: "Profissional",
-    cliente: "Cliente",
+    admin: "ADMINISTRADOR",
+    recepcionista: "RECEPCIONISTA",
+    profissional: "PROFISSIONAL",
+    cliente: "CLIENTE",
   };
-  return map[role] ?? "Usuário";
+  return map[role] ?? "USUÁRIO";
+}
+
+/** Foto de perfil: fonte canônica é a session.avatarUrl; legado como fallback. */
+function userAvatarUrl(session: ReturnType<typeof getSession>): string | null {
+  const legacy = sessionStorage.getItem("maraca.profilePhoto");
+  return session?.avatarUrl ?? legacy;
+}
+
+function avatarHtml(session: ReturnType<typeof getSession>): string {
+  const avatarUrl = userAvatarUrl(session);
+  if (avatarUrl) {
+    return `<span class="avatar avatar--sm avatar--photo" style="background-image:url('${escapeHtml(avatarUrl)}')"></span>`;
+  }
+  return `<span class="avatar avatar--sm">${initials(session?.userName ?? "Usuário")}</span>`;
 }
 
 export function renderPanel(container: HTMLElement, options: PanelOptions): PanelHandle {
   const session = getSession();
   const user = session?.userName ?? "Usuário";
-  const initialsText = initials(user);
 
   const COLLAPSE_KEY = "maraca.panel.collapsed";
   const isCollapsed = localStorage.getItem(COLLAPSE_KEY) === "1";
@@ -64,7 +77,7 @@ export function renderPanel(container: HTMLElement, options: PanelOptions): Pane
         </nav>
         <div class="panel__footer">
           <div class="panel__user" title="${escapeHtml(user)}">
-            <span class="avatar avatar--sm">${initialsText}</span>
+            ${avatarHtml(session)}
             <div class="panel__user-meta">
               <strong>${escapeHtml(user)}</strong>
               <small>${escapeHtml(options.roleLabel)}</small>
@@ -148,6 +161,34 @@ export function renderPanel(container: HTMLElement, options: PanelOptions): Pane
   markActive();
   window.addEventListener("hashchange", markActive);
   cleanups.push(() => window.removeEventListener("hashchange", markActive));
+
+// Reatividade do avatar: ao persistir nova foto (settings), atualiza o
+  // avatar da sidebar imediatamente, sem re-render de rota.
+  const onSessionUpdated = (): void => {
+    const s = getSession();
+    const el = $<HTMLElement>(".panel__user .avatar", container);
+    if (!el) return;
+    const photo = userAvatarUrl(s);
+    el.classList.toggle("avatar--photo", Boolean(photo));
+    if (photo) {
+      el.style.backgroundImage = `url("${photo}")`;
+      el.textContent = "";
+    } else {
+      el.style.backgroundImage = "";
+      el.textContent = initials(s?.userName ?? "Usuário");
+    }
+  };
+  window.addEventListener(SESSION_UPDATED_EVENT, onSessionUpdated);
+  cleanups.push(() => window.removeEventListener(SESSION_UPDATED_EVENT, onSessionUpdated));
+
+  const logoutBtn = $<HTMLButtonElement>("[data-panel-logout]", container);
+  if (logoutBtn) {
+    const handler = (): void => {
+      logout();
+    };
+    logoutBtn.addEventListener("click", handler);
+    cleanups.push(() => logoutBtn.removeEventListener("click", handler));
+  }
 
   const cleanup = (): void => {
     document.body.classList.remove("panel-mode");

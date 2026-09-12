@@ -1,24 +1,47 @@
 /* ===== Painel compartilhado (Admin + Recepcionista) ===== */
 
+/* ----- Linha 1: filtros do dashboard (Período | Profissional) ----- */
 .dashboard-filter {
   margin-bottom: var(--space-3);
 }
 
-.dashboard-filter__row {
+.dashboard-filter__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.dashboard-filter__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.dashboard-filter__subfields {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-  align-items: flex-end;
 }
 
-.dashboard-filter__row .field {
+.dashboard-filter__subfields .field {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
 }
 
-.dashboard-filter__row .field input[type="date"] {
+.dashboard-filter__subfields .field input[type="date"] {
   min-width: 0;
+}
+
+/* Campos de filtro (Período | Profissional): a coluna do filtro é flex
+   column e os selects/inputs são filhos diretos (sem wrapper .field); a
+   regra global `.input` de components.css fornece o tema dark. Aqui fica
+   apenas a largura total para preencher a coluna corretamente. */
+.dashboard-filter__col select.input,
+.dashboard-filter__col input.input {
+  width: 100%;
 }
 
 /* ----- Card destaque do mês no dashboard ----- */
@@ -27,6 +50,338 @@
   flex-direction: column;
   gap: var(--space-3);
   min-height: 110px;
+}
+
+/* ----- Caixas financeiras (Linha 3) -----
+   Lucro Líquido ganha destaque visual maior conforme o wireframe:
+   verde/dourado quando positivo, vermelho quando negativo. */
+.kpi-card--lucro .kpi-card__value {
+  font-size: 2.3rem;
+}
+
+.kpi-card--lucro-positivo {
+  border-color: var(--color-gold-border);
+  background-color: var(--color-gold-soft);
+}
+
+.kpi-card--lucro-negativo {
+  border-color: var(--color-danger);
+  background-color: var(--color-danger-soft);
+}
+
+/* ----- Gráficos do dashboard (Linhas 5 e 6) ----- */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.chart-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.chart-card--full {
+  width: 100%;
+  margin-top: var(--space-5);
+}
+
+.chart-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Título dos cards de gráfico padronizado com `.kpi-card__label` das caixas
+   topo: caixa alta, cor cinza, tamanho reduzido e peso semibold. */
+.chart-card__title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.chart-card__title .bx {
+  color: var(--color-gold);
+}
+
+.chart-card__empty {
+  font-size: 0.85rem;
+}
+
+/* Toggle 7/30 dias do gráfico "Agendamentos por dia" */
+.chart-toggle {
+  display: inline-flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.chart-toggle__btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.chart-toggle__btn:hover {
+  color: var(--color-text);
+}
+
+.chart-toggle__btn.is-active {
+  background-color: var(--color-gold-soft);
+  color: var(--color-gold);
+}
+
+/* Donut de distribuição por status */
+.donut {
+  align-self: center;
+  width: 180px;
+  height: 180px;
+  max-width: 100%;
+}
+
+.donut__segment {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: butt;
+}
+
+.donut__segment--confirmado {
+  stroke: var(--color-success);
+}
+
+.donut__segment--pendente {
+  stroke: var(--color-gold);
+}
+
+.donut__segment--concluido {
+  stroke: var(--color-success);
+}
+
+.donut__segment--cancelado {
+  stroke: var(--color-danger);
+}
+
+.donut__legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+}
+
+.donut__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  min-width: 0;
+}
+
+.donut__legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.donut__legend-dot--confirmado {
+  background-color: var(--color-success);
+}
+
+.donut__legend-dot--pendente {
+  background-color: var(--color-gold);
+}
+
+.donut__legend-dot--concluido {
+  background-color: var(--color-success);
+}
+
+.donut__legend-dot--cancelado {
+  background-color: var(--color-danger);
+}
+
+.donut__legend-label--confirmado {
+  color: var(--color-success-text);
+}
+
+.donut__legend-label--pendente {
+  color: var(--color-gold);
+}
+
+.donut__legend-label--concluido {
+  color: var(--color-success-text);
+}
+
+.donut__legend-label--cancelado {
+  color: var(--color-danger-text);
+}
+
+.donut__legend-value {
+  margin-left: auto;
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+/* Barras verticais (agendamentos por dia, horários de pico) */
+.bar-chart {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  height: 180px;
+  padding-top: var(--space-3);
+  /* Reserva espaço inferior para os rótulos do eixo X ficarem 100% visíveis */
+  padding-bottom: var(--space-1);
+}
+
+.bar-chart__item {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.bar-chart__value {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: var(--color-text-muted);
+}
+
+.bar-chart__track {
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  /* flex ocupa o espaço restante da coluna (valor + rótulo reservados),
+     em vez de height:100% que empurrava o rótulo para fora do container */
+  flex: 1 1 0;
+  min-height: 6px;
+  background-color: var(--color-border);
+  border-radius: 4px 4px 0 0;
+  /* overflow:hidden é apenas para o preenchimento (__bar); os rótulos do
+     eixo ficam FORA da track (siblings do item), nunca são cortados aqui */
+  overflow: hidden;
+}
+
+.bar-chart__bar {
+  display: block;
+  width: 100%;
+  height: calc(var(--bar) * 100%);
+  background-color: var(--color-gold);
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+  transition: height var(--transition-base);
+}
+
+.bar-chart__label {
+  font-size: 0.62rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Barras horizontais (serviços mais vendidos — largura total) */
+.hbar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.hbar-chart__item {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) 1fr 48px;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.hbar-chart__name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hbar-chart__track {
+  display: block;
+  height: 12px;
+  background-color: var(--color-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.hbar-chart__bar {
+  display: block;
+  height: 100%;
+  width: calc(var(--bar) * 100%);
+  background-color: var(--color-gold);
+  border-radius: var(--radius-full);
+  transition: width var(--transition-base);
+}
+
+.hbar-chart__count {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--color-gold);
+  text-align: right;
+}
+
+@media (max-width: 992px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hbar-chart__item {
+    grid-template-columns: minmax(110px, 180px) 1fr 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chart-card--full,
+  .charts-grid {
+    margin-top: var(--space-4);
+  }
+
+  .donut {
+    width: 150px;
+    height: 150px;
+  }
+
+  .hbar-chart__item {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+
+  .hbar-chart__count {
+    text-align: left;
+  }
 }
 
 .kpi-card--destaque .avatar--lg {
@@ -65,6 +420,127 @@
 
 .kpi-card__empty {
   font-size: 0.85rem;
+}
+
+/* ----- Dashboard compacto (Desktop ≥ 1024px) ----------------------------
+   Em lg+ o dashboard deve caber no viewport (shell 100vh) sem rolagem
+   vertical em monitores padrão. Compactação deliberada e escopada:
+   - respiro uniforme: padding interno dos cards em p-3 (12px) e gaps de
+     grid/linhas em gap-3 (12px);
+   - alturas de gráficos e avatar do destaque reduzidas para o respiro maior
+     caber sem rolagem;
+   - tipografia de valor ligeiramente reduzida apenas no dashboard (1.4rem /
+     1.7rem no lucro) para garantir o encaixe sem perder hierarquia.
+   O container já é o .panel (100vh) com .panel__content flex:1; mantém-se
+   overflow-y:auto como fallback para janelas muito baixas — não aplicamos
+   overflow:hidden forçado que poderia cortar conteúdo inacessível. */
+@media (min-width: 1024px) {
+  /* Container principal do Dashboard: respiro uniforme entre linhas (gap-3).
+     Padding vertical reduzido (p-2) para o respiro maior caber no viewport;
+     margens laterais seguem p-4 para preservar o alinhamento do painel. */
+  .panel__content:has(.kpi-grid) {
+    padding: var(--space-2) var(--space-4);
+    gap: var(--space-3);
+  }
+
+  /* O dashboard renderiza dentro de um wrapper (2º filho, sem classe):
+     vira coluna flex com gap explícito entre as linhas (gap-3). */
+  .panel__content:has(.kpi-grid) > div:last-child {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  /* Gaps entre cards de todas as linhas (gap-3 uniforme) */
+  .kpi-grid,
+  .fin-grid,
+  .charts-grid {
+    gap: var(--space-3);
+  }
+
+  /* Espaço entre seções passa a ser apenas o gap do wrapper/flex (12px) */
+  .dashboard-filter {
+    margin-bottom: 0;
+  }
+
+  .fin-grid,
+  .kpi-grid--destaque,
+  .charts-grid,
+  .chart-card--full {
+    margin-top: 0;
+  }
+
+  /* Padding interno uniforme dos cards: p-3 (12px em todos os lados) */
+  .kpi-card,
+  .chart-card {
+    padding: var(--space-3);
+    gap: var(--space-2);
+  }
+
+  /* Valores dos KPIs levemente menores só no dashboard (equilíbrio com o
+     respiro maior) — mantém hierarquia entre os textos do card. */
+  .kpi-card__value {
+    font-size: 1.4rem;
+  }
+
+  .kpi-card--lucro .kpi-card__value {
+    font-size: 1.7rem;
+  }
+
+  /* Destaque do mês: mesmo respiro dos demais cards (p-3 via .kpi-card),
+     avatar compacto para acompanhar a proporção das outras linhas. */
+  .kpi-card--destaque {
+    gap: var(--space-1);
+    min-height: 0;
+  }
+
+  .kpi-card--destaque .avatar--lg {
+    width: 40px;
+    height: 40px;
+    font-size: 0.95rem;
+  }
+
+  /* Gráficos: alturas reduzidas para o respiro maior caber no viewport */
+  .donut {
+    width: 64px;
+    height: 64px;
+  }
+
+  .donut__legend {
+    gap: var(--space-1);
+    font-size: 0.68rem;
+    line-height: 1.25;
+  }
+
+  .bar-chart {
+    height: 88px;
+    padding-top: var(--space-2);
+    padding-bottom: var(--space-1);
+    gap: var(--space-2);
+  }
+
+  .hbar-chart {
+    gap: var(--space-1);
+  }
+
+  .hbar-chart__track {
+    height: 7px;
+  }
+
+  /* Filtros do dashboard: compactados (gap menor entre rótulo e campo) */
+  .dashboard-filter__col {
+    gap: var(--space-1);
+  }
+
+  .dashboard-filter__subfields {
+    gap: var(--space-2);
+  }
+
+  /* Estados vazios do dashboard: padding compacto para não estourar o
+     orçamento de altura do viewport quando não há dados no recorte. */
+  .panel__content:has(.kpi-grid) .panel__empty {
+    padding: var(--space-3);
+  }
 }
 
 .manage-head {
@@ -440,14 +916,37 @@ body.light-theme .manage-toolbar select.input {
   padding-bottom: 8px;
 }
 
+/* Rodapé de ações da tela de Configurações: flex-col no mobile (botões
+   empilhados ocupando 100% da largura, sem vazar as bordas do card) e
+   linha à direita em sm+ (640px+), equivalente a "flex-col sm:flex-row
+   gap-2 w-full". */
 .config-actions {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-3);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  width: 100%;
   margin-top: 0;
   padding-top: var(--space-2);
   border-top: 1px solid var(--color-border);
+}
+
+.config-actions .btn {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (min-width: 640px) {
+  .config-actions {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    width: auto;
+  }
+
+  .config-actions .btn {
+    width: auto;
+  }
 }
 
 /* ----- Lista de usuários (superusuário) ----- */
@@ -619,6 +1118,10 @@ body.light-theme .manage-toolbar select.input {
 }
 
 @media (max-width: 768px) {
+  .dashboard-filter__grid {
+    grid-template-columns: 1fr;
+  }
+
   .pro-grid {
     grid-template-columns: 1fr;
   }
@@ -646,22 +1149,28 @@ body.light-theme .manage-toolbar select.input {
    Escopado por :has([data-perm-switch]), atributo exclusivo do modal de
    permissões da view manage. Não altera .modal--lg genérico (Agenda), nem o
    .table global, .table--fit ou .table--conta (Agenda/Conta ficam intactos).
-   A tabela tem 7 colunas (Funcionário + 6 permissões); aqui ela usa
-   table-layout fixed e min-width: 0 para caber no corpo do modal sem gerar
-   scrollbar horizontal no .table-wrap. Em telas menores, o overlay (padding)
-   + width:100% do modal já respeitam a viewport; o overflow-x do .table-wrap
-   permanece intacto. */
+   A tabela tem 7 colunas (Funcionário + 6 permissões). Cabeçalhos e switches
+   centralizados; cada coluna de permissão tem largura mínima confortável
+   (120px, faixa solicitada 120–140) e a tabela usa table-layout auto. Para a
+   matriz caber sem scroll em telas comuns, o modal fica um pouco maior
+   (max-width 1120px) e o respiro horizontal das colunas de permissão é
+   reduzido (14px), encurtando o gap entre os switches — abaixo do necessário
+   o .table-wrap (overflow-x: auto) rola na horizontal.
+   Quebra de texto apenas entre palavras inteiras: hyphens:none +
+   overflow-wrap:normal + word-break:normal — nunca no meio de letras
+   (ex.: "ADMINISTR-ADORES" ou "FINANCEIR-OS"). */
 .modal:has([data-perm-switch]) {
-  max-width: 900px;
+  max-width: 1120px;
 }
 
 .modal:has([data-perm-switch]) .modal__body {
-  padding: var(--space-5);
+  padding: var(--space-4);
 }
 
 .modal:has([data-perm-switch]) .table {
-  table-layout: fixed;
+  table-layout: auto;
   min-width: 0;
+  width: 100%;
 }
 
 .modal:has([data-perm-switch]) .table th,
@@ -670,24 +1179,30 @@ body.light-theme .manage-toolbar select.input {
 }
 
 /* 1ª coluna (Funcionário): nome/e-mail/badge, alinhada à esquerda, com wrap
-   normal e largura maior (~27%); e-mail/nome quebram sem estourar a célula. */
+   normal e largura fixa confortável; e-mail/nome quebram entre palavras. */
 .modal:has([data-perm-switch]) .table th:nth-child(1),
 .modal:has([data-perm-switch]) .table td:nth-child(1) {
-  width: 27%;
+  width: 200px;
+  min-width: 200px;
   white-space: normal;
-  overflow-wrap: break-word;
+  overflow-wrap: normal;
   word-break: normal;
+  hyphens: none;
   text-align: left;
 }
 
-/* Colunas de permissão (2..7): cabeçalhos quebram em linhas curtas, switches
-   centralizados e larguras iguais dividindo os ~73% restantes (6 colunas). */
+/* Colunas de permissão (2..7): cabeçalhos quebram entre palavras, switches
+   centralizados, largura mínima de 120px cada (faixa solicitada 120–140px) e
+   padding horizontal reduzido (12px) para encurtar o gap entre os toggles e
+   a matriz caber em viewports de 1024px sem scroll. */
 .modal:has([data-perm-switch]) .table th:nth-child(n + 2),
 .modal:has([data-perm-switch]) .table td:nth-child(n + 2) {
-  width: calc(73% / 6);
+  min-width: 120px;
+  padding: var(--space-3) 12px;
   white-space: normal;
-  overflow-wrap: break-word;
+  overflow-wrap: normal;
   word-break: normal;
+  hyphens: none;
   text-align: center;
 }
 
@@ -697,4 +1212,67 @@ body.light-theme .manage-toolbar select.input {
   font-size: 0.6rem;
   letter-spacing: 0.08em;
   line-height: 1.35;
+}
+
+/* ── Tabela de Agendamentos: coluna/container de ações ─────────────────────
+   Escopado em .table--agenda. Os botões de ação ficam empilhados (flex-col),
+   com largura uniforme (100% do container + min-width fixo) e texto
+   centralizado — palavras maiores como "REAGENDAR" ou "CONFIRMAR" não
+   provocam botões com tamanhos desiguais. */
+.table--agenda .cell-actions,
+.table--agenda .actions-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  width: 100%;
+  white-space: normal;
+}
+
+.table--agenda .cell-actions .btn--sm,
+.table--agenda .actions-cell .btn--sm {
+  width: 100%;
+  min-width: 110px;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ── Tabela de Agendamentos: scroll horizontal responsivo ──────────────────
+   Escopado em .table--agenda (apenas a lista de agendamentos do painel
+   admin/recepção). O wrapper .table-wrap já rola horizontalmente
+   (overflow-x: auto); aqui a tabela assume largura mínima de 700px e
+   table-layout auto (mesmo comportamento da .table de Despesas), evitando
+   que as colunas sejam espremidas em viewports menores — o conteúdo rola
+   dentro do wrapper em vez de quebrar. */
+.table--agenda {
+  min-width: 700px;
+  table-layout: auto;
+}
+
+/* Células em linha única (nowrap) sem quebra de palavra: nomes, datas e
+   badges permanecem em uma linha contínua em todos os viewports. */
+.table--agenda th,
+.table--agenda td {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+/* Colunas Status (5ª) e Ações (6ª) com mais respiro para a badge e o botão
+   REVERTER. Larguras são sugestão semântica (table-layout auto), não
+   precisam fechar 100%. Vale em todos os viewports: a tabela mantém linhas
+   e colunas e rola horizontalmente dentro do .table-wrap no mobile. */
+.table--agenda th:nth-child(5),
+.table--agenda td:nth-child(5) {
+  width: 14%;
+  padding-left: var(--space-3);
+  padding-right: var(--space-2);
+}
+
+.table--agenda th:nth-child(6),
+.table--agenda td:nth-child(6) {
+  width: 16%;
+  padding-left: var(--space-2);
+  padding-right: var(--space-3);
 }

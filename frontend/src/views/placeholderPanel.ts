@@ -7,7 +7,7 @@ const CONFIG_ROLES: Record<string, { allowed: UserRole[]; title: string; label: 
   profissional: {
     allowed: ["profissional"],
     title: "Minha Agenda",
-    label: "Profissional",
+    label: "PROFISSIONAL",
     text: "Esta área está em construção. Em breve o profissional poderá gerenciar sua própria agenda e atendimentos.",
     links: [
       { href: "#/profissional", label: "Minha agenda", icon: "calendar" },
@@ -17,7 +17,7 @@ const CONFIG_ROLES: Record<string, { allowed: UserRole[]; title: string; label: 
   recepcionista: {
     allowed: ["recepcionista"],
     title: "Painel da Recepcionista",
-    label: "Recepcionista",
+    label: "RECEPCIONISTA",
     text: "Esta área está em construção. Em breve a recepcionista poderá gerenciar agendamentos, clientes e profissionais.",
     links: [
       { href: "#/recepcionista/agendamentos", label: "Agendamentos", icon: "calendar" },

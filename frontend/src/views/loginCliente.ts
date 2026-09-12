@@ -123,7 +123,7 @@ export function renderLoginCliente(container: HTMLElement): () => void {
         <form id="client-register-form" novalidate>
           <div class="field">
             <label class="field__label" for="client-register-name">Nome completo</label>
-            <input type="text" id="client-register-name" name="name" placeholder="digite seu nome completo" autocomplete="name" maxlength="80" required>
+            <input type="text" id="client-register-name" name="name" class="uppercase" placeholder="digite seu nome completo" autocomplete="name" maxlength="80" required>
             <span class="field__error">Informe seu nome completo.</span>
           </div>
           <div class="field">
@@ -133,7 +133,7 @@ export function renderLoginCliente(container: HTMLElement): () => void {
           </div>
           <div class="field">
             <label class="field__label" for="client-register-phone">Whatsapp</label>
-            <input type="tel" id="client-register-phone" name="phone" placeholder="(99) 99999-9999" autocomplete="tel" inputmode="numeric" maxlength="15" required>
+            <input type="tel" id="client-register-phone" name="phone" class="uppercase" placeholder="(99) 99999-9999" autocomplete="tel" inputmode="numeric" maxlength="15" required>
             <span class="field__error">Informe um WhatsApp válido com DDD.</span>
           </div>
           <div class="field" id="client-register-password-field">

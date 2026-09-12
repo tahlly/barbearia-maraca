@@ -1,5 +1,5 @@
 import { CONFIG } from "../config.js";
-import type { Appointment, BookingDraft, Professional } from "../types.js";
+import type { Appointment, BookingDraft, Dependente, Professional } from "../types.js";
 import { fetchBarbeiros, loadProfessionals, loadServices } from "../services/catalog.js";
 import { createAppointment, reschedule } from "../services/booking.js";
 import { buscarClientes, criarCliente } from "../services/clientes.js";
@@ -11,9 +11,11 @@ import { icon, serviceIcon } from "../ui/icons.js";
 import { formatCurrency, formatDateLong, toIsoDate } from "../ui/format.js";
 import { closeModal, openModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
+import { criarDependente, DEPENDENTES_UPDATED_EVENT, listarDependentes, PARENTESCO_LABEL } from "../services/dependentesService.js";
+import { dependentesDialog } from "./dependentesDialog.js";
 import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
 
-type StepName = "cliente" | "servicos" | "horario" | "confirmacao";
+type StepName = "cliente" | "servicos" | "horario" | "dependentes" | "confirmacao";
 
 interface ClienteSelecionado {
   id: string;
@@ -32,10 +34,16 @@ interface WizardState {
   cliente: ClienteSelecionado | null;
   clientResults: ClienteSelecionado[];
   clientSearchPerformed: boolean;
+  /** Quem recebe o atendimento (fluxo do Cliente): "mim" (padrão) ou "dependente". */
+  atendimento: "mim" | "dependente";
+  dependenteId: string | null;
+  dependentes: Dependente[];
 }
 
 export interface BookingWizardHandle {
   openNew(preselectServiceId?: string): void;
+  /** Abre o fluxo já com o serviço selecionado, direto na etapa de data/profissional. */
+  openForService(serviceId: string): void;
   openForReschedule(appointment: Appointment): void;
 }
 
@@ -117,6 +125,14 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   const clientStepItem = stepsItems.find((el) => el.dataset.stepName === "cliente");
   const clientPanel = panels.find((el) => el.dataset.stepName === "cliente");
 
+  // Passo "Quem será atendido?" (somente Cliente autenticado).
+  const dependentesStepItem = stepsItems.find((el) => el.dataset.stepName === "dependentes");
+  const dependentesPanel = panels.find((el) => el.dataset.stepName === "dependentes");
+  const dependentesFields = $<HTMLElement>("[data-dependente-fields]", form)!;
+  const dependenteSelect = $<HTMLSelectElement>("#booking-dependente")!;
+  const dependenteCreateBtn = $<HTMLButtonElement>("[data-dependente-create]", form)!;
+  const quemRadios = $$<HTMLInputElement>('input[name="quem"]', form);
+
   // Passos visíveis (ordem real do wizard para o papel atual). São rederivados
   // a cada abertura porque o modo operador pode mudar entre sessões.
   let steps: HTMLElement[] = [];
@@ -136,8 +152,12 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     const role = session?.role;
     const hasBookingPerm = session?.permissoes?.agendar_para_cliente === true;
     operatorMode = role === "recepcionista" || role === "admin" || (role === "profissional" && hasBookingPerm);
+    // O passo "Quem será atendido?" é exclusivo do Cliente autenticado.
+    const showDependentes = role === "cliente" && !operatorMode;
     if (clientStepItem) clientStepItem.hidden = !operatorMode;
     if (clientPanel) clientPanel.hidden = !operatorMode;
+    if (dependentesStepItem) dependentesStepItem.hidden = !showDependentes;
+    if (dependentesPanel) dependentesPanel.hidden = !showDependentes;
     steps = stepsItems.filter((el) => !el.hidden);
     stepPanels = panels.filter((el) => !el.hidden);
     stepNames = stepPanels.map((el) => el.dataset.stepName as StepName);
@@ -161,6 +181,9 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     cliente: null,
     clientResults: [],
     clientSearchPerformed: false,
+    atendimento: "mim",
+    dependenteId: null,
+    dependentes: [],
   };
 
   const today = new Date();
@@ -451,7 +474,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     prevBtn.hidden = pos === 0 || pos === TOTAL_STEPS - 1;
     nextBtn.hidden = pos === TOTAL_STEPS - 1;
     footer.classList.toggle("wizard__footer--summary", pos === TOTAL_STEPS - 1);
-    nextBtn.textContent = activeName === "horario" ? "Confirmar agendamento" : "Continuar";
+    nextBtn.textContent = pos === TOTAL_STEPS - 2 ? "Confirmar agendamento" : "Continuar";
     if (activeName === "horario") {
       void renderSlots();
     }
@@ -484,6 +507,14 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       }
       return valid;
     }
+    if (name === "dependentes") {
+      const valid =
+        state.atendimento !== "dependente" || Boolean(state.dependenteId);
+      if (!valid && report) {
+        showToast("Selecione o dependente que será atendido.", "error");
+      }
+      return valid;
+    }
     return true;
   }
 
@@ -497,12 +528,17 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       appointment.funcionarioNome ??
       "-";
     const total = catalogServices.find((s) => s.id === appointment.servicoId)?.price ?? 0;
+    // Quem recebe o atendimento: dependente selecionado no Step 3 ou o cliente.
+    const atendidoNome =
+      state.atendimento === "dependente" && state.dependenteId
+        ? state.dependentes.find((d) => d.id === state.dependenteId)?.nome ?? "-"
+        : (appointment.clienteNome ?? getSession()?.userName ?? "-");
     const rows: Array<[string, string]> = [
       ["Serviço(s)", serviceName],
       ["Profissional", professional],
       ["Data", formatDateLong(appointment.data)],
       ["Horário", appointment.hora],
-      ["Cliente", appointment.clienteNome ?? "-"],
+      ["Quem será atendido", atendidoNome],
       ["Total", formatCurrency(total)],
     ];
     summaryEl.innerHTML = rows
@@ -569,10 +605,18 @@ onBookingCreatedRef?.();
     state.cliente = null;
     state.clientResults = [];
     state.clientSearchPerformed = false;
+    state.atendimento = "mim";
+    state.dependenteId = null;
+    state.dependentes = [];
     form.reset();
     clearFormErrors(form);
     resetPasswordReveal();
     dateInput.value = state.dateIso;
+    quemRadios.forEach((radio) => {
+      radio.checked = radio.value === "mim";
+    });
+    dependentesFields.hidden = true;
+    dependenteSelect.innerHTML = "";
     if (operatorMode) {
       clientSearchInput.value = "";
       clearElement(clientResultsBox);
@@ -809,7 +853,9 @@ onBookingCreatedRef?.();
   });
 
   nextBtn.addEventListener("click", () => {
-    if (positionName(state.step) === "horario") {
+    // O penúltimo passo dispara o agendamento (horário no modo operador;
+    // "Quem será atendido?" no fluxo do Cliente).
+    if (state.step === TOTAL_STEPS - 2) {
       if (validateStep(state.step, true)) {
         void submit();
       }
@@ -841,6 +887,21 @@ onBookingCreatedRef?.();
       if (input) input.checked = true;
       updateTotal();
     }
+    openModal(overlay);
+  }
+
+  async function openForService(serviceId: string): Promise<void> {
+    await refreshCatalog();
+    applyOperatorMode();
+    await resetWizard();
+    // Pré-seleciona o serviço vindo da lista de Serviços Disponíveis do cliente.
+    state.serviceId = serviceId;
+    renderServices();
+    updateTotal();
+    // Reavalia profissionais após a troca de serviço (categorias do serviço
+    // filtram a lista) e pula direto para a etapa de data/profissional.
+    await renderProfessionals();
+    goToStep(positionOf("horario"));
     openModal(overlay);
   }
 
@@ -889,11 +950,75 @@ onBookingCreatedRef?.();
     openModal(overlay);
   }
 
+  // ------------------------------------------------------- Passo Dependentes
+  async function renderDependentesOptions(preselectId?: string): Promise<void> {
+    state.dependentes = await listarDependentes();
+    if (state.dependentes.length === 0) {
+      dependenteSelect.innerHTML = `<option value="">Nenhum dependente cadastrado</option>`;
+      dependenteSelect.disabled = true;
+      return;
+    }
+    dependenteSelect.disabled = false;
+    dependenteSelect.innerHTML = [
+      `<option value="">Selecione...</option>`,
+      ...state.dependentes.map(
+        (d) =>
+          `<option value="${escapeHtml(d.id)}">${escapeHtml(d.nome)} — ${PARENTESCO_LABEL[d.parentesco]}</option>`,
+      ),
+    ].join("");
+    const target = preselectId ?? state.dependenteId;
+    if (target && state.dependentes.some((d) => d.id === target)) {
+      dependenteSelect.value = target;
+      state.dependenteId = target;
+      validateStep(positionOf("dependentes"), false);
+    }
+  }
+
+  quemRadios.forEach((radio) => {
+    radio.addEventListener("change", () => {
+      if (!radio.checked) return;
+      state.atendimento = radio.value === "dependente" ? "dependente" : "mim";
+      dependentesFields.hidden = state.atendimento !== "dependente";
+      if (state.atendimento === "dependente") {
+        void renderDependentesOptions();
+      } else {
+        state.dependenteId = null;
+        dependenteSelect.value = "";
+      }
+      validateStep(positionOf("dependentes"), false);
+    });
+  });
+
+  dependenteSelect.addEventListener("change", () => {
+    state.dependenteId = dependenteSelect.value || null;
+    validateStep(positionOf("dependentes"), false);
+  });
+
+  dependenteCreateBtn.addEventListener("click", () => {
+    void (async () => {
+      const saved = await dependentesDialog({
+        title: "Cadastrar dependente",
+        confirmLabel: "Salvar dependente",
+        onSubmit: async (input) => {
+          await criarDependente(input);
+        },
+      });
+      if (!saved) return;
+      showToast("Dependente cadastrado.", "success");
+      // Seleciona o dependente recém-criado (último da lista) no dropdown.
+      const dependentes = await listarDependentes();
+      state.dependentes = dependentes;
+      const created = dependentes[dependentes.length - 1];
+      await renderDependentesOptions(created?.id);
+      window.dispatchEvent(new CustomEvent(DEPENDENTES_UPDATED_EVENT));
+    })();
+  });
+
   initDateField();
   renderServices();
   void renderProfessionals();
   goToStep(operatorMode ? positionOf("cliente") : positionOf("servicos"));
 
-  activeHandle = { openNew, openForReschedule };
+  activeHandle = { openNew, openForService, openForReschedule };
   return activeHandle;
 }
