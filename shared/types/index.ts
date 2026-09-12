@@ -299,3 +299,94 @@ export interface FaturamentoResumoDTO {
   /** Margem = lucro / faturamento × 100 (percentual, 2 casas). SÓ para quem tem `ver_financeiro`. */
   margem?: string;
 }
+
+// --- Contratos HTTP do Dashboard (gráficos da seção 3.1) ---
+
+/**
+ * Distribuição de agendamentos por status em um período.
+ * Endpoint: `GET /api/dashboard/graficos`.
+ *
+ * O mapa SEMPRE contém as 4 chaves do enum `status_agendamento`
+ * (`pendente`, `confirmado`, `cancelado`, `concluido`) — status sem
+ * agendamentos no período vêm com `0`. A decisão de agrupar visualmente
+ * (ex.: confirmado + pendente na renderização) é EXCLUSIVA do Frontend;
+ * o backend devolve os contadores brutos por status.
+ */
+export interface DistribuicaoStatusDTO {
+  pendente: number;
+  confirmado: number;
+  cancelado: number;
+  concluido: number;
+}
+
+/** Contagem de agendamentos em um único dia. */
+export interface AgendamentosDiaDTO {
+  /** Data no formato YYYY-MM-DD (fuso do servidor). */
+  data: string;
+  /** Quantidade de agendamentos naquele dia. */
+  quantidade: number;
+}
+
+/**
+ * Contagem de agendamentos por dia dentro de uma janela (7 ou 30 dias).
+ * Endpoint: `GET /api/dashboard/graficos`.
+ *
+ * A janela é definida pelo parâmetro `dias` (7 ou 30), terminando em HOJE
+ * (dias corridos, ambos os extremos inclusivos). Todos os dias da janela
+ * estão presentes no array — dias sem agendamentos vêm com `quantidade: 0`,
+ * para o gráfico de barras/linha não precisar completar lacunas.
+ */
+export interface AgendamentosPorDiaDTO {
+  /** Data inicial da janela (YYYY-MM-DD, hoje − (dias − 1)). */
+  inicio: string;
+  /** Data final da janela (YYYY-MM-DD, HOJE). */
+  fim: string;
+  /** Contagens por dia, sempre com `dias` itens (zeros preenchidos). */
+  dias: AgendamentosDiaDTO[];
+}
+
+/** Contagem de agendamentos em um slot de 30 minutos. */
+export interface HorarioPicoDTO {
+  /**
+   * Hora de início REAL do agendamento (coluna `hora`, tipo `time`) no
+   * formato HH:MM — sem arredondar para hora cheia (ex.: "09:30", "13:00").
+   * Slots são de 30 minutos e refletem o horário armazenado em banco.
+   */
+  hora: string;
+  /** Quantidade de agendamentos no slot. */
+  quantidade: number;
+}
+
+/** Contagem de agendamentos CONCLUÍDOS por serviço (barras horizontais). */
+export interface ServicoMaisVendidoDTO {
+  servicoId: string;
+  servicoNome: string;
+  /** Quantidade de agendamentos concluídos do serviço no período. */
+  quantidade: number;
+}
+
+/**
+ * Resposta completa dos gráficos do Dashboard.
+ * Endpoint: `GET /api/dashboard/graficos`.
+ * Acesso: somente usuários com a permissão efetiva `ver_financeiro`
+ * (admin por padrão; overrides no banco contam). Caso contrário → 403.
+ *
+ * `inicio`/`fim` definem o período base (default: ano corrente) que rege a
+ * Distribuição por status, os Horários de pico e os Serviços mais vendidos.
+ * O gráfico de Agendamentos por dia usa a janela própria `dias` (7/30),
+ * terminando em hoje.
+ */
+export interface DashboardGraficosDTO {
+  /** Data inicial do período base (YYYY-MM-DD). */
+  inicio: string;
+  /** Data final do período base (YYYY-MM-DD). */
+  fim: string;
+  /** Contagem bruta por status (todas as 4 chaves presentes). */
+  distribuicaoStatus: DistribuicaoStatusDTO;
+  /** Agendamentos por dia na janela 7/30 (zeros preenchidos). */
+  agendamentosPorDia: AgendamentosPorDiaDTO;
+  /** Agendamentos por slot de 30 minutos no período base. */
+  horariosPico: HorarioPicoDTO[];
+  /** Agendamentos concluídos por serviço no período base (mais vendidos). */
+  servicosMaisVendidos: ServicoMaisVendidoDTO[];
+}
