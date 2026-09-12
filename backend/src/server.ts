@@ -82,6 +82,7 @@ import permissaoRoutes from './rotas/permissao-routes';
 import despesaRoutes from './rotas/despesa-routes';
 import dashboardRoutes from './rotas/dashboard-routes';
 import financeiroRoutes from './rotas/financeiro-routes';
+import painelBarbeiroRoutes from './rotas/painel-barbeiro-routes';
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -140,6 +141,7 @@ app.use('/api/horario-excecoes', horarioExcecaoRoutes);
 app.use('/api/despesas', despesaRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/financeiro', financeiroRoutes);
+app.use('/api/painel-barbeiro', painelBarbeiroRoutes);
 
 // ── 404 para rotas /api não mapeadas ────────────────────────────────
 app.use('/api/{*path}', (_req: Request, _res: Response, next: NextFunction) => {

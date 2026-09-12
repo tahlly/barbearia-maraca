@@ -27,17 +27,26 @@ export interface HorarioContagemRow {
  * completa os status faltantes com 0 para o contrato devolver SEMPRE as
  * 4 chaves do enum. A decisão de agrupar status na visualização (ex.:
  * confirmado + pendente) é exclusiva do Frontend.
+ *
+ * `funcionarioId` é OPCIONAL (aditivo): quando informado, restringe ao
+ * barbeiro — usado pelo Painel do Profissional. Sem ele, a query é idêntica
+ * ao Dashboard admin existente.
  */
 export async function contarAgendamentosPorStatus(opcoes: {
   inicio: string;
   fim: string;
+  funcionarioId?: string;
 }): Promise<StatusContagemRow[]> {
-  const rows = await db('agendamento')
+  const query = db('agendamento')
     .select('status')
     .count({ quantidade: '*' })
-    .whereBetween('data', [opcoes.inicio, opcoes.fim])
-    .groupBy('status')
-    .orderBy('status', 'asc');
+    .whereBetween('data', [opcoes.inicio, opcoes.fim]);
+
+  if (opcoes.funcionarioId) {
+    query.where('funcionario_id', opcoes.funcionarioId);
+  }
+
+  const rows = await query.groupBy('status').orderBy('status', 'asc');
 
   return rows as unknown as StatusContagemRow[];
 }
@@ -47,17 +56,26 @@ export async function contarAgendamentosPorStatus(opcoes: {
  *
  * Retorna apenas os dias com agendamento; a service preenche os demais dias
  * da janela com 0 (o gráfico de barras/linha espera o eixo completo).
+ *
+ * `funcionarioId` é OPCIONAL (aditivo): quando informado, restringe ao
+ * barbeiro — usado pelo Painel do Profissional. Sem ele, a query é idêntica
+ * ao Dashboard admin existente.
  */
 export async function contarAgendamentosPorDia(opcoes: {
   inicio: string;
   fim: string;
+  funcionarioId?: string;
 }): Promise<DiaContagemRow[]> {
-  const rows = await db('agendamento')
+  const query = db('agendamento')
     .select('data')
     .count({ quantidade: '*' })
-    .whereBetween('data', [opcoes.inicio, opcoes.fim])
-    .groupBy('data')
-    .orderBy('data', 'asc');
+    .whereBetween('data', [opcoes.inicio, opcoes.fim]);
+
+  if (opcoes.funcionarioId) {
+    query.where('funcionario_id', opcoes.funcionarioId);
+  }
+
+  const rows = await query.groupBy('data').orderBy('data', 'asc');
 
   return rows as unknown as DiaContagemRow[];
 }
@@ -69,16 +87,27 @@ export async function contarAgendamentosPorDia(opcoes: {
  * `time`, ex.: "09:30:00") — extraindo `HH:MM` com `LEFT(hora::text, 5)`.
  * Isso preserva o minuto real (ex.: "09:30" permanece "09:30") sem arredondar
  * para hora cheia; cada valor distinto de HH:MM vira um slot de 30 minutos.
+ *
+ * `funcionarioId` é OPCIONAL (aditivo): quando informado, restringe ao
+ * barbeiro — usado pelo Painel do Profissional. Sem ele, a query é idêntica
+ * ao Dashboard admin existente.
  */
 export async function contarAgendamentosPorHora(opcoes: {
   inicio: string;
   fim: string;
+  funcionarioId?: string;
 }): Promise<HorarioContagemRow[]> {
   const exprHora = db.raw("LEFT(hora::text, 5) as hora");
-  const rows = await db('agendamento')
+  const query = db('agendamento')
     .select(exprHora)
     .count({ quantidade: '*' })
-    .whereBetween('data', [opcoes.inicio, opcoes.fim])
+    .whereBetween('data', [opcoes.inicio, opcoes.fim]);
+
+  if (opcoes.funcionarioId) {
+    query.where('funcionario_id', opcoes.funcionarioId);
+  }
+
+  const rows = await query
     .groupBy(db.raw("LEFT(hora::text, 5)"))
     .orderBy(db.raw("LEFT(hora::text, 5)"), 'asc');
 

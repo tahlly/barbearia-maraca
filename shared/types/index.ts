@@ -679,3 +679,82 @@ export interface ComissaoPendenciaDTO {
 
 /** Resposta da listagem de pendências de comissão não resolvidas. */
 export type ResponseListarPendenciasComissao = ComissaoPendenciaDTO[];
+
+// --- Contratos HTTP do Painel do Barbeiro (spec: especificacao-painel-barbeiro.md) ---
+// Endpoint único: `GET /api/painel-barbeiro` — devolve os 5 elementos do
+// "Meu Painel" em uma única resposta (mesmo padrão dos gráficos do Dashboard
+// e do Resumo Financeiro). Acesso: usuário com papel `profissional`; NUNCA
+// exige `ver_financeiro` (comissão própria é dado pessoal do profissional).
+// Todos os valores são filtrados EXCLUSIVAMENTE pelos atendimentos do próprio
+// profissional logado — nunca nominal de colega, nunca faturamento/lucro da
+// barbearia (regra de negócio da seção 2 da spec).
+
+/**
+ * Comparativo de comissão própria do mês corrente vs. mês anterior.
+ * Endpoint: `GET /api/painel-barbeiro`.
+ *
+ * Valores monetários como strings decimais normalizadas ("45.90").
+ * `variacaoPercentual` é a variação RELATIVA ((atual − anterior) / anterior × 100),
+ * com 2 casas e sinal; `null` quando o mês anterior é zero (não há base de
+ * comparação — o Frontend mostra apenas o valor, sem seta).
+ */
+export interface PainelBarbeiroComissaoDTO {
+  /** Comissão acumulada no mês corrente (string decimal, ex.: "142.50"). */
+  valorAtual: string;
+  /** Comissão do mês anterior equivalente (string decimal). */
+  mesAnterior: string;
+  /** Variação relativa em %, 2 casas, com sinal. `null` sem base (anterior = 0). */
+  variacaoPercentual: string | null;
+}
+
+/** Contagem de atendimentos do próprio profissional em um único dia. */
+export interface PainelBarbeiroAtendimentoDiaDTO {
+  /** Data no formato YYYY-MM-DD (fuso do servidor). */
+  data: string;
+  /** Quantidade de atendimentos do profissional naquele dia. */
+  quantidade: number;
+}
+
+/** Contagem de serviços realizados pelo próprio profissional (barras horizontais). */
+export interface PainelBarbeiroServicoDTO {
+  servicoId: string;
+  servicoNome: string;
+  /** Quantidade de atendimentos concluídos do serviço no mês. */
+  quantidade: number;
+}
+
+/** Contagem de atendimentos do profissional em um slot de horário. */
+export interface PainelBarbeiroHorarioDTO {
+  /** Hora de início REAL do agendamento (HH:MM, ex.: "09:30"). */
+  hora: string;
+  /** Quantidade de atendimentos do profissional no slot. */
+  quantidade: number;
+}
+
+/**
+ * Resposta completa do Painel do Barbeiro (Meu Painel).
+ * Endpoint: `GET /api/painel-barbeiro`.
+ * Acesso: papel `profissional` autenticado (sem `ver_financeiro`).
+ *
+ * Períodos (igual à spec da tela):
+ * - `atendimentosMes`/`comissaoMes`/`servicosMaisFeitos`/`horariosMaisConcorridos`
+ *   referem-se ao MÊS CORRENTE;
+ * - `atendimentosPorDia` é a janela dos ÚLTIMOS 7 DIAS, terminando em hoje,
+ *   com todos os dias presentes (zeros preenchidos).
+ */
+export interface PainelBarbeiroDTO {
+  /** Atendimentos concluídos do próprio profissional no mês corrente. */
+  atendimentosMes: number;
+  /**
+   * Comissão própria do mês, com comparativo vs. mês anterior.
+   * `null` quando `comissao_ativa = false` (interruptor global desligado) —
+   * nesse caso o card não deve aparecer na tela.
+   */
+  comissaoMes: PainelBarbeiroComissaoDTO | null;
+  /** Atendimentos por dia, últimos 7 dias (zeros preenchidos). */
+  atendimentosPorDia: PainelBarbeiroAtendimentoDiaDTO[];
+  /** Serviços mais feitos pelo profissional no mês corrente. */
+  servicosMaisFeitos: PainelBarbeiroServicoDTO[];
+  /** Horários em que o profissional mais atende no mês corrente. */
+  horariosMaisConcorridos: PainelBarbeiroHorarioDTO[];
+}
