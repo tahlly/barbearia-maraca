@@ -20,6 +20,7 @@ import {
   buscarPendenciaComissaoPorAgendamento,
   removerPendenciaComissaoPorAgendamento,
   listarPendenciasComissao as listarPendenciasComissaoRepo,
+  resolverPendenciasComissao,
 } from '../repositories/comissao-repository';
 import { buscarPorId as buscarFuncionarioPorId } from '../repositories/funcionario-repository';
 import { buscarServicoPorId } from '../repositories/servico-repository';
@@ -109,9 +110,26 @@ export async function salvarComissoesDoFuncionario(
 
   const itens = await validarItensComissao(input.comissoes);
 
-  return db.transaction(async (trx) =>
-    substituirComissoesDoFuncionario(funcionarioId, itens, trx),
-  );
+  return db.transaction(async (trx) => {
+    const salvas = await substituirComissoesDoFuncionario(funcionarioId, itens, trx);
+
+    // Resolução automática de pendências (fechamento do aviso de % ausente):
+    // para cada serviço que PASSOU a ter percentual > 0 configurado neste
+    // funcionário, marca `resolvido = true` nas pendências abertas daquele par
+    // funcionário+serviço — "depois que o admin cadastra a % faltante, o item
+    // some da lista". Uso `percentual` normalizado (string "40.00"): equivale ao
+    // índice 0 da base centesimal (> 0 somente com % positiva). % = 0 NÃO
+    // resolve (é configuração válida "não paga comissão", não é preenchimento
+    // de % faltante). Mesma transação do REPLACE (atomicidade).
+    const servicoIdsComPercentualPositivo = itens
+      .filter((item) => Number(item.percentual) > 0)
+      .map((item) => item.servico_id);
+    if (servicoIdsComPercentualPositivo.length > 0) {
+      await resolverPendenciasComissao(funcionarioId, servicoIdsComPercentualPositivo, trx);
+    }
+
+    return salvas;
+  });
 }
 
 // ── Hooks automáticos (Passo 5) ───────────────────────────────────────

@@ -603,6 +603,13 @@ export interface ItemComissaoServicoRequest {
 /**
  * Body de salvar as comissões de um funcionário (REPLACE em transação).
  * PUT `.../comissao/funcionarios/{funcionarioId}`.
+ *
+ * EFEITO ADICIONAL (resolução automática de pendências): para cada serviço que
+ * passou a ter percentual > 0 configurado, o backend marca como `resolvido`
+ * as pendências abertas (`comissao_pendencia.resolvido = true`) daquele par
+ * funcionário+serviço — "depois que o admin cadastra a % faltante, o item some
+ * da lista". Percentual 0 NÃO resolve (configuração válida "não paga comissão").
+ * Contrato de request/response inalterado.
  */
 export interface RequestSalvarComissoesFuncionario {
   comissoes: ItemComissaoServicoRequest[];

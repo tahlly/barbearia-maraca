@@ -322,3 +322,25 @@ export async function listarPendenciasComissao(): Promise<
     resolvido: r.resolvido,
   }));
 }
+
+/**
+ * Marca como `resolvido = true` as pendências ABERTAS de um funcionário cujo
+ * `servico_id` está na lista — chamada pelo PUT de comissões (REPLACE) para os
+ * serviços que passaram a ter percentual > 0 configurado ("depois que o admin
+ * cadastra a % faltante, o item some da lista"). Filtro também por
+ * `funcionario_id`, então pendências de OUTROS funcionários nunca são tocadas.
+ * Executa DENTRO da mesma transação do REPLACE (atomicidade).
+ */
+export async function resolverPendenciasComissao(
+  funcionarioId: string,
+  servicoIdsComPercentualPositivo: string[],
+  trx: Knex.Transaction,
+): Promise<void> {
+  if (servicoIdsComPercentualPositivo.length === 0) {
+    return;
+  }
+  await trx('comissao_pendencia')
+    .where({ funcionario_id: funcionarioId, resolvido: false })
+    .whereIn('servico_id', servicoIdsComPercentualPositivo)
+    .update({ resolvido: true });
+}

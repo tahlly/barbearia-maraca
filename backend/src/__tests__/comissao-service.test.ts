@@ -31,6 +31,7 @@ const criarPendenciaComissaoMock = vi.fn();
 const buscarPendenciaComissaoPorAgendamentoMock = vi.fn();
 const removerPendenciaComissaoPorAgendamentoMock = vi.fn();
 const listarPendenciasComissaoRepoMock = vi.fn();
+const resolverPendenciasComissaoMock = vi.fn();
 const buscarFuncionarioPorIdMock = vi.fn();
 const buscarServicoPorIdMock = vi.fn();
 
@@ -60,6 +61,7 @@ vi.mock('../repositories/comissao-repository', () => ({
   removerPendenciaComissaoPorAgendamento: (...args: unknown[]) =>
     removerPendenciaComissaoPorAgendamentoMock(...args),
   listarPendenciasComissao: (...args: unknown[]) => listarPendenciasComissaoRepoMock(...args),
+  resolverPendenciasComissao: (...args: unknown[]) => resolverPendenciasComissaoMock(...args),
 }));
 
 vi.mock('../repositories/funcionario-repository', () => ({
@@ -113,6 +115,7 @@ beforeEach(() => {
   // Defaults seguros: usuário com permissão, transação executa o callback.
   exigirPermissaoMock.mockResolvedValue(undefined);
   transactionMock.mockImplementation(async (cb: (trx: unknown) => Promise<unknown>) => cb(trxFake));
+  resolverPendenciasComissaoMock.mockResolvedValue(undefined);
 });
 
 // ── Interruptor global (spec 3.4) ────────────────────────────
@@ -252,6 +255,61 @@ describe('salvarComissoesDoFuncionario', () => {
       trxFake,
     );
     expect(comissoes).toEqual([comissaoSalva()]);
+  });
+
+  it('resolução automática: pendência aberta do par funcionário+serviço X é resolvida quando o PUT configura % > 0', async () => {
+    buscarFuncionarioPorIdMock.mockResolvedValue(funcionario());
+    buscarServicoPorIdMock.mockResolvedValue(servicoValido());
+    substituirComissoesDoFuncionarioMock.mockResolvedValue([comissaoSalva()]);
+
+    await salvarComissoesDoFuncionario(usuario('admin'), 'admin', 'func-1', {
+      comissoes: [{ servico_id: 'svc-1', percentual: 40 }],
+    });
+
+    // O REPLACE acontece primeiro; DEPOIS, na MESMA transação, as pendências do
+    // par funcionário+serviço que passou a ter % > 0 são marcadas resolvidas.
+    expect(substituirComissoesDoFuncionarioMock).toHaveBeenCalledTimes(1);
+    expect(resolverPendenciasComissaoMock).toHaveBeenCalledTimes(1);
+    expect(resolverPendenciasComissaoMock).toHaveBeenCalledWith('func-1', ['svc-1'], trxFake);
+  });
+
+  it('resolução automática: pendências de OUTROS serviços NÃO são afetadas (só os serviços com % > 0 do PUT)', async () => {
+    buscarFuncionarioPorIdMock.mockResolvedValue(funcionario());
+    buscarServicoPorIdMock
+      .mockResolvedValueOnce(servicoValido())
+      .mockResolvedValueOnce(servicoValido({ id: 'svc-2', nome: 'Barba' }));
+    substituirComissoesDoFuncionarioMock.mockResolvedValue([
+      comissaoSalva(),
+      comissaoSalva({ servico_id: 'svc-2', servico_nome: 'Barba', percentual: '50.00' }),
+    ]);
+
+    await salvarComissoesDoFuncionario(usuario('admin'), 'admin', 'func-1', {
+      comissoes: [
+        { servico_id: 'svc-1', percentual: 40 },
+        { servico_id: 'svc-2', percentual: 50 },
+      ],
+    });
+
+    // Apenas os pares informados com % > 0 são resolvidos — o filtro do banco
+    // garante também que funcionários diferentes nunca são tocados (chamada é
+    // sempre com o funcionario_id do PUT e só os servicoIds com % > 0).
+    expect(resolverPendenciasComissaoMock).toHaveBeenCalledTimes(1);
+    expect(resolverPendenciasComissaoMock).toHaveBeenCalledWith('func-1', ['svc-1', 'svc-2'], trxFake);
+  });
+
+  it('resolução automática: percentual 0 NÃO resolve pendências (0 é configuração válida "não paga comissão")', async () => {
+    buscarFuncionarioPorIdMock.mockResolvedValue(funcionario());
+    buscarServicoPorIdMock.mockResolvedValue(servicoValido());
+    substituirComissoesDoFuncionarioMock.mockResolvedValue([
+      comissaoSalva({ percentual: '0.00' }),
+    ]);
+
+    await salvarComissoesDoFuncionario(usuario('admin'), 'admin', 'func-1', {
+      comissoes: [{ servico_id: 'svc-1', percentual: 0 }],
+    });
+
+    expect(substituirComissoesDoFuncionarioMock).toHaveBeenCalledTimes(1);
+    expect(resolverPendenciasComissaoMock).not.toHaveBeenCalled();
   });
 
   it('lista vazia limpa as comissões (replace para nada)', async () => {
