@@ -188,12 +188,13 @@ export async function createUsuarioInterno(data: {
   }>("/funcionarios", {
     method: "POST",
     body: JSON.stringify({
-      nome: data.nome.trim(),
+      // Nome e especialidade padronizados em CAIXA ALTA; e-mail e senha preservados.
+      nome: data.nome.trim().toUpperCase(),
       email: data.email.trim().toLowerCase(),
       ...(data.senha !== undefined && data.senha !== "" ? { senha: data.senha } : {}),
       cargo: roleToCargo(data.role),
       ...(data.especialidade !== undefined && data.especialidade.trim() !== ""
-        ? { especialidade: data.especialidade.trim() }
+        ? { especialidade: data.especialidade.trim().toUpperCase() }
         : {}),
       ...(data.categorias !== undefined ? { categorias: data.categorias } : {}),
     } satisfies CreateFuncionarioRequest),
@@ -234,8 +235,9 @@ export async function updateUsuarioInterno(
   if (!usuario?.professionalId) return null;
 
   const payload: UpdateFuncionarioRequest = {};
-  if (data.nome !== undefined) payload.nome = data.nome.trim();
-  if (data.especialidade !== undefined) payload.especialidade = data.especialidade;
+  // Nome e especialidade padronizados em CAIXA ALTA; e-mail e senha preservados.
+  if (data.nome !== undefined) payload.nome = data.nome.trim().toUpperCase();
+  if (data.especialidade !== undefined) payload.especialidade = data.especialidade.trim().toUpperCase();
   if (data.cargo !== undefined) payload.cargo = data.cargo;
   if (data.email !== undefined) payload.email = data.email.trim();
   if (data.senha !== undefined && data.senha !== "") payload.senha = data.senha;

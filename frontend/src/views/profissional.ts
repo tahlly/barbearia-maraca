@@ -1,5 +1,5 @@
 import { renderPanel } from "../ui/layout.js";
-import { requireRole, updateSessionUser } from "../services/auth.js";
+import { requireRole, updateSessionAvatar, updateSessionUser } from "../services/auth.js";
 import { $, escapeHtml, initials } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { formatDateMedium, formatCurrency } from "../ui/format.js";
@@ -32,12 +32,11 @@ export function renderProfissional(container: HTMLElement): () => void {
   const session = requireRole(["profissional"]);
   const { content, cleanup: cleanupPanel } = renderPanel(container, {
     title: "Minha Agenda",
-    roleLabel: "Profissional",
+    roleLabel: "PROFISSIONAL",
     links: [
       { href: "#/profissional", label: "Agendamentos", icon: "calendar" },
       { href: "#/profissional/faturamento", label: "Faturamento", icon: "dollar" },
       { href: "#/profissional/configuracoes", label: "Configurações", icon: "cog" },
-      { href: "#/", label: "Voltar ao site", icon: "arrow-left" },
     ],
   });
 
@@ -101,7 +100,7 @@ export function renderProfissional(container: HTMLElement): () => void {
         </div>
         <div class="toolbar">
           ${canManage ? `<button type="button" class="btn btn--primary" data-new-booking>${icon("plus", 16)} Agendar</button>` : ""}
-          <select class="input" data-status-filter aria-label="Filtrar por status">
+          <select class="input uppercase" data-status-filter aria-label="Filtrar por status">
             <option value="todos">Todos Status</option>
             <option value="pendente">Pendente</option>
             <option value="confirmado">Confirmado</option>
@@ -110,7 +109,7 @@ export function renderProfissional(container: HTMLElement): () => void {
           </select>
           <div class="manage-search">
             ${icon("search", 16)}
-            <input type="search" data-search-app placeholder="Buscar cliente..." aria-label="Buscar cliente">
+            <input type="search" class="uppercase" data-search-app placeholder="Buscar cliente..." aria-label="Buscar cliente">
           </div>
         </div>
       </div>
@@ -442,6 +441,9 @@ export function renderProfissional(container: HTMLElement): () => void {
 
   // ----------------------------------------------------------- Configurações
   function renderConfiguracoes(): void {
+    const inicialPhoto = session?.avatarUrl ?? sessionStorage.getItem("maraca.profilePhoto");
+    /** Foto escolhida localmente; só entra no contexto global (Session) ao Salvar. */
+    let pendingPhoto: string | null = null;
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -451,7 +453,7 @@ export function renderProfissional(container: HTMLElement): () => void {
       </div>
       <div class="config-card">
         <div class="config-photo">
-          <span class="avatar avatar--lg">${initials(session?.userName ?? "?")}</span>
+          <span class="avatar avatar--lg${inicialPhoto ? " avatar--photo" : ""}"${inicialPhoto ? ` style="background-image:url('${escapeHtml(inicialPhoto)}')"` : ""}>${inicialPhoto ? "" : escapeHtml(initials(session?.userName ?? "?"))}</span>
           <input type="file" id="profile-photo" accept="image/*" hidden>
           <button type="button" class="btn btn--sm btn--gold-outline" id="profile-photo-btn">${icon("upload", 14)} Carregar foto</button>
         </div>
@@ -459,7 +461,7 @@ export function renderProfissional(container: HTMLElement): () => void {
         <form id="profile-form" novalidate>
           <div class="field">
             <label class="field__label" for="profile-name">Nome</label>
-            <input type="text" id="profile-name" value="${escapeHtml(session?.userName ?? "")}" maxlength="80">
+            <input type="text" id="profile-name" class="uppercase" value="${escapeHtml(session?.userName ?? "")}" maxlength="80">
           </div>
 
           <h4 class="manage-form-title">Alterar Senha</h4>
@@ -505,6 +507,23 @@ export function renderProfissional(container: HTMLElement): () => void {
     const photoBtn = $<HTMLButtonElement>("#profile-photo-btn", content);
     const photoInput = $<HTMLInputElement>("#profile-photo", content);
     const avatar = $<HTMLElement>(".config-photo .avatar", content);
+
+    const committedPhoto = (): string | null =>
+      session?.avatarUrl ?? sessionStorage.getItem("maraca.profilePhoto");
+
+    const applyAvatarPreview = (url: string | null): void => {
+      if (!avatar) return;
+      if (url) {
+        avatar.classList.add("avatar--photo");
+        avatar.style.backgroundImage = `url("${url}")`;
+        avatar.textContent = "";
+      } else {
+        avatar.classList.remove("avatar--photo");
+        avatar.style.backgroundImage = "";
+        avatar.textContent = escapeHtml(initials(session?.userName ?? "?"));
+      }
+    };
+
     if (photoBtn && photoInput && avatar) {
       const click = (): void => photoInput.click();
       photoBtn.addEventListener("click", click);
@@ -515,20 +534,16 @@ export function renderProfissional(container: HTMLElement): () => void {
         if (!file) return;
         const reader = new FileReader();
         reader.onload = () => {
-          const dataUrl = reader.result as string;
-          sessionStorage.setItem("maraca.profilePhoto", dataUrl);
-          avatar.style.backgroundImage = `url("${dataUrl}")`;
-          avatar.textContent = "";
-          showToast("Foto atualizada.");
+          // Apenas pré-visualiza: a foto só é commitada no contexto global ao
+          // Salvar (dispara evento p/ sidebar atualizar sem refresh).
+          pendingPhoto = reader.result as string;
+          applyAvatarPreview(pendingPhoto);
+          showToast("Foto pronta. Clique em Salvar alterações para aplicar.");
         };
         reader.readAsDataURL(file);
       });
 
-      const savedPhoto = sessionStorage.getItem("maraca.profilePhoto");
-      if (savedPhoto) {
-        avatar.style.backgroundImage = `url("${savedPhoto}")`;
-        avatar.textContent = "";
-      }
+      applyAvatarPreview(committedPhoto());
     }
 
     const form = $<HTMLFormElement>("#profile-form", content);
@@ -543,6 +558,9 @@ export function renderProfissional(container: HTMLElement): () => void {
             i.value = "";
           });
           ($("#email-confirm", content) as HTMLInputElement).value = "";
+          // Descarta foto pendente: restaura o preview para a foto commitada na sessão.
+          pendingPhoto = null;
+          applyAvatarPreview(committedPhoto());
           showToast("Alterações descartadas.");
         };
         cancelBtn.addEventListener("click", cancel);
@@ -600,6 +618,12 @@ export function renderProfissional(container: HTMLElement): () => void {
           if (!result.ok) {
             showToast(result.message ?? "Não foi possível salvar.", "error");
             return;
+          }
+          // Salva a foto no contexto global do usuário e emite evento para a
+          // sidebar atualizar o avatar instantaneamente, sem refresh.
+          if (pendingPhoto) {
+            updateSessionAvatar(pendingPhoto);
+            pendingPhoto = null;
           }
           showToast("Alterações salvas.");
           renderConfiguracoes();

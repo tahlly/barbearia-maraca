@@ -19,17 +19,18 @@ export interface UsuarioComPermissoes {
 }
 
 /**
- * Rótulos padrão das permissões (mesmas descrições do catálogo do backend).
- * Usado como fallback quando `listarPermissoesCatalogo` falha ou retorna um
- * catálogo incompleto para alguma chave conhecida.
+ * Rótulos padrão das permissões — texto canônico dos cabeçalhos do modal
+ * (aprovado; ordem das colunas = ordem do catálogo do backend). Usado como
+ * fonte primária das chaves conhecidas e fallback quando
+ * `listarPermissoesCatalogo` falha ou retorna um catálogo incompleto.
  */
 export const PERMISSOES_LABELS: Record<string, string> = {
-  ver_financeiro: "Visualizar dados financeiros",
-  excluir_desativar_funcionario: "Excluir ou desativar funcionários",
-  criar_admin: "Criar novos administradores",
-  gerenciar_permissoes: "Gerenciar permissões de usuários",
-  editar_servicos_categorias: "Editar serviços e categorias",
-  agendar_para_cliente: "Criar, cancelar e reagendar agendamentos de clientes",
+  agendar_para_cliente: "AGENDAR, REAGENDAR OU CANCELAR AGENDAMENTO",
+  criar_admin: "CRIAR NOVOS ADMINISTRADORES",
+  editar_servicos_categorias: "EDITAR SERVIÇOS E CATEGORIAS",
+  excluir_desativar_funcionario: "EXCLUIR OU DESATIVAR FUNCIONÁRIOS",
+  gerenciar_permissoes: "GERENCIAR PERMISSÕES DE USUÁRIOS",
+  ver_financeiro: "VISUALIZAR DADOS FINANCEIROS",
 };
 
 /**

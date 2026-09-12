@@ -105,6 +105,23 @@ body.light-theme .auth__box {
   margin-top: var(--space-2);
 }
 
+/* Segunda camada de proteção: todos os campos de entrada dentro de
+   formulários de autenticação ficam isentos de caixa alta, mesmo que
+   um container pai herde text-transform: uppercase. */
+.auth__box .field input,
+.auth--admin .field input {
+  text-transform: none;
+}
+
+/* A classe utilitária .uppercase (aplicada em campos cadastrais como
+   nome/telefone) tem precedência sobre a isenção da área de auth.
+   Credenciais (e-mail/senha) não recebem a classe e seguem normal-case,
+   garantidas pela exceção correspondente em components.css. */
+.auth__box .field input.uppercase,
+.auth--admin .field input.uppercase {
+  text-transform: uppercase;
+}
+
 .auth__box .field__label {
   color: var(--color-label);
 }

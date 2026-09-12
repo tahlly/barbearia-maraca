@@ -42,6 +42,10 @@
   max-width: 440px;
 }
 
+.modal--md {
+  max-width: 540px;
+}
+
 .modal--lg {
   max-width: 720px;
 }
@@ -861,4 +865,84 @@ body.light-theme .badge--neutral {
 body.light-theme .client-picked {
   border-color: var(--color-gold);
   background-color: var(--color-gold-soft);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Passo "Quem será atendido?" (Dependentes) do wizard de agendamento */
+/* ------------------------------------------------------------------ */
+.quem-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: var(--space-2);
+}
+
+.quem-option__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-gold-soft);
+  color: var(--color-gold);
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.quem-option__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.quem-option__info strong {
+  font-size: 0.9rem;
+}
+
+.quem-option__info small {
+  font-size: 0.74rem;
+  color: var(--color-text-muted);
+}
+
+.dependente-field {
+  margin-top: var(--space-5);
+}
+
+.dependente-field select {
+  min-height: 46px;
+}
+
+.dependente-quick {
+  margin-top: var(--space-3);
+}
+
+.dependente-quick .btn {
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Dialog de dependente (cadastro/edição) — compartilhado com a view  */
+/* ------------------------------------------------------------------ */
+.dependente-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.dependente-form select {
+  min-height: 46px;
+}
+
+.dependente__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.dependente-form .field__hint {
+  margin-top: var(--space-2);
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
 }

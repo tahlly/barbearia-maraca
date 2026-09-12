@@ -331,15 +331,26 @@ body.panel-mode > .footer {
   color: var(--color-text);
 }
 
+/* Linha 1: KPIs operacionais (Total, Confirmados, Pendentes, Cancelados) */
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--space-4);
 }
 
-.kpi-card:nth-child(5),
-.kpi-card:nth-child(6) {
-  grid-column: span 2;
+/* Linha 3 (wireframe): caixas financeiras — 4 colunas de largura igual.
+   Faturamento, Despesas, Lucro Líquido e Margem (exclusivo do Admin). */
+.fin-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+/* Linha 4 (wireframe): Profissional destaque ocupando 100% da largura. */
+.kpi-grid--destaque {
+  grid-template-columns: 1fr;
+  margin-top: var(--space-5);
 }
 
 .kpi-grid + .panel__section {
@@ -404,7 +415,8 @@ body.panel-mode > .footer {
 }
 
 @media (max-width: 768px) {
-  .kpi-grid {
+  .kpi-grid,
+  .fin-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 
@@ -453,13 +465,39 @@ body.panel-mode > .footer {
   }
 }
 
+/* ----- Mobile: scroll natural do documento (≤ 768px) -----
+   O shell compartilhado usa frame 100vh + overflow hidden com scroll
+   interno em .panel__content, o que "congela" o topo e espreme os filtros
+   no espaço interno restante. No mobile o documento volta a crescer e a
+   página rola naturalmente: a sidebar off-canvas (position: fixed) e o
+   backdrop permanecem intactos, e o topbar, sendo static, rola junto com a
+   página. Acima de 768px o shell atual (100vh + scroll interno) continua
+   valendo sem alteração. Por ser um bloco próprio após o @media existente,
+   não interfere no restante das regras mobile do painel. */
+@media (max-width: 768px) {
+  .panel {
+    height: auto;
+    overflow: visible;
+  }
+
+  .panel__main {
+    overflow: visible;
+  }
+
+  .panel__content {
+    overflow: visible;
+    min-height: 0;
+  }
+}
+
 @media (max-width: 480px) {
-  .kpi-grid {
+  .kpi-grid,
+  .fin-grid {
     grid-template-columns: 1fr;
   }
 
-  .kpi-card:nth-child(5),
-  .kpi-card:nth-child(6) {
-    grid-column: auto;
+  .kpi-grid--destaque,
+  .fin-grid {
+    margin-top: var(--space-4);
   }
 }

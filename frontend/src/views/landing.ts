@@ -4,6 +4,8 @@ import { loadServices } from "../services/catalog.js";
 import { getSession } from "../services/auth.js";
 import { navigateTo } from "../router.js";
 import { formatCurrency } from "../ui/format.js";
+import { syncHeroImages } from "../theme.js";
+import { contactSectionHtml } from "../features/contactSection.js";
 
 function renderServicesSection(wizard: BookingWizardHandle): void {
   const grid = $("#services-grid");
@@ -126,44 +128,7 @@ export function renderLanding(container: HTMLElement): () => void {
         <span class="section__eyebrow">Contato &amp; Horários</span>
         <h2 class="section__title">Visite-nos</h2>
         <div class="contact__inner">
-          <div class="contact__info">
-            <div class="contact__item">
-              <span class="contact__icon" aria-hidden="true"><i class='bx bx-time-five'></i></span>
-              <div>
-                <h3>Horário de funcionamento</h3>
-                <ul class="hours-list">
-                  <li><span>Segunda a sexta</span><span>09:00 — 19:00</span></li>
-                  <li><span>Sábado</span><span>09:00 — 18:00</span></li>
-                  <li><span>Domingo</span><span>Fechado</span></li>
-                </ul>
-              </div>
-            </div>
-            <div class="contact__item">
-              <span class="contact__icon" aria-hidden="true"><i class='bx bx-map'></i></span>
-              <div>
-                <h3>Endereço</h3>
-                <p>R. Francisco Real, 763 - Lj "C - Padre Miguel<br>Rio de Janeiro — RJ, 21810-041</p>
-              </div>
-            </div>
-            <div class="contact__item">
-              <span class="contact__icon" aria-hidden="true"><i class='bx bx-phone'></i></span>
-              <div>
-                <h3>Telefone</h3>
-                <p><a href="tel:+5521966420270">(21) 96642-0270</a></p>
-              </div>
-            </div>
-            <div class="contact__item">
-              <span class="contact__icon" aria-hidden="true"><i class='bx bx-envelope'></i></span>
-              <div>
-                <h3>E-mail</h3>
-                <p><a href="mailto:contato@barbeariamaraca.com.br">contato@barbeariamaraca.com.br</a></p>
-              </div>
-            </div>
-            <div class="contact__socials">
-              <a href="https://www.instagram.com/barbeariamaraca/" target="_blank" rel="noopener noreferrer" class="social-btn" aria-label="Instagram da Barbearia Maracá"><i class='bx bxl-instagram'></i></a>
-              <a href="https://wa.me/5521966420270" target="_blank" rel="noopener noreferrer" class="social-btn" aria-label="WhatsApp da Barbearia Maracá"><i class='bx bxl-whatsapp'></i></a>
-            </div>
-          </div>
+          ${contactSectionHtml()}
           <div class="map-image">
             <iframe
               src="${mapaEmbed}"
@@ -171,13 +136,14 @@ export function renderLanding(container: HTMLElement): () => void {
               loading="lazy"
               referrerpolicy="no-referrer-when-downgrade"
               allowfullscreen
-              style="border:0;width:100%;height:350px;display:block;"
             ></iframe>
           </div>
         </div>
       </div>
     </section>
   `;
+
+  syncHeroImages(container);
 
   const wizard = initBookingWizard();
   renderServicesSection(wizard);

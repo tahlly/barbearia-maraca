@@ -75,6 +75,8 @@ export interface Session {
   precisaTrocarSenha?: boolean;
   /** Permissões efetivas do usuário logado (RBAC granular, Item 1). */
   permissoes?: Record<string, boolean>;
+  /** URL da foto de perfil (ex.: data URL local ou imagem do Google). */
+  avatarUrl?: string;
 }
 
 export interface Cliente {
@@ -86,4 +88,27 @@ export interface Cliente {
   createdAt: string;
   googleId?: string;
   avatarUrl?: string;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Dependentes (modo mock no frontend; contrato em preparação)        */
+/* ------------------------------------------------------------------ */
+
+export type Parentesco = "conjuge" | "filho" | "pai_mae" | "irmao" | "outros";
+
+/**
+ * DTO de escrita de dependente (payload de criação/edição).
+ * Quando o backend integrar, este é o body de POST/PUT /api/dependentes.
+ */
+export interface DependenteProps {
+  nome: string;
+  parentesco: Parentesco;
+}
+
+/**
+ * Entidade dependente (compõe DependenteProps + id gerado).
+ * Espelho do futuro `DependenteDTO` do backend.
+ */
+export interface Dependente extends DependenteProps {
+  id: string;
 }

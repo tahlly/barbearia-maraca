@@ -73,3 +73,147 @@
     align-items: flex-start;
   }
 }
+
+/* ---------------------------------------------------------------
+   View de Contatos do Cliente (wrapper .contact-section--panel)
+   Reutiliza o componente contactSectionHtml() (classes .contact__*,
+   .hours-list e .social-btn da Landing). Aqui só a cascata de cards
+   responsivos do contexto do painel.
+
+   Alinhamento com o dashboard:
+   - cards com a MESMA linguagem do .kpi-card (color-surface, border,
+     radius-md, padding space-4, gap space-2);
+   - grid 4 colunas -> 2 (<=768px) igual ao .kpi-grid;
+   - sem sombra permanente nos cards (o dashboard não usa sombra em
+     cards); sombra apenas no affordance de hover dos botões sociais,
+     via tokens --shadow-*.
+   Obs.: o rodapé institucional anterior (.panel__institutional) foi
+   substituído por esta view — a seção única de contatos é o componente
+   compartilhado com a Home. */
+.contact-section--panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.contact-section--panel .contact__info {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.contact-section--panel .contact__item {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.contact-section--panel .contact__icon {
+  border-radius: var(--radius-full);
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+}
+
+/* Cabeçalho do card padronizado com .kpi-card__label do dashboard. */
+.contact-section--panel .contact__item h3 {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 0;
+}
+
+.contact-section--panel .contact__item p,
+.contact-section--panel .contact__item a,
+.contact-section--panel .hours-list {
+  font-size: 0.92rem;
+}
+
+.contact-section--panel .contact__socials {
+  display: flex;
+  gap: var(--space-3);
+  grid-column: 1 / -1;
+}
+
+/* Botões sociais no painel: circulares (44px), surface como base e
+   affordance de hover igual aos botões do dashboard (elevação com
+   sombra token e acento ouro). */
+.contact-section--panel .social-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.contact-section--panel .social-btn:hover {
+  border-color: var(--color-gold-border);
+  color: var(--color-gold);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Responsivo: mesmo padrão do .kpi-grid (4 -> 2). Em telas muito
+   estreitas (< 520px), os cards de conteúdo longo (endereço/horários)
+   viram 1 coluna para evitar quebra ilegível — desvio mínimo e
+   documentado, mantendo os tokens do dashboard. */
+@media (max-width: 768px) {
+  .contact-section--panel .contact__info {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .contact-section--panel .contact__info {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  View de Dependentes (cliente)                                      */
+/* ------------------------------------------------------------------ */
+.table--dependentes th:nth-child(1),
+.table--dependentes td:nth-child(1) { width: 48%; }
+
+.table--dependentes th:nth-child(2),
+.table--dependentes td:nth-child(2) { width: 24%; }
+
+.table--dependentes th:nth-child(3),
+.table--dependentes td:nth-child(3) { width: 28%; }
+
+.parentesco-label {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+
+.btn--danger-text {
+  color: var(--color-danger-text);
+}
+
+.btn--danger-text:hover {
+  color: var(--color-danger);
+  background-color: var(--color-danger-soft);
+}

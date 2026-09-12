@@ -1,6 +1,6 @@
 import { $, escapeHtml, initials } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
-import { getSession } from "../services/auth.js";
+import { getSession, updateSessionAvatar } from "../services/auth.js";
 import { showToast } from "../ui/toast.js";
 
 /**
@@ -41,12 +41,15 @@ export function renderSettingsForm(
   onSubmit: SettingsSubmitFn,
 ): () => void {
   const current = getSession();
+  const initialPhoto = current?.avatarUrl ?? sessionStorage.getItem("maraca.profilePhoto");
   const cleanups: Array<() => void> = [];
+  /** Foto escolhida localmente; só entra no contexto global (Session) ao Salvar. */
+  let pendingPhoto: string | null = null;
 
   container.innerHTML = `
     <div class="config-card">
       <div class="config-photo">
-        <span class="avatar avatar--lg">${initials(current?.userName ?? "?")}</span>
+        <span class="avatar avatar--lg${initialPhoto ? " avatar--photo" : ""}"${initialPhoto ? ` style="background-image:url('${escapeHtml(initialPhoto)}')"` : ""}>${initialPhoto ? "" : escapeHtml(initials(current?.userName ?? "?"))}</span>
         <input type="file" id="profile-photo" accept="image/*" hidden>
         <button type="button" class="btn btn--sm btn--gold-outline" id="profile-photo-btn">${icon("upload", 14)} Carregar foto</button>
       </div>
@@ -54,7 +57,7 @@ export function renderSettingsForm(
       <form id="profile-form" novalidate>
         <div class="field">
           <label class="field__label" for="profile-name">Nome</label>
-          <input type="text" id="profile-name" value="${escapeHtml(current?.userName ?? "")}" maxlength="80">
+          <input type="text" id="profile-name" class="uppercase" value="${escapeHtml(current?.userName ?? "")}" maxlength="80">
         </div>
 
         <h4 class="manage-form-title">Alterar Senha</h4>
@@ -102,6 +105,23 @@ export function renderSettingsForm(
   const photoInput = $<HTMLInputElement>("#profile-photo", container);
   const avatar = $<HTMLElement>(".config-photo .avatar", container);
 
+  /** Foto já aplicada (committed) na sessão — usada para restaurar ao Cancelar. */
+  const committedPhoto = (): string | null =>
+    getSession()?.avatarUrl ?? sessionStorage.getItem("maraca.profilePhoto");
+
+  const applyAvatarPreview = (url: string | null): void => {
+    if (!avatar) return;
+    if (url) {
+      avatar.classList.add("avatar--photo");
+      avatar.style.backgroundImage = `url("${url}")`;
+      avatar.textContent = "";
+    } else {
+      avatar.classList.remove("avatar--photo");
+      avatar.style.backgroundImage = "";
+      avatar.textContent = escapeHtml(initials(getSession()?.userName ?? "?"));
+    }
+  };
+
   if (photoBtn && photoInput && avatar) {
     const click = (): void => photoInput.click();
     photoBtn.addEventListener("click", click);
@@ -112,22 +132,18 @@ export function renderSettingsForm(
       if (!file) return;
       const reader = new FileReader();
       reader.onload = () => {
-        const dataUrl = reader.result as string;
-        sessionStorage.setItem("maraca.profilePhoto", dataUrl);
-        avatar.style.backgroundImage = `url("${dataUrl}")`;
-        avatar.textContent = "";
-        showToast("Foto atualizada.");
+        // Apenas pré-visualiza: a foto só é commitada no contexto global ao
+        // Salvar (dispara evento p/ sidebar atualizar sem refresh).
+        pendingPhoto = reader.result as string;
+        applyAvatarPreview(pendingPhoto);
+        showToast("Foto pronta. Clique em Salvar alterações para aplicar.");
       };
       reader.readAsDataURL(file);
     };
     photoInput.addEventListener("change", onPhotoChange);
     cleanups.push(() => photoInput.removeEventListener("change", onPhotoChange));
 
-    const savedPhoto = sessionStorage.getItem("maraca.profilePhoto");
-    if (savedPhoto) {
-      avatar.style.backgroundImage = `url("${savedPhoto}")`;
-      avatar.textContent = "";
-    }
+    applyAvatarPreview(committedPhoto());
   }
 
   // --- Form: cancel ---
@@ -144,6 +160,9 @@ export function renderSettingsForm(
           i.value = "";
         });
         ($("#email-confirm", container) as HTMLInputElement).value = "";
+        // Descarta foto pendente: restaura o preview para a foto commitada na sessão.
+        pendingPhoto = null;
+        applyAvatarPreview(committedPhoto());
         showToast("Alterações descartadas.");
       };
       cancelBtn.addEventListener("click", cancel);
@@ -153,7 +172,8 @@ export function renderSettingsForm(
     // --- Form: submit ---
     const submit = (event: Event): void => {
       event.preventDefault();
-      const nome = ($("#profile-name", container) as HTMLInputElement).value.trim();
+      // Nome padronizado em CAIXA ALTA antes do envio (e-mail/senha preservados).
+      const nome = ($("#profile-name", container) as HTMLInputElement).value.trim().toUpperCase();
       const pwCurrent = ($("#pw-current", container) as HTMLInputElement).value;
       const pwNew = ($("#pw-new", container) as HTMLInputElement).value;
       const pwConfirm = ($("#pw-confirm", container) as HTMLInputElement).value;
@@ -201,6 +221,12 @@ export function renderSettingsForm(
       void (async () => {
         const ok = await onSubmit(data);
         if (ok) {
+          // Salva a foto no contexto global do usuário e emite evento para a
+          // sidebar atualizar o avatar instantaneamente, sem refresh.
+          if (pendingPhoto) {
+            updateSessionAvatar(pendingPhoto);
+            pendingPhoto = null;
+          }
           showToast("Alterações salvas.");
         }
       })();

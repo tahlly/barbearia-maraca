@@ -56,6 +56,44 @@ textarea {
   color: inherit;
 }
 
+/* Remove as setas nativas (spinners) de campos numéricos em todos os
+   navegadores (WebKit/Blink e Firefox). */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Exibe campos de texto em CAIXA ALTA (visual) em todos os formulários
+   e modais. O valor enviado permanece como digitado; a normalização de
+   dados segue as regras de cada formulário (letras maiúsculas no submit).
+   Aplica-se apenas a campos de texto genéricos (input[type="text"] e
+   textarea); selects e tipos sensíveis nunca recebem caixa alta
+   (ver exceções abaixo e a regra `.input` em components.css). */
+input[type="text"],
+textarea {
+  text-transform: uppercase;
+}
+
+/* Senhas e e-mails NUNCA recebem caixa alta: evita que o browser
+   autocompleto, o toggle de visibilidade ou herança de container
+   convertam o valor para maiúsculas. O autocomplete de current/new-password
+   cobre também os campos revelados ("mostrar senha"), que viram type=text
+   em runtime mas mantêm o atributo de autenticação. Selects também ficam
+   isentos: opções longas ("Todos os registros") não devem ser distorcidas. */
+input[type="password"],
+input[type="email"],
+input[type="text"][autocomplete="current-password"],
+input[type="text"][autocomplete="new-password"],
+select {
+  text-transform: none;
+}
+
 button {
   background: none;
   border: none;

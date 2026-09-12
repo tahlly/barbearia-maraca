@@ -197,6 +197,7 @@ export async function loginWithGoogle(
       expiresAt: data.expiresAt ?? Date.now() + CONFIG.sessionTtlMs,
       role: data.role,
       permissoes: data.permissoes,
+      avatarUrl: googleProfile.avatarUrl,
     };
     sessionStorage.setItem(CONFIG.sessionKey, JSON.stringify(session));
     return { ok: true, session, avatarUrl: googleProfile.avatarUrl };

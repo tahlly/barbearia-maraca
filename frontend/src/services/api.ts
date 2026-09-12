@@ -1,5 +1,6 @@
 import { CONFIG } from "../config.js";
 import { navigateTo } from "../router.js";
+import { clearUserStorage } from "./sessionArtifacts.js";
 
 export class ApiError extends Error {
   constructor(
@@ -137,7 +138,7 @@ export async function httpJson<T>(path: string, init: RequestInit = {}): Promise
   /* 401 em caminho autenticado → sessão expirada: limpa storage e vai ao login. */
   if (response.status === 401) {
     if (readTokenFromSession()) {
-      sessionStorage.removeItem(CONFIG.sessionKey);
+      clearUserStorage();
       navigateTo("/login");
     }
     const serverMessage = (await readErrorMessage(response)) ?? "Sessão expirada. Faça login novamente.";

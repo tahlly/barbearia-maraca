@@ -84,7 +84,8 @@
         <li class="steps__item" data-step-name="cliente" hidden><span class="steps__dot">1</span><span class="steps__label">Cliente</span></li>
         <li class="steps__item is-active" data-step-name="servicos"><span class="steps__dot">2</span><span class="steps__label">Serviços</span></li>
         <li class="steps__item" data-step-name="horario"><span class="steps__dot">3</span><span class="steps__label">Profissional &amp; Horário</span></li>
-        <li class="steps__item" data-step-name="confirmacao"><span class="steps__dot">4</span><span class="steps__label">Confirmação</span></li>
+        <li class="steps__item" data-step-name="dependentes"><span class="steps__dot">4</span><span class="steps__label">Quem será atendido</span></li>
+        <li class="steps__item" data-step-name="confirmacao"><span class="steps__dot">5</span><span class="steps__label">Confirmação</span></li>
       </ol>
       <div class="steps__track" aria-hidden="true"><span id="booking-progress"></span></div>
 
@@ -150,7 +151,39 @@
             <p class="slots-hint" id="slots-hint"><i class="bx bx-error-circle" aria-hidden="true"></i><span>Escolha um profissional para ver os horários disponíveis.</span></p>
             <div class="slots" id="booking-slots" hidden></div>
           </section>
-          <section class="wizard__step" data-step="3" data-step-name="confirmacao" aria-label="Passo 4 — Confirmação">
+          <section class="wizard__step" data-step="3" data-step-name="dependentes" aria-label="Passo 4 — Quem será atendido" hidden>
+            <h3 class="wizard__heading">Quem será atendido?</h3>
+            <p class="wizard__hint">Escolha se o atendimento é para você ou para um dependente cadastrado.</p>
+            <div class="quem-options" role="radiogroup" aria-label="Quem será atendido">
+              <label class="option-card quem-option">
+                <input type="radio" name="quem" value="mim">
+                <span class="quem-option__icon" aria-hidden="true"><i class="bx bx-user"></i></span>
+                <span class="quem-option__info">
+                  <strong>Para mim</strong>
+                  <small>Eu serei atendido(a)</small>
+                </span>
+                <span class="option-check"><i class="bx bx-check"></i></span>
+              </label>
+              <label class="option-card quem-option">
+                <input type="radio" name="quem" value="dependente">
+                <span class="quem-option__icon" aria-hidden="true"><i class="bx bx-group"></i></span>
+                <span class="quem-option__info">
+                  <strong>Para um dependente</strong>
+                  <small>Familiar ou acompanhante cadastrado</small>
+                </span>
+                <span class="option-check"><i class="bx bx-check"></i></span>
+              </label>
+            </div>
+            <div class="field dependente-field" data-dependente-fields hidden>
+              <label class="field__label" for="booking-dependente">Selecione o dependente</label>
+              <select id="booking-dependente" aria-describedby="booking-dependente-hint"></select>
+              <span class="field__hint" id="booking-dependente-hint">A lista é carregada do seu cadastro de dependentes.</span>
+              <div class="dependente-quick">
+                <button type="button" class="btn btn--ghost btn--sm" data-dependente-create>+ Cadastrar novo dependente</button>
+              </div>
+            </div>
+          </section>
+          <section class="wizard__step" data-step="4" data-step-name="confirmacao" aria-label="Passo 5 — Confirmação">
             <div class="success-card">
               <span class="success-card__icon" aria-hidden="true"><i class="bx bx-check-circle"></i></span>
               <h3 class="success-card__title" id="booking-success-title">Agendamento confirmado!</h3>

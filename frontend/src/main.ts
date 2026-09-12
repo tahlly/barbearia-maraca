@@ -9,6 +9,7 @@ import { renderLogin } from "./views/login.js";
 import { renderLoginCliente } from "./views/loginCliente.js";
 import { renderMinhaConta } from "./views/minhaConta.js";
 import { renderManage } from "./views/manage.js";
+import { renderFinanceiro } from "./views/financeiro.js";
 import { renderProfissional } from "./views/profissional.js";
 import { primeCatalog } from "./services/catalog.js";
 
@@ -23,11 +24,17 @@ function init(): void {
   registerRoute("/login", renderLogin);
   registerRoute("/login-cliente", renderLoginCliente);
   registerRoute("/minha-conta", renderMinhaConta);
+  registerRoute("/minha-conta/servicos", renderMinhaConta);
+  registerRoute("/minha-conta/contatos", renderMinhaConta);
+  registerRoute("/minha-conta/dependentes", renderMinhaConta);
   registerRoute("/minha-conta/configuracoes", renderMinhaConta);
+  // Alias para o caminho "/cliente/dependentes" solicitado na spec da feature.
+  registerRoute("/cliente/dependentes", renderMinhaConta);
   registerRoute("/admin", renderManage);
   registerRoute("/admin/agendamentos", renderManage);
   registerRoute("/admin/servicos", renderManage);
   registerRoute("/admin/profissionais", renderManage);
+  registerRoute("/admin/financeiro", renderFinanceiro);
   registerRoute("/admin/configuracoes", renderManage);
   registerRoute("/profissional", renderProfissional);
   registerRoute("/profissional/faturamento", renderProfissional);

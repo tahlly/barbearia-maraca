@@ -2,6 +2,9 @@ import { CONFIG } from "../config.js";
 import { navigateTo } from "../router.js";
 import type { Session, UserRole } from "../types.js";
 import { ApiError, apiFetch, httpJson } from "./api.js";
+import { SESSION_UPDATED_EVENT, clearUserStorage } from "./sessionArtifacts.js";
+
+export { SESSION_UPDATED_EVENT };
 
 export interface LoginResult {
   ok: boolean;
@@ -150,14 +153,28 @@ export function getSession(): Session | null {
   try {
     const session = JSON.parse(raw) as Session;
     if (!session.token || session.expiresAt <= Date.now()) {
-      sessionStorage.removeItem(CONFIG.sessionKey);
+      // Expira sem notificar (getSession é chamado com frequência — evitamos loops).
+      clearUserStorage(false);
       return null;
     }
     return session;
   } catch {
-    sessionStorage.removeItem(CONFIG.sessionKey);
+    clearUserStorage(false);
     return null;
   }
+}
+
+/**
+ * Persiste a URL da foto de perfil no estado global do usuário (Session) e
+ * emite `SESSION_UPDATED_EVENT` para que a sidebar atualize instantaneamente.
+ * Mantém o antigo `maraca.profilePhoto` sincronizado por compatibilidade.
+ */
+export function updateSessionAvatar(avatarUrl: string): void {
+  const session = getSession();
+  if (!session) return;
+  persistSession({ ...session, avatarUrl });
+  sessionStorage.setItem("maraca.profilePhoto", avatarUrl);
+  window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT, { detail: { avatarUrl } }));
 }
 
 export function requireSession(): Session {
@@ -222,6 +239,9 @@ export function logout(): void {
     /* ignorar — o logout local continua mesmo se o backend falhar */
   });
 
-  sessionStorage.removeItem(CONFIG.sessionKey);
+  // Limpeza completa do estado local do usuário (sessão, foto, tentativas de
+  // login) + notifica a UI para descartar referências à imagem em memória.
+  clearUserStorage();
+  // Logout leva direto à página inicial pública (Home/Landing), sem passar pelo login.
   navigateTo("/");
 }

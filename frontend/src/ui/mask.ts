@@ -3,6 +3,8 @@
  * Aceita qualquer 2 dígitos na entrada, mas marca visualmente
  * como inválido quando o DDD não está na faixa aceita.
  */
+import { formatCurrency } from "./format.js";
+
 function isValidDDD(ddd: string): boolean {
   const num = Number(ddd);
   if (num >= 11 && num <= 99 && !(num >= 20 && num <= 29)) return true;
@@ -57,4 +59,31 @@ export function attachUppercaseMask(input: HTMLInputElement): void {
       input.setSelectionRange(selectionStart, selectionEnd);
     }
   });
+}
+
+/**
+ * Máscara de Moeda Brasileira em tempo de digitação.
+ * Os dígitos digitados representam centavos (padrão de calculadora):
+ *  "150" -> "R$ 1,50", "180000" -> "R$ 1.800,00".
+ */
+export function maskCurrency(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length === 0) return "R$ 0,00";
+  return formatCurrency(Number(digits) / 100);
+}
+
+export function attachCurrencyMask(input: HTMLInputElement): void {
+  input.addEventListener("input", () => {
+    input.value = maskCurrency(input.value);
+  });
+}
+
+/**
+ * Converte o valor mascarado (ex.: "R$ 1.234,56") de volta para número.
+ * Retorna 0 quando não há dígitos válidos.
+ */
+export function currencyToNumber(value: string): number {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 0) return 0;
+  return Number(digits) / 100;
 }
