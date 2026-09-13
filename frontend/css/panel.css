@@ -356,6 +356,12 @@ body.panel-mode > .footer {
   margin-top: var(--space-5);
 }
 
+/* Variante do Administrador: "Profissional destaque do mês" e
+   "Faturamento do destaque" lado a lado. */
+.kpi-grid--destaque-duo {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 .kpi-grid + .panel__section {
   margin-top: var(--space-5);
 }

@@ -565,6 +565,16 @@ export function renderManage(container: HTMLElement): () => void {
       destaqueConcluidos = count;
     }
 
+    // Faturamento gerado pelo profissional destaque no recorte filtrado,
+    // exibido ao lado do card de destaque (somente para o Administrador).
+    let destaqueFaturamento = 0;
+    if (financial && destaque) {
+      for (const a of filtered) {
+        if (a.status === "cancelado") continue;
+        if (a.funcionarioId === destaque.id) destaqueFaturamento += serviceTotal(a.servicoId);
+      }
+    }
+
     // Caixas financeiras (Linha 3 do wireframe): 4 colunas iguais.
     // Faturamento é o valor já existente; Despesas soma o período filtrado;
     // Lucro Líquido = Faturamento - Despesas; Margem = (Lucro / Faturamento) * 100.
@@ -637,11 +647,16 @@ export function renderManage(container: HTMLElement): () => void {
           <span class="kpi-card__value">${margemPercent === null ? "—" : `${margemPercent.toFixed(1).replace(".", ",")}%`}</span>
         </div>
       </div>` : ""}
-      <div class="kpi-grid kpi-grid--destaque">
+      <div class="kpi-grid kpi-grid--destaque${financial && destaque ? " kpi-grid--destaque-duo" : ""}">
         <div class="kpi-card kpi-card--destaque">
           <span class="kpi-card__label">${icon("star", 16)} Profissional destaque do mês</span>
           ${destaque ? destaqueCardHTML(destaque, destaqueConcluidos) : `<p class="panel__empty kpi-card__empty">${concluidos === 0 ? "Sem atendimentos concluídos nesse recorte." : "Nenhum profissional encontrado."}</p>`}
         </div>
+        ${financial && destaque ? `
+        <div class="kpi-card kpi-card--destaque">
+          <span class="kpi-card__label">${icon("dollar", 16)} Faturamento do destaque</span>
+          <span class="kpi-card__value kpi-card__value--gold">${formatCurrency(destaqueFaturamento)}</span>
+        </div>` : ""}
       </div>
       <div class="charts-grid">
         <div class="chart-card">

@@ -59,6 +59,12 @@
   font-size: 2.3rem;
 }
 
+/* Faturamento do profissional destaque: valor em tamanho de destaque,
+   igual ao Lucro Líquido (Linha 3), para separar do corpo dos demais KPIs. */
+.kpi-card--destaque .kpi-card__value {
+  font-size: 2.3rem;
+}
+
 .kpi-card--lucro-positivo {
   border-color: var(--color-gold-border);
   background-color: var(--color-gold-soft);
@@ -487,6 +493,10 @@
   }
 
   .kpi-card--lucro .kpi-card__value {
+    font-size: 1.7rem;
+  }
+
+  .kpi-card--destaque .kpi-card__value {
     font-size: 1.7rem;
   }
 
