@@ -258,7 +258,7 @@
 }
 
 #conta-agenda-table .table {
-  min-width: 760px;
+  min-width: 800px;
 }
 
 /* ------------------------------------------------------------------ */
@@ -267,23 +267,29 @@
 /* O problema: com larguras originais (Ações 20% ≈ 120px em 600px),
    os botões REAGENDAR/CANCELAR (min-width 96px cada) vazavam da célula
    e pintavam por cima do badge de Status ("Pendente").
-   Ajuste: tabela com min-width 760px (já rola horizontalmente no mobile
+   Ajuste: tabela com min-width 800px (já rola horizontalmente no mobile
    via .table-wrap) e coluna Ações de 32% para os dois botões ficarem
-   lado a lado, contidos na célula, sem sobrepor a coluna Status. */
+   lado a lado, contidos na célula, sem sobrepor a coluna Status.
+   A coluna Data/Hora (22%) ganhou largura e nowrap para o horário ficar
+   SEMPRE ao lado do mês, igual à tabela da Gestão (.table--agenda). */
 #conta-agenda-table .table--conta th:nth-child(1),
-#conta-agenda-table .table--conta td:nth-child(1) { width: 22%; }
+#conta-agenda-table .table--conta td:nth-child(1) { width: 19%; }
 
 #conta-agenda-table .table--conta th:nth-child(2),
-#conta-agenda-table .table--conta td:nth-child(2) { width: 14%; }
+#conta-agenda-table .table--conta td:nth-child(2) { width: 13%; }
 
 #conta-agenda-table .table--conta th:nth-child(3),
-#conta-agenda-table .table--conta td:nth-child(3) { width: 14%; }
+#conta-agenda-table .table--conta td:nth-child(3) { width: 22%; }
 
 #conta-agenda-table .table--conta th:nth-child(4),
-#conta-agenda-table .table--conta td:nth-child(4) { width: 18%; }
+#conta-agenda-table .table--conta td:nth-child(4) { width: 14%; }
 
 #conta-agenda-table .table--conta th:nth-child(5),
 #conta-agenda-table .table--conta td:nth-child(5) { width: 32%; }
+
+#conta-agenda-table .table--conta td:nth-child(3) {
+  white-space: nowrap;
+}
 
 #conta-agenda-table .table--conta .cell-actions {
   display: flex;

@@ -1259,6 +1259,14 @@ body.light-theme .manage-toolbar select.input {
   word-break: normal;
 }
 
+/* Padrão de Data/Hora consistente em todas as listas de agendamentos:
+   o horário fica SEMPRE ao lado do mês (mesmo comportamento da tabela
+   de Gestão .table--agenda, que já é nowrap). Aqui cobrimos a tabela
+   do Profissional (#pro-agenda-table). */
+#pro-agenda-table .table td:nth-child(3) {
+  white-space: nowrap;
+}
+
 /* Colunas Status (5ª) e Ações (6ª) com mais respiro para a badge e o botão
    REVERTER. Larguras são sugestão semântica (table-layout auto), não
    precisam fechar 100%. Vale em todos os viewports: a tabela mantém linhas
