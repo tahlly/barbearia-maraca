@@ -4,6 +4,7 @@ import { $, $$, clearFormErrors, escapeHtml, initials, setFieldError } from "../
 import { icon } from "../ui/icons.js";
 import { formatCurrency, formatDateMedium, formatDateShort } from "../ui/format.js";
 import {
+  ensureCatalogLoaded,
   loadServices,
   loadProfessionals,
   loadCategories,
@@ -320,6 +321,10 @@ export function renderManage(container: HTMLElement): () => void {
 
   // ---------------------------------------------------------------- Dashboard
   async function renderDashboard(): Promise<void> {
+    // BUG 1 (race no boot): aguarda o catálogo antes de ler os caches
+    // síncronos. Sem este await, o primeiro render via F5 podia enxergar
+    // serviceTotal()=0, serviceName()="-" e destaque null.
+    await ensureCatalogLoaded();
     refreshCaches();
     let appointments: Appointment[];
     try {
@@ -415,6 +420,8 @@ export function renderManage(container: HTMLElement): () => void {
       void (async () => {
         try {
           const appts = await listAppointments();
+          await ensureCatalogLoaded();
+          refreshCaches();
           $("#dashboard-metrics", content)!.innerHTML = await dashboardMetricsHTML(appts);
         } catch (error) {
           const metrics = $("#dashboard-metrics", content);

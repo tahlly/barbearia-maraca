@@ -151,6 +151,37 @@ export async function primeCatalog(): Promise<void> {
   await Promise.all([fetchServices(), fetchProfessionals(), fetchCategories()]);
 }
 
+let _primePromise: Promise<void> | null = null;
+let _catalogPrimed = false;
+
+/**
+ * Garante que o catálogo (serviços, profissionais e categorias) foi carregado
+ * no cache.
+ *
+ * Idempotente: enquanto o carregamento inicial está em andamento, retorna a
+ * MESMA promessa (nunca dispara fetches duplicados); após a primeira
+ * conclusão bem-sucedida, resolve imediatamente nas chamadas seguintes.
+ *
+ * Views que dependem do cache síncrono (`loadServices`/`loadProfessionals`)
+ * devem `await` esta função antes de ler — o Dashboard faz isso para nunca
+ * renderizar Faturamento zerado, nomes `-` ou destaque vazio no boot.
+ */
+export function ensureCatalogLoaded(): Promise<void> {
+  if (_catalogPrimed) {
+    return Promise.resolve();
+  }
+  if (!_primePromise) {
+    _primePromise = primeCatalog()
+      .then(() => {
+        _catalogPrimed = true;
+      })
+      .finally(() => {
+        _primePromise = null;
+      });
+  }
+  return _primePromise;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Admin CRUD — serviços (API real)                                   */
 /* ------------------------------------------------------------------ */

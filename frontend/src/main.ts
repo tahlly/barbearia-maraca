@@ -11,7 +11,7 @@ import { renderMinhaConta } from "./views/minhaConta.js";
 import { renderManage } from "./views/manage.js";
 import { renderFinanceiro } from "./views/financeiro.js";
 import { renderProfissional } from "./views/profissional.js";
-import { primeCatalog } from "./services/catalog.js";
+import { ensureCatalogLoaded } from "./services/catalog.js";
 
 function init(): void {
   initTheme();
@@ -56,9 +56,10 @@ function init(): void {
   }
 
   /* Popula o cache de catálogo (serviços e profissionais) no boot.
-     É fire-and-forget: enquanto a resposta não chega, o cache pode estar
-     vazio; as views que dependem dele recarregam assincronamente. */
-  void primeCatalog().catch(() => {
+     É fire-and-forget, mas idempotente: o Dashboard faz `await` nesta mesma
+     promessa (ensureCatalogLoaded) antes de renderizar métricas que dependem
+     do cache — por isso nunca enxerga o cache vazio no primeiro render. */
+  void ensureCatalogLoaded().catch(() => {
     /* Silencioso: falha de rede no boot não deve quebrar a SPA;
        as views tratam os próprios erros ao carregar dados. */
   });
