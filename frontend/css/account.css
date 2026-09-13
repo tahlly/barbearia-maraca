@@ -257,6 +257,56 @@
   min-width: 600px;
 }
 
+#conta-agenda-table .table {
+  min-width: 760px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tabela de agendamentos do Cliente — coluna Ações sem sobreposição  */
+/*  ------------------------------------------------------------------ */
+/* O problema: com larguras originais (Ações 20% ≈ 120px em 600px),
+   os botões REAGENDAR/CANCELAR (min-width 96px cada) vazavam da célula
+   e pintavam por cima do badge de Status ("Pendente").
+   Ajuste: tabela com min-width 760px (já rola horizontalmente no mobile
+   via .table-wrap) e coluna Ações de 32% para os dois botões ficarem
+   lado a lado, contidos na célula, sem sobrepor a coluna Status. */
+#conta-agenda-table .table--conta th:nth-child(1),
+#conta-agenda-table .table--conta td:nth-child(1) { width: 22%; }
+
+#conta-agenda-table .table--conta th:nth-child(2),
+#conta-agenda-table .table--conta td:nth-child(2) { width: 14%; }
+
+#conta-agenda-table .table--conta th:nth-child(3),
+#conta-agenda-table .table--conta td:nth-child(3) { width: 14%; }
+
+#conta-agenda-table .table--conta th:nth-child(4),
+#conta-agenda-table .table--conta td:nth-child(4) { width: 18%; }
+
+#conta-agenda-table .table--conta th:nth-child(5),
+#conta-agenda-table .table--conta td:nth-child(5) { width: 32%; }
+
+#conta-agenda-table .table--conta .cell-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+}
+
+#conta-agenda-table .table--conta .cell-actions .btn--sm {
+  min-width: 0;
+  flex: 1 1 auto;
+  width: auto;
+  padding: 6px 8px;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .btn--danger-text:hover {
   color: var(--color-danger);
   background-color: var(--color-danger-soft);
