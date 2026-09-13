@@ -1276,3 +1276,513 @@ body.light-theme .manage-toolbar select.input {
   padding-left: var(--space-2);
   padding-right: var(--space-3);
 }
+
+/* ==================================================================
+   Financeiro (Admin) — abas Despesas | Resumo | Regras de Comissão
+   View: frontend/src/views/financeiro.ts
+   ------------------------------------------------------------------
+   Reutiliza os tokens do painel e os componentes já existentes
+   (.manage-head, .btn--*, .table-wrap, .table, .badge, .muted-note,
+   .panel__empty, .kpi-grid, .chart-card). Aqui ficam apenas os
+   elementos exclusivos da view Financeiro. Nenhuma regra abaixo força
+   UPPERCASE em inputs: a caixa alta visual vem da classe .uppercase
+   aplicada na view ou do text-transform dos próprios componentes.
+   ================================================================== */
+
+/* ----- Utilidades de cor de texto (variação ▲/▼ do comparativo) -----
+   A view emite text--success (>= 0) ou text--danger (< 0). São classes
+   utilitárias genéricas de texto; podem ser promovidas para
+   components.css se outro fluxo passar a usá-las. */
+.text--success {
+  color: var(--color-success-text);
+}
+
+.text--danger {
+  color: var(--color-danger-text);
+}
+
+.text--success,
+.text--danger {
+  font-weight: 800;
+}
+
+/* ----- Navegação por abas (topo do painel) -----
+   Tab bar text-only, sem ícones e sem badge: o padrão é nenhum badge.
+   A caixa alta é visual e feita aqui (botões de aba, não inputs).
+   Em telas estreitas as abas permanecem em linha única e a barra rola
+   horizontalmente (scrollbar invisível), padrão de tab bar em SPA. */
+.tab-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-border);
+  scrollbar-width: none;
+}
+
+.tab-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  appearance: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 12px 18px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+
+.tab:hover {
+  color: var(--color-text);
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: -2px;
+  border-radius: 6px;
+}
+
+.tab--active {
+  color: var(--color-gold);
+  border-bottom-color: var(--color-gold);
+}
+
+/* Painel de conteúdo de cada aba: coluna flex com o mesmo respiro do
+   .panel__section. A transição usa o keyframe fade-in de base.css e é
+   desativada globalmente por prefers-reduced-motion. */
+.tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  animation: fade-in var(--transition-base);
+}
+
+/* ----- Ancoragem do topbar e respiro uniforme nas abas -----
+   O `.panel__topbar` (layout.ts) é irmão do `.panel__content`, FORA do
+   scroll interno. No desktop ele é inerentemente imune à rolagem; no
+   mobile (<=768px) o documento rola naturalmente e o topbar estático
+   sairia do viewport — e a aba Resumo é a única alta o suficiente para
+   rolar. `:has(.tab-panel)` isola a view Financeiro (única que emite
+   `.tab-panel`); `z-index: 10` fica abaixo do sidebar/backdrop mobile
+   (60/55) e acima do conteúdo. No desktop a regra é inerte. */
+.panel__main:has(.tab-panel) .panel__topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* ----- Ancoragem da barra de abas dentro de .panel__content -----
+   A view Financeiro emite `.tab-bar` + `.tab-panel` como IRMÃOS dentro de
+   `.panel__content` (financeiro.ts renderConteudo). A barra vive no TOPO do
+   scroll e a aba Resumo é a única alta o suficiente para rolar — sem
+   ancoragem, a barra sai do viewport junto com o conteúdo e o usuário
+   perde a navegação entre abas. Mesmo escopo `:has(.tab-panel)` do topbar
+   acima (classes exclusivas do Financeiro; o `:has` impede vazamento para
+   Account/Manage/Admin).
+
+   No desktop (>.768px) `.panel__content` é o scroll container
+   (overflow-y: auto) e o topbar é irmão FORA do scroll: o scrollport
+   começa exatamente abaixo do topbar, então `top: 0` ancora a barra no
+   lugar certo sem offset. No mobile (<=768px) o documento rola e o topbar
+   sticky ocupa altura real do viewport; o offset é tratado no @media.
+
+   `z-index: 9` fica abaixo do topbar (10) e do sidebar/backdrop mobile
+   (60/55). O background opaco usa `--color-bg` — o fundo real de
+   `.panel__content`/`.panel` (panel.css:10; a barra nunca recebeu fundo).
+   `flex-shrink: 0` evita espremer a barra no flex column com overflow.
+
+   A faixa abaixo da borda da barra é transparente (margin-bottom 12px da
+   .tab-bar + gap 16px do .panel__content = 28px): sem tampa o conteúdo de
+   Resumo apareceria deslizando por baixo. A sombra opaca (blur 0, spread
+   0) cobre exatamente esses 28px SEM mudar o layout — box-shadow não
+   ocupa fluxo e não é recortada pelo overflow-x: auto da barra. */
+.panel__main:has(.tab-panel) .tab-bar {
+  position: sticky;
+  top: 0;
+  z-index: 9;
+  background-color: var(--color-bg);
+  box-shadow: 0 calc(var(--space-3) + var(--space-4)) 0 0 var(--color-bg);
+  flex-shrink: 0;
+}
+
+/* Mobile: o `.panel__topbar` é sticky top:0 e sua altura é derivada de
+   padding var(--space-5) × 2 + hamburger 36px (panel.css) + border 1px
+   (panel.css). Não existe token de altura do topbar (`--header-h` é o
+   header público); o valor é calculado dos componentes reais, não
+   inventado. PENDÊNCIA: QA deve medir a altura real do topbar em
+   viewport estreito (ex.: 375px/390px/768px) e ajustar este top se o
+   título do painel quebrar linha e aumentar a altura. */
+@media (max-width: 768px) {
+  .panel__main:has(.tab-panel) .tab-bar {
+    top: calc(var(--space-5) * 2 + 36px + 1px);
+  }
+}
+
+/* O bloco "Dashboard compacto" (>=1024px) compacta `.panel__content` via
+   `:has(.kpi-grid)`; a aba Resumo (única aba do Financeiro com .kpi-grid)
+   receberia padding/gap diferentes das abas Despesas/Regras, deslocando o
+   conteúdo ao alternar. Restauramos o respiro padrão do painel quando a
+   view de abas está ativa (mesma especificidade, ordem posterior vence). */
+@media (min-width: 1024px) {
+  .panel__content:has(.tab-panel) {
+    padding: var(--space-6);
+    gap: var(--space-4);
+  }
+}
+
+/* ----- KPIs da aba Resumo -----
+   Card próprio (.kpi) com a mesma linguagem do .kpi-card do dashboard;
+   o grid responsivo (4 -> 2 -> 1) já vem do .kpi-grid em panel.css. */
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.kpi__label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.kpi__value {
+  font-size: 1.9rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--color-text);
+  /* Valores longos (R$ 1.234.567,89) não podem vazar o card */
+  overflow-wrap: anywhere;
+}
+
+/* Variantes de cor dos KPIs (hooks prontos; a view escolhe por KPI).
+   Espelham os modificadores já existentes do .kpi-card__value. */
+.kpi__value--gold {
+  color: var(--color-gold);
+}
+
+.kpi__value--success {
+  color: var(--color-success-text);
+}
+
+.kpi__value--danger {
+  color: var(--color-danger-text);
+}
+
+/* ----- Card comparativo (este mês vs. mês anterior) -----
+   As linhas da view são spans irmãos (rótulo + variação); o flex com
+   wrap e gap agrupa cada par sem precisar de wrapper extra. */
+.compare-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.compare-card__title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.compare-card__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-5);
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
+
+/* ----- Grid de gráficos do Resumo ----- */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+}
+
+.chart {
+  min-width: 0;
+}
+
+/* Evolução mensal: permite scroll horizontal dentro do card em telas
+   estreitas (as barras mantêm largura mínima confortável). */
+.chart--lines {
+  overflow-x: auto;
+}
+
+/* ----- Barras verticais agrupadas (evolução mensal) -----
+   Cada .bars__col é uma coluna por mês; as barras de receita/despesa
+   ficam lado a lado (flex row) alinhadas à base, com o rótulo do eixo
+   posicionado de forma absoluta no rodapé da coluna (sem cortar texto).
+   A view injeta height:% via style inline; o height:0 é fallback. */
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  height: 220px;
+  min-width: 480px;
+  padding-top: var(--space-3);
+}
+
+.bars__col {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  /* Reserva o rodapé para o rótulo do eixo ficar 100% visível */
+  padding-bottom: 20px;
+}
+
+.bars__bar {
+  display: block;
+  flex: 1 1 0;
+  max-width: 22px;
+  height: 0; /* fallback; a view injeta height:% via style inline */
+  min-height: 4px;
+  border-radius: 4px 4px 0 0;
+  transition:
+    height var(--transition-base),
+    background-color var(--transition-fast);
+}
+
+.bars__bar--receita {
+  background-color: var(--color-success);
+}
+
+.bars__bar--despesa {
+  background-color: var(--color-danger);
+}
+
+/* Hook para quando a view passar a renderizar a série de lucro. */
+.bars__bar--lucro {
+  background-color: var(--color-gold);
+}
+
+.bars__label {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  font-size: 0.62rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ----- Lista de categorias (despesas por categoria) ----- */
+.cat-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cat-list__item {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) minmax(64px, 2fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.cat-list__label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.cat-list__track {
+  display: block;
+  height: 10px;
+  background-color: var(--color-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.cat-list__fill {
+  display: block;
+  height: 100%;
+  background-color: var(--color-gold);
+  border-radius: var(--radius-full);
+  transition: width var(--transition-base);
+}
+
+.cat-list__value {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--color-text-secondary);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ----- Regras de Comissão: card do interruptor ----- */
+.switch-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.switch-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.switch-card__title {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.switch-card__hint {
+  margin: var(--space-1) 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* Estado SIM/NÃO ao lado do track. O .switch base (components.css) mede
+   42x24 e assume apenas input+track; quando há .switch__state o label
+   cresce para acomodar o texto (escopo :has, mesmo recurso usado no
+   restante do app para não afetar os switches de permissões). */
+.switch:has(.switch__state) {
+  width: auto;
+  height: auto;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.switch__state {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.switch__state--on {
+  color: var(--color-gold);
+}
+
+.switch__state--off {
+  color: var(--color-text-muted);
+}
+
+/* Estado indisponível (falha ao carregar/salvar a configuração): o track
+   já é escurecido pelo components.css; aqui o rótulo acompanha. Texto
+   "INDISPONÍVEL" continua presente — cor nunca é o único sinal. */
+.switch:has(input:disabled) .switch__state {
+  opacity: 0.55;
+}
+
+/* ----- Nota explicativa dinâmica (aba Comissão) ----- */
+.note {
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.note--info {
+  background-color: var(--color-gold-soft);
+  border: 1px solid var(--color-gold-border);
+  color: var(--color-text-secondary);
+}
+
+.note .muted-note {
+  margin: 0;
+}
+
+/* ----- Tabela de Despesas: ações compactas e quebráveis -----
+   Escopo .tab-panel .table (apenas a tabela da aba Despesas). Os botões
+   Editar/Excluir ficam com respiro menor e podem quebrar de linha sem
+   estourar a coluna Ações; as demais tabelas do app não são afetadas. */
+.tab-panel .table .cell-actions {
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
+  white-space: normal;
+}
+
+.tab-panel .table .cell-actions .btn--sm {
+  min-width: 0;
+  padding: 6px 12px;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* ----- Responsivo ----- */
+@media (max-width: 992px) {
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .tab {
+    padding: 10px 12px;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+  }
+
+  .cat-list__item {
+    grid-template-columns: minmax(96px, 1fr) minmax(48px, 2fr) auto;
+    gap: var(--space-2);
+  }
+}
+
+/* No desktop compacto (>=1024px) a aba Resumo acompanha o respiro do
+   dashboard (:has(.kpi-grid) em manage.css): cards de KPI com padding
+   p-3 e valores 1.4rem, mesma linguagem do .kpi-card compacto. */
+@media (min-width: 1024px) {
+  .kpi {
+    padding: var(--space-3);
+    gap: var(--space-2);
+  }
+
+  .kpi__value {
+    font-size: 1.4rem;
+  }
+}
