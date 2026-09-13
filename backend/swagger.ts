@@ -24,6 +24,7 @@ const options: swaggerJSDoc.Options = {
     path.join(__dirname, 'src', 'rotas', 'dashboard-routes.ts'),
     path.join(__dirname, 'src', 'rotas', 'despesa-routes.ts'),
     path.join(__dirname, 'src', 'rotas', 'financeiro-routes.ts'),
+    path.join(__dirname, 'src', 'rotas', 'painel-barbeiro-routes.ts'),
   ],
 };
 

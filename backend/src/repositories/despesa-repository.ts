@@ -255,3 +255,34 @@ export async function somarDespesasPorMes(opcoes: {
 
   return rows as unknown as DespesaPorMesRow[];
 }
+
+// ── Agregado do Painel do Profissional ───────────────────────────────
+
+interface SomaComissaoRow {
+  total: string | number | null;
+}
+
+/**
+ * Soma as comissões (despesas `tipo_despesa='comissao'`, geradas pelo hook
+ * automático ao concluir atendimento) de UM funcionário em um período.
+ *
+ * Decisão de semântica: a comissão do profissional é materializada como
+ * despesa automática (`agendamento_id` preenchido) na MESMA data do
+ * atendimento (`despesa.data` = `agendamento.data`). Portanto o filtro de
+ * período é sobre `despesa.data`, e `funcionario_id` é OBRIGATÓRIO — nunca
+ * soma comissão de outros profissionais (nem a receita da barbearia).
+ */
+export async function somarComissaoFuncionarioPeriodo(opcoes: {
+  funcionarioId: string;
+  inicio: string;
+  fim: string;
+}): Promise<string> {
+  const row = (await db('despesa')
+    .where('funcionario_id', opcoes.funcionarioId)
+    .where('tipo_despesa', 'comissao')
+    .whereBetween('data', [opcoes.inicio, opcoes.fim])
+    .sum({ total: 'valor' })
+    .first()) as SomaComissaoRow | undefined;
+
+  return String(row?.total ?? 0);
+}
