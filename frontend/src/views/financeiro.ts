@@ -164,13 +164,17 @@ export function renderFinanceiro(container: HTMLElement): () => void {
                     <td>
                       <span class="cell-actions">
                         ${
-                          // Pré-editar/editar/excluir só para despesas MANUAIS.
-                          d.automatica
-                            ? `<span class="muted-note">Gerada pelo sistema</span>`
-                            : `<span class="cell-actions">
-                                <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-despesa="${escapeHtml(d.id)}">Editar</button>
-                                <button type="button" class="btn btn--sm btn--danger-outline" data-delete-despesa="${escapeHtml(d.id)}">Excluir</button>
-                              </span>`
+                          // Despesa automática COM agendamento → link para atendimento;
+                          // automática SEM agendamento → texto informativo;
+                          // manual → Editar + Excluir.
+                          d.automatica && d.agendamento_id
+                            ? `<a class="btn btn--sm btn--outline" href="#/admin/agendamentos">Ver atendimento</a>`
+                            : d.automatica
+                              ? `<span class="muted-note">Gerada pelo sistema</span>`
+                              : `<span class="cell-actions">
+                                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-despesa="${escapeHtml(d.id)}">Editar</button>
+                                  <button type="button" class="btn btn--sm btn--danger-outline" data-delete-despesa="${escapeHtml(d.id)}">Excluir</button>
+                                </span>`
                         }
                       </span>
                     </td>
