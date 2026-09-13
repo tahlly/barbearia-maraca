@@ -422,9 +422,12 @@
   font-size: 0.85rem;
 }
 
-/* ----- Dashboard compacto (Desktop ≥ 1024px) ----------------------------
-   Em lg+ o dashboard deve caber no viewport (shell 100vh) sem rolagem
-   vertical em monitores padrão. Compactação deliberada e escopada:
+/* ----- Dashboard compacto (Desktop ≥ 1024px, paisagem) -------------------
+   Em lg+ (somente viewports em PAISAGEM, ex.: monitores e tablets deitados)
+   o dashboard deve caber no viewport (shell 100vh) sem rolagem vertical em
+   monitores padrão. Compactação deliberada e escopada — NÃO se aplica em
+   retrato (ex.: iPad Pro em pé, 1032px), onde o conteúdo deve preencher a
+   altura disponível com o layout espaçoso padrão:
    - respiro uniforme: padding interno dos cards em p-3 (12px) e gaps de
      grid/linhas em gap-3 (12px);
    - alturas de gráficos e avatar do destaque reduzidas para o respiro maior
@@ -434,7 +437,7 @@
    O container já é o .panel (100vh) com .panel__content flex:1; mantém-se
    overflow-y:auto como fallback para janelas muito baixas — não aplicamos
    overflow:hidden forçado que poderia cortar conteúdo inacessível. */
-@media (min-width: 1024px) {
+@media (min-width: 1024px) and (orientation: landscape) {
   /* Container principal do Dashboard: respiro uniforme entre linhas (gap-3).
      Padding vertical reduzido (p-2) para o respiro maior caber no viewport;
      margens laterais seguem p-4 para preservar o alinhamento do painel. */
