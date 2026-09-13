@@ -137,14 +137,17 @@
   font-size: 18px;
 }
 
-/* Cabeçalho do card padronizado com .kpi-card__label do dashboard. */
+/* Cabeçalho do card padronizado com .kpi-card__label do dashboard.
+   margin-bottom abre respiro entre o título e o conteúdo (lista de
+   horários, endereço, telefone etc.) — sem ele, o título colava no
+   conteúdo logo abaixo. */
 .contact-section--panel .contact__item h3 {
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-text-muted);
-  margin-bottom: 0;
+  margin-bottom: var(--space-2);
 }
 
 .contact-section--panel .contact__item p,
