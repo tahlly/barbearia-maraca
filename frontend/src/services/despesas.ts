@@ -5,6 +5,7 @@
  * - `GET /api/despesas`      → listagem paginada (filtros opcionais inicio+fim,
  *                              tipo; envelope { items, total, page, limit, totalPages })
  * - `POST /api/despesas`     → criação manual (tipo_despesa NUNCA comissao)
+ * - `PUT /api/despesas/:id`  → edição manual (tipo_despesa NUNCA comissao)
  * - `DELETE /api/despesas/:id` → exclusão manual (automatica/comissao é bloqueada)
  * - `GET /api/despesas/resumo` → soma de despesas de um período
  *
@@ -99,6 +100,20 @@ export interface NovaDespesa {
   recorrente: boolean;
 }
 
+/**
+ * Corpo recebido no PUT /api/despesas/:id (edição manual).
+ * Os mesmos valores da tela de criação, enviados sempre na íntegra porque o
+ * formulário abre pré-preenchido com os dados atuais da despesa.
+ */
+export interface AtualizarDespesaInput {
+  descricao: string;
+  tipo_despesa: Exclude<TipoDespesa, "comissao">;
+  /** Valor em reais. */
+  valor: number;
+  data: string;
+  recorrente: boolean;
+}
+
 interface DespesaPaginada {
   items: DespesaDTO[];
   total: number;
@@ -128,6 +143,34 @@ export async function criarDespesa(dados: NovaDespesa): Promise<Despesa> {
     body: JSON.stringify({
       descricao: dados.descricao,
       tipo_despesa: dados.tipo_despesa,
+      valor: Number(dados.valor.toFixed(2)),
+      data: dados.data,
+      recorrente: dados.recorrente,
+    }),
+  });
+  return toDespesa(dto);
+}
+
+/**
+ * Atualiza os dados de uma despesa MANUAL via `PUT /api/despesas/:id`.
+ *
+ * Convenções aplicadas na origem do dado (mesma da criação):
+ * - `descricao` é normalizada para MINÚSCULAS antes de persistir; a exibição
+ *   em maiúsculas é responsabilidade da camada visual (classe `uppercase`).
+ * - `tipo_despesa` NUNCA pode ser `comissao` (determinado no tipo do dado;
+ *   o Backend recusa 400 caso algo tente burlar).
+ * - `valor`/`data`/`recorrente` são reenviados sempre (edição integral do
+ *   formulário, que abre pré-preenchido com os valores atuais).
+ */
+export async function atualizarDespesa(
+  id: string,
+  dados: AtualizarDespesaInput,
+): Promise<Despesa> {
+  const dto = await httpJson<DespesaDTO>(`/despesas/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      descricao: dados.descricao.toLowerCase(),
+      tipo_despesa: dados.tipo_despesa.toLowerCase(),
       valor: Number(dados.valor.toFixed(2)),
       data: dados.data,
       recorrente: dados.recorrente,

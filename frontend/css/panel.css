@@ -250,6 +250,9 @@ body.panel-mode > .footer {
   padding: var(--space-5) var(--space-6);
   border-bottom: 1px solid var(--color-border);
   background-color: var(--color-surface);
+  /* O topbar não encolhe por flex (o container .panel__main é column):
+     mantém altura fixa mesmo com conteúdos altos no .panel__content. */
+  flex-shrink: 0;
 }
 
 .panel__topbar-start {

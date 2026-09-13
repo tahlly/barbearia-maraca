@@ -96,10 +96,15 @@
   gap: var(--space-4);
 }
 
+/* Grid de contatos da view de Contatos do painel — equivalência nativa de
+   `grid-cols-1 md:grid-cols-2`: 1 coluna no mobile e 2 colunas no desktop,
+   dispondo os 4 cards 2x2 (2 em cima, 2 embaixo). Segue o mesmo token de
+   gap (space-4) do .kpi-grid e do dashboard para harmonia. */
 .contact-section--panel .contact__info {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
+  row-gap: var(--space-4);
 }
 
 .contact-section--panel .contact__item {
@@ -111,6 +116,17 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden; /* camada de proteção visual contra vazamento de
+                      conteúdo longo (e-mail/endereço). */
+}
+
+/* E-mail: quebra de palavra somente quando necessário (overflow-wrap:
+   anywhere) — impede vazamento do texto fora do card sem forçar quebra
+   em toda palavra, preservando a leitura de endereços e tel. */
+.contact-section--panel .contact__item a[href^="mailto:"] {
+  overflow-wrap: anywhere;
+  word-break: break-word;
   min-width: 0;
 }
 
@@ -213,7 +229,99 @@
   color: var(--color-danger-text);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Tabelas do painel do Cliente — scroll horizontal responsivo        */
+/*  ------------------------------------------------------------------ */
+/* Agendamentos, Serviços Ofertados e Dependentes passam a ter o MESMO
+   comportamento do painel Admin (agenda da gestão): o .table-wrap já
+   rola horizontalmente (overflow-x: auto) e a tabela ganha largura
+   mínima para manter as colunas alinhadas SEM espremer textos (mesmo
+   valor base de 600px usado nas tabelas gerenciáveis, suficiente para
+   serviço, profissional, data, status e as ações AGENDAR/CANCELAR).
+   O user-select: none evita seleção acidental de texto ao arrastar o
+   scroll horizontal em telas pequenas (equivalente nativo do especificado
+   «select-none»); a legibilidade e a seleção por teclado permanecem
+   intactas para leitores de tela. */
+#conta-agenda-table,
+[data-servicos-wrap],
+[data-dependentes-wrap] {
+  width: 100%;
+  overflow-x: auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#conta-agenda-table .table,
+[data-servicos-wrap] .table,
+[data-dependentes-wrap] .table {
+  min-width: 600px;
+}
+
 .btn--danger-text:hover {
   color: var(--color-danger);
   background-color: var(--color-danger-soft);
+}
+
+/* ============================================================
+   Card "CONSULTAR AGENDAMENTOS" — painel do Cliente (mobile-first)
+   Escopo nativo: `.adv-filter:has([data-new-booking])`.
+   Só o Cliente tem `data-new-booking` dentro do `.adv-filter`
+   (o Admin usa `data-consult`), então estas regras NÃO afetam
+   o painel Admin, que reutiliza as mesmas classes `.adv-filter__*`.
+   Tradução visual: flex flex-col md:flex-row w-full gap-3,
+   datas e botões w-full no mobile (LIMPAR FILTRO sem vazamento).
+   ============================================================ */
+.adv-filter:has([data-new-booking]) .adv-filter__row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  gap: var(--space-3);
+}
+
+.adv-filter:has([data-new-booking]) .adv-filter__field {
+  width: 100%;
+}
+
+.adv-filter:has([data-new-booking]) .adv-filter__date,
+.adv-filter:has([data-new-booking]) .adv-filter__date input[type="date"] {
+  width: 100%;
+}
+
+.adv-filter:has([data-new-booking]) .adv-filter__actions {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: var(--space-3);
+}
+
+.adv-filter:has([data-new-booking]) .adv-filter__actions .btn {
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .adv-filter:has([data-new-booking]) .adv-filter__row {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+
+  .adv-filter:has([data-new-booking]) .adv-filter__field {
+    width: auto;
+  }
+
+  .adv-filter:has([data-new-booking]) .adv-filter__date,
+  .adv-filter:has([data-new-booking]) .adv-filter__date input[type="date"] {
+    width: auto;
+  }
+
+  .adv-filter:has([data-new-booking]) .adv-filter__actions {
+    flex-direction: row;
+    align-items: center;
+    width: auto;
+    margin-left: 0;
+  }
+
+  .adv-filter:has([data-new-booking]) .adv-filter__actions .btn {
+    width: auto;
+  }
 }
