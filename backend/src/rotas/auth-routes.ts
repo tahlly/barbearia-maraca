@@ -27,10 +27,14 @@ const authRoutes = Router();
  *         avatarUrl: { type: string, nullable: true }
  *     AuthLoginRequest:
  *       type: object
- *       required: [email, password]
+ *       required: [email, password, tipoAcesso]
  *       properties:
  *         email: { type: string, example: cliente@email.com }
  *         password: { type: string, example: senha123 }
+ *         tipoAcesso:
+ *           type: string
+ *           enum: [interno, cliente]
+ *           description: 'interno = portal administrativo; cliente = portal de agendamento'
  *     AuthLoginResponse:
  *       type: object
  *       properties:

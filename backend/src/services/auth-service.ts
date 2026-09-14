@@ -153,6 +153,12 @@ export async function autenticarComGoogle(idToken: string): Promise<LoginRespons
   if (usuario.tipo === 'funcionario') {
     garantirFuncionarioAtivo(ativo);
   }
+
+  // Portal cliente (Google): rejeitar funcionários
+  if (usuario.tipo !== 'cliente') {
+    throw new ForbiddenError('Acesso restrito para clientes');
+  }
+
   const role = mapearTipoParaRole(usuario.tipo, cargo);
 
   return {
@@ -276,6 +282,7 @@ export async function registrar(data: {
 export async function login(data: {
   email: string;
   senha: string;
+  tipoAcesso: 'interno' | 'cliente';
 }): Promise<LoginResponseDTO> {
   const usuario = await findUsuarioByEmail(data.email);
   if (!usuario || !usuario.senha_hash) {
@@ -291,6 +298,15 @@ export async function login(data: {
   if (usuario.tipo === 'funcionario') {
     garantirFuncionarioAtivo(ativo);
   }
+
+  // Verificação de acesso cruzado: tipoAcesso deve bater com o tipo do usuário
+  if (data.tipoAcesso === 'cliente' && usuario.tipo !== 'cliente') {
+    throw new ForbiddenError('Acesso restrito para este portal');
+  }
+  if (data.tipoAcesso === 'interno' && usuario.tipo !== 'funcionario') {
+    throw new ForbiddenError('Acesso restrito para este portal');
+  }
+
   const role = mapearTipoParaRole(usuario.tipo, cargo);
 
   return {
