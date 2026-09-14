@@ -58,8 +58,9 @@ function extrairDiaSemanaDaData(data?: string): number | undefined {
   if (Number.isNaN(d.getTime())) {
     throw new ValidationError('data deve estar em formato ISO válido');
   }
-  const jsDay = d.getDay(); // 0=domingo ... 6=sábado (igual ao domínio)
-  return jsDay;
+  // "YYYY-MM-DD" é data de calendário (sem hora): usa componentes UTC para
+  // obter o dia da semana independente do fuso do servidor.
+  return d.getUTCDay(); // 0=domingo ... 6=sábado (igual ao domínio)
 }
 
 export async function listarHorarios(req: Request, res: Response): Promise<void> {
