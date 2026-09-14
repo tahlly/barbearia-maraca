@@ -96,7 +96,7 @@ npm run build                 # tsc && vite build
 - **Migrations não devem ser reescritas após aplicadas** — crie novas migrations para mudanças.
 - **Restrição de dupla reserva** é um índice único parcial em `agendamento (funcionario_id, data, hora) WHERE status <> 'cancelado'` (migration `20260902000004`). Cobre horário exato, não sobreposição parcial.
 - **Nomenclatura do schema:** a tabela de equipe é `funcionario` (enum `cargo`: barbeiro/recepcionista/administrador), NÃO `barbeiro`. Horários são `horario_trabalho` + `horario_excecao`, NÃO `horario`.
-- **Seed:** senha padrão dos usuários de teste é `senha123`; o seed não cria agendamentos.
+- **Seed:** senha padrão dos usuários de teste é `senha123`; o seed cria dados de demonstração — 55 agendamentos em datas passadas e 12 horários de trabalho padrão (seg–sáb 09:00–19:00) para os 2 barbeiros.
 
 ### Commits e fluxo de PR
 - **Commitlint + Husky** validam a mensagem de commit (Conventional Commits, `commitlint.config.cjs`). Formato: `tipo(escopo): descrição` (ex.: `fix(frontend): ...`). Mensagens fora do padrão são **bloqueadas**.
