@@ -1,6 +1,7 @@
 import type {
   PainelBarbeiroDTO,
   PainelBarbeiroComissaoDTO,
+  PainelBarbeiroComissaoServicoDTO,
   PainelBarbeiroServicoDTO,
   PainelBarbeiroHorarioDTO,
 } from '../dtos/painel-barbeiro-dto';
@@ -9,7 +10,10 @@ import {
   contarAgendamentosPorHora,
 } from '../repositories/dashboard-repository';
 import { resumirFaturamento } from '../repositories/agendamento-repository';
-import { buscarConfiguracaoComissao } from '../repositories/comissao-repository';
+import {
+  buscarConfiguracaoComissao,
+  listarComissoesDoFuncionario,
+} from '../repositories/comissao-repository';
 import { somarComissaoFuncionarioPeriodo } from '../repositories/despesa-repository';
 import { buscarFuncionarioPorUsuarioId } from '../repositories/horario-repository';
 import { formatarData, formatarHora } from '../utils/formatadores';
@@ -135,10 +139,10 @@ export async function obterPainelBarbeiro(
 
   const comissaoAtiva = (await buscarConfiguracaoComissao()) === true;
 
-  // Consultas independentes em paralelo. As somas de comissão só são
-  // consultadas quando o interruptor global está ATIVO (economia + o card
-  // não existe com comissão desligada).
-  const [faturamento, diaRows, horaRows, comissaoAtual, comissaoAnterior] =
+  // Consultas independentes em paralelo. As somas de comissão e a lista de
+  // percentuais só são consultadas quando o interruptor global está ATIVO
+  // (economia + os campos não existem com comissão desligada).
+  const [faturamento, diaRows, horaRows, comissaoAtual, comissaoAnterior, comissoes] =
     await Promise.all([
       resumirFaturamento({ funcionarioId, inicio: mesCorrente.inicio, fim: mesCorrente.fim }),
       contarAgendamentosPorDia({
@@ -165,6 +169,9 @@ export async function obterPainelBarbeiro(
             fim: mesAnterior.fim,
           })
         : Promise.resolve('0'),
+      comissaoAtiva
+        ? listarComissoesDoFuncionario(funcionarioId)
+        : Promise.resolve([]),
     ]);
 
   // Atendimentos por dia: preenche zero para dias sem atendimento na janela.
@@ -202,9 +209,19 @@ export async function obterPainelBarbeiro(
     };
   }
 
+  // Percentuais por serviço do PRÓPRIO profissional (espelho do catálogo de
+  // comissão, sem exigir `ver_financeiro` — dado pessoal, não de gestão).
+  // Só são consultados com o interruptor ativo.
+  const comissoesServico: PainelBarbeiroComissaoServicoDTO[] = comissoes.map((item) => ({
+    servicoId: item.servico_id,
+    servicoNome: item.servico_nome,
+    percentual: item.percentual,
+  }));
+
   return {
     atendimentosMes: faturamento.quantidade,
     comissaoMes,
+    comissoesServico,
     atendimentosPorDia,
     servicosMaisFeitos,
     horariosMaisConcorridos,

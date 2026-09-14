@@ -390,6 +390,16 @@ export function renderLogin(container: HTMLElement): () => void {
       return;
     }
 
+    // Acesso cruzado: conta de cliente tentando entrar na área restrita.
+    // A mensagem é canônica no frontend (não ecoa o corpo da API); não conta
+    // como tentativa inválida (a senha pode estar correta) nem ativa lockout.
+    if (result.status === 403) {
+      passwordInput.value = "";
+      passwordInput.focus();
+      showToast("Esse acesso é restrito para administradores e funcionários.", "error");
+      return;
+    }
+
     registerFailure();
     passwordInput.value = "";
     passwordInput.focus();

@@ -4,9 +4,18 @@ import { $, escapeHtml, initials } from "../ui/dom.js";
 import { icon } from "../ui/icons.js";
 import { formatDateMedium, formatCurrency } from "../ui/format.js";
 import { cancelAppointment, listAppointments, getRevenueSummary, type RevenueSummary } from "../services/booking.js";
+import { obterPainelBarbeiro, type PainelBarbeiroComissaoServicoDTO } from "../services/painel-barbeiro.js";
 import { confirmDialog } from "../ui/modal.js";
 import { initBookingWizard } from "../features/bookingWizard.js";
 import { showToast } from "../ui/toast.js";
+import {
+  bindPaginacao,
+  criarPaginacaoEstado,
+  limitarPagina,
+  paginar,
+  paginacaoHtml,
+  type PaginacaoEstado,
+} from "../ui/pagination.js";
 import type { Appointment } from "../types.js";
 
 const STATUS_LABEL: Record<Appointment["status"], string> = {
@@ -149,6 +158,13 @@ export function renderProfissional(container: HTMLElement): () => void {
     if (inicio) inicio.value = defaultStart;
     if (fim) fim.value = defaultEnd;
 
+    // Paginação client-side: estado local da tela; nova consulta reseta para a
+    // primeira página. `ultimaLista` conserva os dados completos para os
+    // handlers de navegação reaplicarem os filtros sem novo fetch.
+    const paginacao = criarPaginacaoEstado();
+    let ultimaLista: Appointment[] = [];
+    let totalFiltrado = 0;
+
     function applyFilters(appointments: Appointment[]): Appointment[] {
       let list = appointments;
       const q = (search?.value ?? "").trim().toLowerCase();
@@ -172,7 +188,16 @@ export function renderProfissional(container: HTMLElement): () => void {
 
     function refresh(appointments: Appointment[]): void {
       currentAppointments = appointments;
-      $("#pro-agenda-table", content)!.innerHTML = buildTable(applyFilters(appointments));
+      ultimaLista = appointments;
+      const filtered = applyFilters(appointments);
+      // Paginação: limita a página ao novo total filtrado e renderiza a fatia.
+      totalFiltrado = filtered.length;
+      paginacao.paginaAtual = limitarPagina(paginacao.paginaAtual, filtered.length, paginacao.itensPorPagina);
+      $("#pro-agenda-table", content)!.innerHTML = buildTable(
+        paginar(filtered, paginacao),
+        filtered.length,
+        paginacao,
+      );
     }
 
     async function reloadList(): Promise<void> {
@@ -204,12 +229,15 @@ export function renderProfissional(container: HTMLElement): () => void {
     void reloadList();
 
     const onSearch = (): void => {
+      paginacao.paginaAtual = 1;
       void reloadList();
     };
     const onFilter = (): void => {
+      paginacao.paginaAtual = 1;
       void reloadList();
     };
     const onConsult = (): void => {
+      paginacao.paginaAtual = 1;
       void reloadList();
     };
 
@@ -218,6 +246,7 @@ export function renderProfissional(container: HTMLElement): () => void {
       if (fim) fim.value = defaultEnd;
       if (search) search.value = "";
       if (filter) filter.value = "todos";
+      paginacao.paginaAtual = 1;
       void reloadList();
     };
 
@@ -260,9 +289,14 @@ export function renderProfissional(container: HTMLElement): () => void {
 
     cleanups.push(() => search?.removeEventListener("input", onSearch));
     cleanups.push(() => filter?.removeEventListener("change", onFilter));
+
+    // Controles de paginação (delegação única por renderização): ao navegar,
+    // reaplica os filtros sobre a última lista carregada sem novo fetch.
+    const cleanupPag = bindPaginacao(content, paginacao, () => totalFiltrado, () => refresh(ultimaLista));
+    cleanups.push(cleanupPag);
   }
 
-  function buildTable(appointments: Appointment[]): string {
+  function buildTable(appointments: Appointment[], total: number, paginacao: PaginacaoEstado): string {
     if (appointments.length === 0) {
       return `<p class="panel__empty">Nenhum agendamento encontrado.</p>`;
     }
@@ -303,6 +337,7 @@ export function renderProfissional(container: HTMLElement): () => void {
             .join("")}
         </tbody>
       </table>
+      ${paginacaoHtml(total, paginacao)}
     `;
   }
 
@@ -383,7 +418,27 @@ export function renderProfissional(container: HTMLElement): () => void {
       `;
     }
 
-    function buildSummary(resume: RevenueSummary): string {
+    // Card "Comissão" no lugar de "Ticket médio", com o valor financeiro real:
+    // para cada serviço do período, (valor do serviço × percentual configurado)
+    // / 100, somado. Os percentuais vêm do painel-barbeiro (dado pessoal do
+    // profissional, sem `ver_financeiro`); sem interruptor/percentual, R$ 0,00.
+    function calcularComissaoPeriodo(
+      resume: RevenueSummary,
+      comissoes: PainelBarbeiroComissaoServicoDTO[],
+    ): number {
+      const percentualPorServico = new Map(
+        comissoes.map((c) => [c.servicoId, Number(c.percentual)] as const),
+      );
+      return resume.porServico.reduce((acc, s) => {
+        const percentual = percentualPorServico.get(s.servicoId) ?? 0;
+        return acc + (Number(s.valorTotal) * percentual) / 100;
+      }, 0);
+    }
+
+    function buildSummary(
+      resume: RevenueSummary,
+      comissoes: PainelBarbeiroComissaoServicoDTO[],
+    ): string {
       return `
         <div class="kpi-grid">
           <div class="kpi-card">
@@ -395,8 +450,8 @@ export function renderProfissional(container: HTMLElement): () => void {
             <span class="kpi-card__value kpi-card__value--success">${resume.quantidade}</span>
           </div>
           <div class="kpi-card">
-            <span class="kpi-card__label">${icon("scissors", 16)} Ticket médio</span>
-            <span class="kpi-card__value">${formatCurrency(Number(resume.ticketMedio))}</span>
+            <span class="kpi-card__label">${icon("trending-up", 16)} Comissão</span>
+            <span class="kpi-card__value">${formatCurrency(calcularComissaoPeriodo(resume, comissoes))}</span>
           </div>
         </div>
         <div class="panel__section">
@@ -411,8 +466,13 @@ export function renderProfissional(container: HTMLElement): () => void {
       if (!box) return;
       box.innerHTML = `<p class="panel__empty">Carregando faturamento...</p>`;
       try {
-        const resume = await getRevenueSummary(inicio?.value, fim?.value);
-        box.innerHTML = buildSummary(resume);
+        const [resume, painel] = await Promise.all([
+          getRevenueSummary(inicio?.value, fim?.value),
+          // Falha de leitura degrada para "sem percentuais" (comissão R$ 0,00)
+          // sem bloquear o faturamento (ex.: usuário sem vínculo a funcionário).
+          obterPainelBarbeiro().catch(() => null),
+        ]);
+        box.innerHTML = buildSummary(resume, painel?.comissoesServico ?? []);
       } catch (error) {
         box.innerHTML = `<p class="panel__empty" role="alert">${escapeHtml(
           error instanceof Error ? error.message : "Não foi possível carregar o faturamento.",

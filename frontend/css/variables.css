@@ -49,6 +49,13 @@
   --container: 1180px;
   --header-h: 72px;
 
+  /* Altura aproximada da `.tab-bar` do Financeiro (buttons .tab: padding
+     vertical 12px×2 + linha 0.78rem ≈ 15px + borda, box-sizing border-box).
+     Usada como offset sticky do header da aba (`.manage-head`) logo abaixo
+     da barra. PENDÊNCIA: QA deve medir em 375/390/768/1024px e ajustar se
+     a tipografia mudar. */
+  --tabbar-h: 40px;
+
   --z-header: 100;
   --z-overlay: 1000;
   --z-toast: 1100;

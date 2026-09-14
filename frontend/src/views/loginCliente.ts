@@ -292,6 +292,17 @@ export function renderLoginCliente(container: HTMLElement): () => void {
       redirectForRole(result.role);
       return;
     }
+
+    // Acesso cruzado: conta administrativa tentando entrar na área do cliente.
+    // A mensagem é canônica no frontend (não ecoa o corpo da API); mantém o
+    // usuário na tela de login e limpa apenas a senha por segurança.
+    if (result.status === 403) {
+      loginPassword.value = "";
+      loginPassword.focus();
+      showToast("Não é permitido acesso com conta de acesso restrito.", "error");
+      return;
+    }
+
     loginAlert.textContent = result.message ?? "Credenciais inválidas. Verifique e tente novamente.";
     loginAlert.hidden = false;
   };

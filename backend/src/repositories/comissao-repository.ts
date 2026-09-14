@@ -1,6 +1,7 @@
 import type { Knex } from 'knex';
 import db from '../database/connection';
 import type { ComissaoServicoDTO } from '../dtos/comissao-dto';
+import { formatarData } from '../utils/formatadores';
 
 // Repositório do domínio de Regras de Comissão (spec 3.4/3.5).
 //
@@ -318,7 +319,10 @@ export async function listarPendenciasComissao(): Promise<
     funcionario_nome: r.funcionario_nome,
     servico_id: r.servico_id,
     servico_nome: r.servico_nome,
-    data: r.data,
+    // Normaliza para YYYY-MM-DD (contrato ComissaoPendenciaDTO): o driver do
+    // Postgres serializa DATE como ISO com timezone ("2026-09-22T03:00:00.000Z")
+    // e o frontend formata a partir do formato puro.
+    data: formatarData(r.data),
     resolvido: r.resolvido,
   }));
 }

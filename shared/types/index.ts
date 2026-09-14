@@ -715,6 +715,19 @@ export interface PainelBarbeiroAtendimentoDiaDTO {
   quantidade: number;
 }
 
+/**
+ * Percentual de comissão configurado para o PRÓPRIO profissional (dado pessoal,
+ * sem `ver_financeiro`). Viabiliza a tela "Meu Faturamento" calcular a comissão
+ * do período filtrado com a fórmula aprovada: (valor do serviço × %) / 100.
+ * `percentual` é string decimal normalizada (ex.: "40.00").
+ */
+export interface PainelBarbeiroComissaoServicoDTO {
+  servicoId: string;
+  servicoNome: string;
+  /** Percentual 0..100 configurado (string decimal, ex.: "40.00"). */
+  percentual: string;
+}
+
 /** Contagem de serviços realizados pelo próprio profissional (barras horizontais). */
 export interface PainelBarbeiroServicoDTO {
   servicoId: string;
@@ -751,6 +764,12 @@ export interface PainelBarbeiroDTO {
    * nesse caso o card não deve aparecer na tela.
    */
   comissaoMes: PainelBarbeiroComissaoDTO | null;
+  /**
+   * Percentuais de comissão configurados por serviço do PRÓPRIO profissional.
+   * `[]` quando `comissao_ativa = false` (interruptor desligado); a tela de
+   * faturamento usa este mapa para calcular a comissão por período.
+   */
+  comissoesServico: PainelBarbeiroComissaoServicoDTO[];
   /** Atendimentos por dia, últimos 7 dias (zeros preenchidos). */
   atendimentosPorDia: PainelBarbeiroAtendimentoDiaDTO[];
   /** Serviços mais feitos pelo profissional no mês corrente. */

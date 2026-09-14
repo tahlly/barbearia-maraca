@@ -72,13 +72,22 @@ export interface ConfiguracaoComissao {
   comissao_ativa: boolean;
 }
 
+/**
+ * Aviso de atendimento concluído SEM percentual de comissão cadastrado.
+ * Espelha `ComissaoPendenciaDTO` em shared/types — o backend devolve o array
+ * DIRETO (sem envelope `items`).
+ */
 export interface PendenciaComissao {
   id: string;
+  agendamento_id: string;
+  funcionario_id: string;
   funcionario_nome: string;
+  servico_id: string;
   servico_nome: string;
-  percentual: string;
-  valor: string;
+  /** Data do agendamento (YYYY-MM-DD). */
   data: string;
+  /** Nasce `false`; pendência pendente de revisão. */
+  resolvido: boolean;
 }
 
 /**
@@ -110,10 +119,9 @@ export async function atualizarConfiguracaoComissao(comissao_ativa: boolean): Pr
   });
 }
 
-/** Lista as comissões pendentes de pagamento do período ativo. */
+/** Lista os atendimentos concluídos sem percentual de comissão cadastrado. */
 export async function listarPendenciasComissao(): Promise<PendenciaComissao[]> {
-  const envelope = await httpJson<{ items: PendenciaComissao[] }>("/financeiro/comissao/pendencias");
-  return envelope.items;
+  return httpJson<PendenciaComissao[]>("/financeiro/comissao/pendencias");
 }
 
 /* ------------------------------------------------------------------ */

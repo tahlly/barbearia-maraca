@@ -10,6 +10,9 @@ export interface LoginResult {
   ok: boolean;
   role?: UserRole;
   message?: string;
+  /** Status HTTP da resposta de erro, quando a API respondeu (ex.: 403 em
+   *  tentativa de acesso cruzado entre perfis). Ausente em falha de rede. */
+  status?: number;
   precisaTrocarSenha?: boolean;
 }
 
@@ -91,7 +94,7 @@ export async function loginInterno(email: string, password: string): Promise<Log
     return { ok: true, role: data.role, precisaTrocarSenha: data.precisaTrocarSenha ?? false };
   } catch (error) {
     if (error instanceof ApiError) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: error.message, status: error.status };
     }
     return { ok: false, message: "Credenciais inválidas. Verifique e tente novamente." };
   }
@@ -118,7 +121,7 @@ export async function loginCliente(email: string, password: string): Promise<Log
     return { ok: true, role: data.role, precisaTrocarSenha: data.precisaTrocarSenha ?? false };
   } catch (error) {
     if (error instanceof ApiError) {
-      return { ok: false, message: error.message };
+      return { ok: false, message: error.message, status: error.status };
     }
     return { ok: false, message: "Credenciais inválidas. Verifique e tente novamente." };
   }
