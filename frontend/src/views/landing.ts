@@ -7,22 +7,30 @@ import { formatCurrency } from "../ui/format.js";
 import { syncHeroImages } from "../theme.js";
 import { contactSectionHtml } from "../features/contactSection.js";
 
+const SERVICES_FALLBACK_HTML =
+  `<p class="options-empty">Nossos serviços estão sendo atualizados. Entre em contato para agendar.</p>`;
+
 function renderServicesSection(wizard: BookingWizardHandle): void {
   const grid = $("#services-grid");
   if (!grid) return;
   clearElement(grid);
 
-  void ensureCatalogLoaded().then(() => {
-    const services = loadServices().filter((s) => s.active);
-    if (services.length === 0) {
-      grid.innerHTML = `<p class="options-empty">Nossos serviços estão sendo atualizados. Entre em contato para agendar.</p>`;
-      return;
-    }
+  void ensureCatalogLoaded()
+    .then(() => {
+      // Guard de geração (B-1): se o usuário trocou de rota antes da Promise
+      // resolver, o grid capturado já está desanexado — não mutar nós órfãos.
+      if (!grid.isConnected) return;
 
-    for (const service of services) {
-      const card = document.createElement("article");
-      card.className = "service-card";
-      card.innerHTML = `
+      const services = loadServices().filter((s) => s.active);
+      if (services.length === 0) {
+        grid.innerHTML = SERVICES_FALLBACK_HTML;
+        return;
+      }
+
+      for (const service of services) {
+        const card = document.createElement("article");
+        card.className = "service-card";
+        card.innerHTML = `
         <div class="service-card__head">
           <h3 class="service-card__name">${escapeHtml(service.name)}</h3>
           <span class="service-card__duration"><i class='bx bx-time-five'></i>${service.durationMin} min</span>
@@ -35,19 +43,26 @@ function renderServicesSection(wizard: BookingWizardHandle): void {
           </div>
           <button type="button" class="btn btn--primary btn--sm" data-service-id="${escapeHtml(service.id)}">Agendar</button>
         </div>`;
-      const btn = card.querySelector<HTMLButtonElement>("button[data-service-id]")!;
-      const handler = (): void => {
-        const session = getSession();
-        if (!session) {
-          navigateTo("/login-cliente");
-          return;
-        }
-        void wizard.openNew(service.id);
-      };
-      btn.addEventListener("click", handler);
-      grid.appendChild(card);
-    }
-  });
+        const btn = card.querySelector<HTMLButtonElement>("button[data-service-id]")!;
+        const handler = (): void => {
+          const session = getSession();
+          if (!session) {
+            navigateTo("/login-cliente");
+            return;
+          }
+          void wizard.openNew(service.id);
+        };
+        btn.addEventListener("click", handler);
+        grid.appendChild(card);
+      }
+    })
+    // Falha de carregamento (M-1): mantém o fallback visível e evita
+    // unhandled promise rejection no console.
+    .catch(() => {
+      if (grid.isConnected) {
+        grid.innerHTML = SERVICES_FALLBACK_HTML;
+      }
+    });
 }
 
 export function renderLanding(container: HTMLElement): () => void {
