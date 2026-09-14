@@ -210,6 +210,33 @@ export async function seed(knex: Knex): Promise<void> {
 
   await knex('funcionario_categoria').insert(funcionarioCategorias);
 
+  // ── Horários de trabalho padrão dos barbeiros ─────────────────────────────
+  // Corrige a ausência que deixava a disponibilidade vazia: o seed apagava
+  // `horario_trabalho` no reset, mas nunca reinseria horários. Agora os 2
+  // barbeiros ganham o horário padrão do `defaultWeekly` do frontend:
+  // seg–sáb (dia_semana 1..6) 09:00–19:00, ativo; domingo (0) fechado (sem
+  // linha, o que é interpretado como fechado pela API e pelo frontend).
+  // Total esperado: 2 barbeiros × 6 dias = 12 linhas.
+  const horariosTrabalho: Array<{
+    funcionario_id: string;
+    dia_semana: number;
+    hora_inicio: string;
+    hora_fim: string;
+    ativo: boolean;
+  }> = [];
+  for (const funcionarioId of barbeiroIds) {
+    for (let dia = 1; dia <= 6; dia += 1) {
+      horariosTrabalho.push({
+        funcionario_id: funcionarioId,
+        dia_semana: dia,
+        hora_inicio: '09:00',
+        hora_fim: '19:00',
+        ativo: true,
+      });
+    }
+  }
+  await knex('horario_trabalho').insert(horariosTrabalho);
+
   // ── Regras de Comissão (spec 3.4/3.5) ────────────────────────────────────
   // Interruptor global ATIVO: concluir um agendamento via API gera a despesa
   // automática de comissão (quando há %) ou uma pendência (quando não há %).
