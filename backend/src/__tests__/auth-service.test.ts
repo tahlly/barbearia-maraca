@@ -6,6 +6,7 @@ import { ForbiddenError } from '../errors/ForbiddenError';
 const findUsuarioByIdMock = vi.fn();
 const findUsuarioByEmailMock = vi.fn();
 const obterFuncionarioNomeMock = vi.fn();
+const obterClienteNomeMock = vi.fn();
 
 let ultimoUpdateUsuario: Record<string, unknown> | undefined;
 
@@ -50,7 +51,7 @@ vi.mock('../repositories/auth-repository', () => ({
   vincularGoogleAUsuario: vi.fn(),
   criarCliente: vi.fn(),
   criarClienteCompleto: vi.fn(),
-  obterClienteNome: vi.fn(),
+  obterClienteNome: (...args: unknown[]) => obterClienteNomeMock(...args),
   obterFuncionarioNome: (...args: unknown[]) => obterFuncionarioNomeMock(...args),
   salvarTokenResetSenha: vi.fn(),
   findUsuarioByResetTokenHash: vi.fn(),
@@ -143,6 +144,7 @@ describe('login — funcionário desativado (fix)', () => {
   beforeEach(() => {
     findUsuarioByEmailMock.mockReset();
     obterFuncionarioNomeMock.mockReset();
+    obterClienteNomeMock.mockReset();
   });
 
   it('funcionário ativo → login gera token e role profissional', async () => {
@@ -153,7 +155,7 @@ describe('login — funcionário desativado (fix)', () => {
     });
     obterFuncionarioNomeMock.mockResolvedValue({ nome: 'Barbeiro A', cargo: 'barbeiro', ativo: true });
 
-    const resultado = await login({ email: 'barbeiro@email.com', senha: 'hash:123456' });
+    const resultado = await login({ email: 'barbeiro@email.com', senha: 'hash:123456', tipoAcesso: 'interno' });
 
     expect(resultado.token).toBeTruthy();
     expect(resultado.role).toBe('profissional');
@@ -169,7 +171,7 @@ describe('login — funcionário desativado (fix)', () => {
     obterFuncionarioNomeMock.mockResolvedValue({ nome: 'Barbeiro A', cargo: 'barbeiro', ativo: false });
 
     await expect(
-      login({ email: 'barbeiro@email.com', senha: 'hash:123456' }),
+      login({ email: 'barbeiro@email.com', senha: 'hash:123456', tipoAcesso: 'interno' }),
     ).rejects.toBeInstanceOf(ForbiddenError);
   });
 
@@ -177,7 +179,7 @@ describe('login — funcionário desativado (fix)', () => {
     findUsuarioByEmailMock.mockResolvedValue(null);
 
     await expect(
-      login({ email: 'sumido@email.com', senha: 'hash:123456' }),
+      login({ email: 'sumido@email.com', senha: 'hash:123456', tipoAcesso: 'interno' }),
     ).rejects.toBeInstanceOf(UnauthorizedError);
     expect(obterFuncionarioNomeMock).not.toHaveBeenCalled();
   });
@@ -191,7 +193,7 @@ describe('login — funcionário desativado (fix)', () => {
     obterFuncionarioNomeMock.mockResolvedValue(null);
 
     await expect(
-      login({ email: 'barbeiro@email.com', senha: 'hash:123456' }),
+      login({ email: 'barbeiro@email.com', senha: 'hash:123456', tipoAcesso: 'interno' }),
     ).rejects.toBeInstanceOf(ForbiddenError);
     expect(obterFuncionarioNomeMock).toHaveBeenCalled();
   });
@@ -205,7 +207,64 @@ describe('login — funcionário desativado (fix)', () => {
     obterFuncionarioNomeMock.mockResolvedValue({ nome: 'Barbeiro A', cargo: 'barbeiro', ativo: null });
 
     await expect(
-      login({ email: 'barbeiro@email.com', senha: 'hash:123456' }),
+      login({ email: 'barbeiro@email.com', senha: 'hash:123456', tipoAcesso: 'interno' }),
     ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+});
+
+describe('login — controle de acesso por portal (tipoAcesso)', () => {
+  beforeEach(() => {
+    findUsuarioByEmailMock.mockReset();
+    obterFuncionarioNomeMock.mockReset();
+    obterClienteNomeMock.mockReset();
+  });
+
+  it('cliente com tipoAcesso interno → ForbiddenError sem gerar token', async () => {
+    findUsuarioByEmailMock.mockResolvedValue({
+      ...BASE_USUARIO,
+      email: 'cliente@email.com',
+      tipo: 'cliente',
+      senha_hash: 'hash:123456',
+      primeiro_acesso: false,
+    });
+    obterClienteNomeMock.mockResolvedValue('Maria Cliente');
+
+    await expect(
+      login({ email: 'cliente@email.com', senha: 'hash:123456', tipoAcesso: 'interno' }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(obterClienteNomeMock).toHaveBeenCalled();
+  });
+
+  it('funcionário com tipoAcesso cliente → ForbiddenError sem gerar token', async () => {
+    findUsuarioByEmailMock.mockResolvedValue({
+      ...BASE_USUARIO,
+      email: 'barbeiro@email.com',
+      senha_hash: 'hash:123456',
+      primeiro_acesso: false,
+    });
+    obterFuncionarioNomeMock.mockResolvedValue({ nome: 'Barbeiro A', cargo: 'barbeiro', ativo: true });
+
+    await expect(
+      login({ email: 'barbeiro@email.com', senha: 'hash:123456', tipoAcesso: 'cliente' }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(obterFuncionarioNomeMock).toHaveBeenCalled();
+  });
+
+  it('cliente com tipoAcesso cliente → login gera token e role cliente', async () => {
+    findUsuarioByEmailMock.mockResolvedValue({
+      ...BASE_USUARIO,
+      email: 'cliente@email.com',
+      tipo: 'cliente',
+      senha_hash: 'hash:123456',
+      primeiro_acesso: false,
+    });
+    obterClienteNomeMock.mockResolvedValue('Maria Cliente');
+
+    const resultado = await login({ email: 'cliente@email.com', senha: 'hash:123456', tipoAcesso: 'cliente' });
+
+    expect(resultado.token).toBeTruthy();
+    expect(resultado.role).toBe('cliente');
+    expect(resultado.user.tipo).toBe('cliente');
+    expect(resultado.user.nome).toBe('Maria Cliente');
   });
 });

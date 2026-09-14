@@ -80,7 +80,7 @@ export async function loginInterno(email: string, password: string): Promise<Log
   try {
     const data = await httpJson<{ token: string; userName: string; userEmail: string; expiresAt?: number; role: UserRole; precisaTrocarSenha?: boolean; permissoes?: Record<string, boolean> }>(
       "/auth/login",
-      { method: "POST", body: JSON.stringify({ email: normalize(email), password }) },
+      { method: "POST", body: JSON.stringify({ email: normalize(email), password, tipoAcesso: "interno" }) },
     );
     persistSession({
       token: data.token,
@@ -107,7 +107,7 @@ export async function loginCliente(email: string, password: string): Promise<Log
   try {
     const data = await httpJson<{ token: string; userName: string; userEmail: string; expiresAt?: number; role: UserRole; precisaTrocarSenha?: boolean; permissoes?: Record<string, boolean> }>(
       "/auth/login",
-      { method: "POST", body: JSON.stringify({ email: normalize(email), password }) },
+      { method: "POST", body: JSON.stringify({ email: normalize(email), password, tipoAcesso: "cliente" }) },
     );
     persistSession({
       token: data.token,
