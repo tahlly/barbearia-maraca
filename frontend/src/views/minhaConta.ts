@@ -12,6 +12,14 @@ import { renderSettingsForm } from "../features/settingsForm.js";
 import { contactSectionHtml } from "../features/contactSection.js";
 import { dependentesDialog } from "../features/dependentesDialog.js";
 import {
+  bindPaginacao,
+  criarPaginacaoEstado,
+  limitarPagina,
+  paginar,
+  paginacaoHtml,
+  type PaginacaoEstado,
+} from "../ui/pagination.js";
+import {
   atualizarDependente,
   criarDependente,
   excluirDependente,
@@ -161,6 +169,13 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     if (inicio) inicio.value = defaultStart;
     if (fim) fim.value = defaultEnd;
 
+    // Paginação client-side: estado local da tela; nova consulta reseta para a
+    // primeira página. `ultimaLista` conserva os dados completos para os
+    // handlers de navegação reaplicarem os filtros sem novo fetch.
+    const paginacao = criarPaginacaoEstado();
+    let ultimaLista: Appointment[] = [];
+    let totalFiltrado = 0;
+
     function applySearch(list: Appointment[]): Appointment[] {
       const q = (search?.value ?? "").trim().toLowerCase();
       if (!q) return list;
@@ -188,11 +203,16 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     }
 
     function refresh(list: Appointment[]): void {
+      ultimaLista = list;
       let filtered = applySearch(list);
       filtered = applyStatus(filtered);
       filtered = applyDates(filtered);
-      $("#conta-agenda-table", content)!.innerHTML = buildTable(filtered);
-      bindRows(filtered);
+      // Paginação: limita a página ao novo total filtrado e renderiza a fatia.
+      totalFiltrado = filtered.length;
+      paginacao.paginaAtual = limitarPagina(paginacao.paginaAtual, filtered.length, paginacao.itensPorPagina);
+      const pagina = paginar(filtered, paginacao);
+      $("#conta-agenda-table", content)!.innerHTML = buildTable(pagina, filtered.length, paginacao);
+      bindRows(pagina);
     }
 
     async function reloadList(): Promise<void> {
@@ -202,9 +222,11 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     }
 
     const onSearch = (): void => {
+      paginacao.paginaAtual = 1;
       void reloadList();
     };
     const onFilter = (): void => {
+      paginacao.paginaAtual = 1;
       void reloadList();
     };
 
@@ -213,6 +235,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
       if (fim) fim.value = defaultEnd;
       if (search) search.value = "";
       if (filter) filter.value = "todos";
+      paginacao.paginaAtual = 1;
       void reloadList();
     };
 
@@ -224,10 +247,15 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     cleanups.push(() => search?.removeEventListener("input", onSearch));
     cleanups.push(() => filter?.removeEventListener("change", onFilter));
 
+    // Controles de paginação (delegação única por renderização): ao navegar,
+    // reaplica os filtros sobre a última lista carregada sem novo fetch.
+    const cleanupPag = bindPaginacao(content, paginacao, () => totalFiltrado, () => refresh(ultimaLista));
+    cleanups.push(cleanupPag);
+
     void reloadList();
   }
 
-  function buildTable(appointments: Appointment[]): string {
+  function buildTable(appointments: Appointment[], total: number, paginacao: PaginacaoEstado): string {
     if (appointments.length === 0) {
       return `<p class="panel__empty">Nenhum agendamento encontrado.</p>`;
     }
@@ -265,6 +293,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
             .join("")}
         </tbody>
       </table>
+      ${paginacaoHtml(total, paginacao)}
     `;
   }
 
@@ -313,6 +342,9 @@ export function renderMinhaConta(container: HTMLElement): () => void {
 
   // ---------------------------------------------------- Serviços Disponíveis
   function renderServicos(): void {
+    const paginacao = criarPaginacaoEstado();
+    let ultimaLista: Service[] = [];
+
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -330,7 +362,9 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     // Área do cliente: sem CRUD. A tabela tem uma única ação por linha —
     // AGENDAR — que pré-seleciona o serviço e abre o wizard de agendamento
     // direto na etapa de data/profissional.
-    function buildTable(services: Service[]): string {
+    // A paginação é client-side (mesma abordagem dos agendamentos): a função
+    // recebe a PÁGINA atual de serviços, o total real e o estado de paginação.
+    function buildTable(services: Service[], total: number, estado: PaginacaoEstado): string {
       if (services.length === 0) {
         return `<p class="panel__empty">Nenhum serviço disponível no momento.</p>`;
       }
@@ -360,14 +394,22 @@ export function renderMinhaConta(container: HTMLElement): () => void {
               .join("")}
           </tbody>
         </table>
+        ${paginacaoHtml(total, estado, "serviço", "serviços")}
       `;
+    }
+
+    function montar(services: Service[]): void {
+      if (!wrap) return;
+      const pagina = paginar(services, paginacao);
+      wrap.innerHTML = buildTable(pagina, services.length, paginacao);
+      bindBookButtons(services);
     }
 
     async function load(): Promise<void> {
       try {
         const services = await fetchServices();
-        if (wrap) wrap.innerHTML = buildTable(services);
-        bindBookButtons(services);
+        ultimaLista = services;
+        montar(services);
       } catch (error) {
         const message =
           error instanceof Error && error.message.trim() !== ""
@@ -389,6 +431,12 @@ export function renderMinhaConta(container: HTMLElement): () => void {
         cleanups.push(() => btn.removeEventListener("click", h));
       });
     }
+
+    // Controles de paginação (delegação única por renderização, mesmo padrão
+    // dos agendamentos): trocar o select de itens por página volta para a
+    // página 1; navegar re-monta a tabela da última lista carregada.
+    const cleanupPag = bindPaginacao(content, paginacao, () => ultimaLista.length, () => montar(ultimaLista));
+    cleanups.push(cleanupPag);
 
     void load();
   }

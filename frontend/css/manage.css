@@ -246,7 +246,6 @@
 }
 
 .donut__legend-value {
-  margin-left: auto;
   color: var(--color-text);
   font-weight: 800;
 }
@@ -303,6 +302,19 @@
   transition: height var(--transition-base);
 }
 
+/* Tons dinâmicos do dashboard (lógica em manage.ts `barTones`) */
+.bar-chart__bar--gold {
+  background-color: var(--color-gold);
+}
+
+.bar-chart__bar--success {
+  background-color: var(--color-success);
+}
+
+.bar-chart__bar--danger {
+  background-color: var(--color-danger);
+}
+
 .bar-chart__label {
   font-size: 0.62rem;
   color: var(--color-text-muted);
@@ -350,6 +362,19 @@
   background-color: var(--color-gold);
   border-radius: var(--radius-full);
   transition: width var(--transition-base);
+}
+
+/* Tons dinâmicos do dashboard (lógica em manage.ts `barTones`) */
+.hbar-chart__bar--gold {
+  background-color: var(--color-gold);
+}
+
+.hbar-chart__bar--success {
+  background-color: var(--color-success);
+}
+
+.hbar-chart__bar--danger {
+  background-color: var(--color-danger);
 }
 
 .hbar-chart__count {
@@ -1399,12 +1424,16 @@ body.light-theme .manage-toolbar select.input {
    mobile (<=768px) o documento rola naturalmente e o topbar estático
    sairia do viewport — e a aba Resumo é a única alta o suficiente para
    rolar. `:has(.tab-panel)` isola a view Financeiro (única que emite
-   `.tab-panel`); `z-index: 10` fica abaixo do sidebar/backdrop mobile
-   (60/55) e acima do conteúdo. No desktop a regra é inerte. */
+   `.tab-panel`); `z-index: 40` fica abaixo do sidebar/backdrop mobile
+   (60/55) e bem acima do conteúdo (evita que cards/tabelas deslizem por
+   cima do cabeçalho durante o scroll). O fundo é reafirmado com
+   `--color-surface` (opaco em tema dark e light) para o cabeçalho
+   nunca "vazar" fundo de conteúdo. No desktop a regra é inerte. */
 .panel__main:has(.tab-panel) .panel__topbar {
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 40;
+  background-color: var(--color-surface);
 }
 
 /* ----- Ancoragem da barra de abas dentro de .panel__content -----
@@ -1422,10 +1451,13 @@ body.light-theme .manage-toolbar select.input {
    lugar certo sem offset. No mobile (<=768px) o documento rola e o topbar
    sticky ocupa altura real do viewport; o offset é tratado no @media.
 
-   `z-index: 9` fica abaixo do topbar (10) e do sidebar/backdrop mobile
-   (60/55). O background opaco usa `--color-bg` — o fundo real de
-   `.panel__content`/`.panel` (panel.css:10; a barra nunca recebeu fundo).
-   `flex-shrink: 0` evita espremer a barra no flex column com overflow.
+   `z-index: 40` fica abaixo do sidebar/backdrop mobile (60/55), no mesmo
+   nível do topbar (que está FORA do scroll — nunca se sobrepõem), e bem
+   acima do conteúdo (evita que cards/tabelas deslizem por cima do
+   cabeçalho durante o scroll). O background opaco usa `--color-bg` — o
+   fundo real de `.panel__content`/`.panel` (panel.css:10; a barra nunca
+   recebeu fundo). `flex-shrink: 0` evita espremer a barra no flex column
+   com overflow.
 
    A faixa abaixo da borda da barra é transparente (margin-bottom 12px da
    .tab-bar + gap 16px do .panel__content = 28px): sem tampa o conteúdo de
@@ -1435,9 +1467,29 @@ body.light-theme .manage-toolbar select.input {
 .panel__main:has(.tab-panel) .tab-bar {
   position: sticky;
   top: 0;
-  z-index: 9;
+  z-index: 40;
   background-color: var(--color-bg);
   box-shadow: 0 calc(var(--space-3) + var(--space-4)) 0 0 var(--color-bg);
+  flex-shrink: 0;
+}
+
+/* ----- Cabeçalho da aba (subtítulo) também sticky e opaco -----
+   Cada aba do Financeiro emite `.panel__section.manage-head` como primeiro
+   filho do `.tab-panel` ("Resumo financeiro" + subtítulo, idem nas outras
+   abas). Sem ancoragem, esse bloco rola junto com os cards/gráficos e o
+   texto passa por baixo da tab-bar misturando-se ao restante. Tornamos o
+   header da aba sticky logo ABAIXO da tab-bar (top = --tabbar-h), com
+   fundo opaco `--color-bg`, z-index 38 (abaixo da barra 40 e do topbar
+   40; acima do conteúdo) e tampa de 16px (gap entre colunas do
+   `.tab-panel`) para o próximo card não deslizar visível no vão. O escopo
+   `:has(.tab-panel)` + `> .manage-head` isola o Financeiro (única view
+   com `.tab-panel`) e atinge apenas o primeiro header da aba. */
+.panel__main:has(.tab-panel) .tab-panel > .manage-head {
+  position: sticky;
+  top: var(--tabbar-h);
+  z-index: 38;
+  background-color: var(--color-bg);
+  box-shadow: 0 var(--space-4) 0 0 var(--color-bg);
   flex-shrink: 0;
 }
 
@@ -1451,6 +1503,10 @@ body.light-theme .manage-toolbar select.input {
 @media (max-width: 768px) {
   .panel__main:has(.tab-panel) .tab-bar {
     top: calc(var(--space-5) * 2 + 36px + 1px);
+  }
+
+  .panel__main:has(.tab-panel) .tab-panel > .manage-head {
+    top: calc(var(--space-5) * 2 + 36px + 1px + var(--tabbar-h));
   }
 }
 
@@ -1541,6 +1597,32 @@ body.light-theme .manage-toolbar select.input {
   color: var(--color-text-secondary);
 }
 
+/* Select de mês do card "Resumo do mês anterior" (UI/UX pode refinar o visual) */
+.compare-card__select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: 0.78rem;
+  color: var(--color-text-secondary);
+}
+
+.compare-card__field {
+  max-width: 220px;
+  width: 100%;
+}
+
+/* Dropdown nativo do select: garante fundo escuro + texto claro nas
+   <option> (o padrão `.input` já aplica `color-scheme: dark`). */
+.compare-card__field option {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+body.light-theme .compare-card__field option {
+  background-color: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
 /* ----- Grid de gráficos do Resumo ----- */
 .chart-grid {
   display: grid;
@@ -1552,14 +1634,15 @@ body.light-theme .manage-toolbar select.input {
   min-width: 0;
 }
 
-/* Evolução mensal: permite scroll horizontal dentro do card em telas
-   estreitas (as barras mantêm largura mínima confortável). */
+/* Evolução mensal: as 12 colunas do mês cabem lado a lado no desktop SEM
+   scroll horizontal (encaixe perfeito; as colunas flex encolhem). O scroll
+   é regra EXCLUSIVA de telas muito pequenas (ver @media ≤480px abaixo). */
 .chart--lines {
-  overflow-x: auto;
+  overflow-x: visible;
 }
 
 /* ----- Barras verticais agrupadas (evolução mensal) -----
-   Cada .bars__col é uma coluna por mês; as barras de receita/despesa
+   Cada .bars__col é uma coluna por mês; as barras de receita/despesa/lucro
    ficam lado a lado (flex row) alinhadas à base, com o rótulo do eixo
    posicionado de forma absoluta no rodapé da coluna (sem cortar texto).
    A view injeta height:% via style inline; o height:0 é fallback. */
@@ -1568,7 +1651,7 @@ body.light-theme .manage-toolbar select.input {
   align-items: flex-end;
   gap: var(--space-2);
   height: 220px;
-  min-width: 480px;
+  min-width: 0;
   padding-top: var(--space-3);
 }
 
@@ -1598,16 +1681,20 @@ body.light-theme .manage-toolbar select.input {
 }
 
 .bars__bar--receita {
-  background-color: var(--color-success);
+  background-color: var(--color-gold);
 }
 
 .bars__bar--despesa {
   background-color: var(--color-danger);
 }
 
-/* Hook para quando a view passar a renderizar a série de lucro. */
 .bars__bar--lucro {
-  background-color: var(--color-gold);
+  background-color: var(--color-success);
+}
+
+/* Série de lucro não positiva: barra em altura zero (sem min-height falsa). */
+.bars__bar--zero {
+  min-height: 0;
 }
 
 .bars__label {
@@ -1621,6 +1708,55 @@ body.light-theme .manage-toolbar select.input {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Tooltip do grupo de barras: mês por extenso + valores em R$ (hover). */
+.bars__tooltip {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 160px;
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--transition-fast),
+    visibility var(--transition-fast);
+}
+
+.bars__tooltip strong {
+  font-size: 0.78rem;
+  color: var(--color-text);
+}
+
+.bars__col:hover .bars__tooltip,
+.bars__col:focus-within .bars__tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Telas muito pequenas (≤480px): scroll horizontal é regra EXCLUSIVA para
+   não esmagar as 12 colunas; no desktop o encaixe é perfeito (sem scroll). */
+@media (max-width: 480px) {
+  .chart--lines {
+    overflow-x: auto;
+  }
+
+  .bars {
+    min-width: 480px;
+  }
 }
 
 /* ----- Lista de categorias (despesas por categoria) ----- */
@@ -1806,5 +1942,106 @@ body.light-theme .manage-toolbar select.input {
 
   .kpi__value {
     font-size: 1.4rem;
+  }
+}
+
+/* ---------------------------------------------------- Comissão (modal),
+   seção "Comissão por serviço" (Profissionais). As classes utilitárias do
+   markup (w-20, p-2, border, rounded, text-right, uppercase) são resolvidas
+   no escopo do componente — sem criar utilitárias globais. */
+
+.pro-comissao-section {
+  margin-top: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background-color: var(--color-surface-raised);
+}
+
+.pro-comissao-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.pro-comissao-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pro-comissao-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.pro-comissao-name {
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  overflow-wrap: break-word;
+}
+
+.pro-comissao-value {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Input percentual — específico o bastante para superar os genéricos de
+   modal (`admin.css .modal__body input[type="text"] { width: 100% }`). */
+.pro-comissao-value .pro-comissao {
+  width: 5rem; /* w-20 */
+  padding: 8px 10px; /* p-2 */
+  border: 1px solid var(--color-border); /* border */
+  border-radius: var(--radius-sm); /* rounded */
+  text-align: right; /* text-right */
+  text-transform: uppercase; /* uppercase */
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color-scheme: dark;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+body.light-theme .pro-comissao-value .pro-comissao {
+  color-scheme: light;
+}
+
+.pro-comissao-value .pro-comissao::placeholder {
+  color: var(--color-text-muted);
+}
+
+.pro-comissao-value .pro-comissao:focus {
+  outline: none;
+  border-color: var(--color-gold);
+  box-shadow: 0 0 0 3px var(--color-gold-soft);
+}
+
+/* Responsivo (mobile): cada linha empilha (nome acima do input) e o input
+   passa a ocupar toda a largura disponível, sem ficar espremido em telas
+   estreitas (w-full por CSS, sem tocar no markup). */
+@media (max-width: 560px) {
+  .pro-comissao-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
+
+  .pro-comissao-value {
+    width: 100%;
+  }
+
+  .pro-comissao-value .pro-comissao {
+    width: 100%;
+    min-width: 5rem;
   }
 }

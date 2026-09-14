@@ -18,6 +18,12 @@ export interface PainelBarbeiroServicoDTO {
   quantidade: number;
 }
 
+export interface PainelBarbeiroComissaoServicoDTO {
+  servicoId: string;
+  servicoNome: string;
+  percentual: string;
+}
+
 export interface PainelBarbeiroHorarioDTO {
   hora: string;
   quantidade: number;
@@ -26,6 +32,7 @@ export interface PainelBarbeiroHorarioDTO {
 export interface PainelBarbeiroDTO {
   atendimentosMes: number;
   comissaoMes: PainelBarbeiroComissaoDTO | null;
+  comissoesServico: PainelBarbeiroComissaoServicoDTO[];
   atendimentosPorDia: PainelBarbeiroAtendimentoDiaDTO[];
   servicosMaisFeitos: PainelBarbeiroServicoDTO[];
   horariosMaisConcorridos: PainelBarbeiroHorarioDTO[];

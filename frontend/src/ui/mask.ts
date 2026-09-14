@@ -87,3 +87,28 @@ export function currencyToNumber(value: string): number {
   if (digits.length === 0) return 0;
   return Number(digits) / 100;
 }
+
+/**
+ * Máscara de PERCENTUAL estrito (regra de comissão, spec 3.5): somente
+ * inteiros de 1 a 100. Remove qualquer caractere não numérico, limita a 3
+ * dígitos, neutraliza "0" isolado (vira vazio — "não paga comissão") e limita
+ * o teto em 100. O sinal "%" NÃO entra no value (é sufixo visual do markup);
+ * assim o payload do submit continua numérico puro.
+ */
+export function maskPercent(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 3);
+  if (digits.length === 0) return "";
+  const numero = Number(digits);
+  // Zero (isolado ou sequência de zeros) = "não paga comissão": vazio.
+  if (numero === 0) return "";
+  if (numero > 100) return "100";
+  return String(numero);
+}
+
+export function attachPercentMask(input: HTMLInputElement): void {
+  input.addEventListener("input", () => {
+    const next = maskPercent(input.value);
+    if (next === input.value) return;
+    input.value = next;
+  });
+}

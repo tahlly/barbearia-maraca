@@ -691,3 +691,122 @@ body.light-theme textarea.input {
 .switch input:disabled + .switch__track {
   opacity: 0.45;
 }
+
+/* ── Paginação (rodapé das listagens de agendamentos) ─────────────────
+   Tema escuro Maracá: footer dentro do .table-wrap, botões ghost e select
+   compacto; botões desabilitados nas extremidades. */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.pagination__per {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pagination__label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.pagination__select {
+  width: auto;
+  min-width: 70px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  color-scheme: dark;
+}
+
+body.light-theme .pagination__select {
+  color-scheme: light;
+}
+
+.pagination__info {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+}
+
+.pagination__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pagination__page {
+  min-width: 92px;
+  text-align: center;
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.pagination__btn {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  font-size: 0.82rem;
+  line-height: 1;
+  justify-content: center;
+}
+
+.pagination__btn:not([disabled]):hover {
+  color: var(--color-gold);
+  background-color: var(--color-gold-soft);
+}
+
+.pagination__btn[disabled] {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* Responsivo da paginação (aplicação mobile-first sobre layout desktop):
+   - desktop/tablet: alinhamento horizontal base (.pagination com flex-wrap já
+     quebra linhas sem vazar do .table-wrap);
+   - <=560px (celular): o rodapé empilha (flex-col) para o select de itens e
+     os botões de navegação nunca vazarem ou quebrarem o layout. */
+@media (max-width: 560px) {
+  .pagination {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+    padding: var(--space-3);
+  }
+
+  .pagination__per {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .pagination__select {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 120px;
+  }
+
+  .pagination__info {
+    width: 100%;
+    font-size: 0.78rem;
+  }
+
+  .pagination__controls {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .pagination__page {
+    order: -1;
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}

@@ -40,9 +40,25 @@ import { confirmDialog, openModal, closeModal } from "../ui/modal.js";
 import { showToast } from "../ui/toast.js";
 import { renderSettingsForm } from "../features/settingsForm.js";
 import { initBookingWizard } from "../features/bookingWizard.js";
-import { attachUppercaseMask } from "../ui/mask.js";
+import { attachPercentMask, attachUppercaseMask } from "../ui/mask.js";
 import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
 import { totalDespesasFiltro } from "../services/despesas.js";
+import {
+  atualizarComissoesFuncionario,
+  listarComissoesFuncionario,
+  listarPendenciasComissao,
+  obterConfiguracaoComissao,
+  type ItemComissaoServicoRequest,
+} from "../services/financeiro.js";
+import { consumirComissaoDeepLink } from "../services/comissaoDeepLink.js";
+import {
+  bindPaginacao,
+  criarPaginacaoEstado,
+  limitarPagina,
+  paginar,
+  paginacaoHtml,
+  type PaginacaoEstado,
+} from "../ui/pagination.js";
 import type { CargoFuncionario, Service, Appointment, Professional, UserRole } from "../types.js";
 
 type ManageTab = "dashboard" | "servicos" | "profissionais" | "agendamentos" | "configuracoes";
@@ -138,6 +154,65 @@ function serviceTotal(serviceId: string): number {
   return servicesCache.find((s) => s.id === serviceId)?.price ?? 0;
 }
 
+/**
+ * Coleta as comissões válidas do formulário do profissional (spec 3.5).
+ * Considera somente percentuais > 0 — vazio ou 0 significa "não paga comissão"
+ * (configuração válida; o backend não cria despesa nem pendência nesse caso).
+ * O payload usa nomes de contrato em minúsculas (`servico_id`/`percentual`),
+ * em sintonia com `RequestSalvarComissoesFuncionario` em shared/types.
+ */
+function coletarComissoesDoForm(overlay: HTMLElement): ItemComissaoServicoRequest[] {
+  const comissoes: ItemComissaoServicoRequest[] = [];
+  overlay.querySelectorAll<HTMLInputElement>("input.pro-comissao").forEach((input) => {
+    const servicoId = input.getAttribute("data-servico-id");
+    if (!servicoId) return;
+    const percentual = Number(input.value);
+    if (Number.isFinite(percentual) && percentual > 0) {
+      comissoes.push({ servico_id: servicoId, percentual });
+    }
+  });
+  return comissoes;
+}
+
+/**
+ * Rótulo de EXIBIÇÃO do serviço na seção de comissão do modal (ajuste de
+ * texto da interface): o catálogo interno usa "Corte"/"Barba"/"Corte + Barba",
+ * mas os labels devem corresponder aos nomes das categorias — "CABELO" e
+ * "BARBA + CABELO" (BARBA permanece igual). Apenas apresentação: nenhum
+ * valor, envio ou cálculo é alterado.
+ */
+function labelBaseComissaoServico(nome: string): string {
+  const upper = nome.toUpperCase();
+  if (upper === "CORTE") return "CABELO";
+  if (upper === "CORTE + BARBA") return "BARBA + CABELO";
+  return upper;
+}
+
+/**
+ * Label visível com o símbolo de % integrado ao texto (ex.: "% CABELO").
+ * O % não é mais um sufixo solto após o input — faz parte do rótulo.
+ */
+function labelComissaoServico(nome: string): string {
+  return `% ${labelBaseComissaoServico(nome)}`;
+}
+
+/** Ordem fixa de exibição dos rótulos de comissão no modal do profissional. */
+const COMISSAO_LABELS_ORDEM = ["% BARBA", "% CABELO", "% BARBA + CABELO"];
+
+/**
+ * Ordena os serviços do catálogo para a ordem de comissão definida
+ * (BARBA → CABELO → BARBA + CABELO), mantendo os demais no final, na ordem
+ * original do catálogo (sort estável). Somente apresentação.
+ */
+function ordenarServicosComissao(servicos: Service[]): Service[] {
+  const rank = new Map(COMISSAO_LABELS_ORDEM.map((label, i) => [label, i] as const));
+  return [...servicos].sort((a, b) => {
+    const ra = rank.get(labelComissaoServico(a.name)) ?? Number.MAX_SAFE_INTEGER;
+    const rb = rank.get(labelComissaoServico(b.name)) ?? Number.MAX_SAFE_INTEGER;
+    return ra - rb;
+  });
+}
+
 /* ------------------------------------------------------------- Gráficos -- */
 
 /** Gera as datas ISO (YYYY-MM-DD) dos últimos `n` dias, do mais antigo a hoje. */
@@ -208,23 +283,49 @@ function statusDonutHTML(counts: Record<Appointment["status"], number>): string 
   `;
 }
 
+/** Formata ISO (YYYY-MM-DD) como "dd/mm" (rótulo curto do eixo X, filtro 7 dias). */
+function formatDayMonth(iso: string): string {
+  const [, mes, dia] = iso.split("-");
+  return `${dia}/${mes}`;
+}
+
+/**
+ * Tons das barras conforme a lógica dinâmica de destaque:
+ * todos iguais → todas amarelas; caso contrário, o(s) maior(es) → verde,
+ * o(s) menor(es) → vermelho, intermediários → amarelo.
+ */
+function barTones(values: readonly number[]): Array<"gold" | "success" | "danger"> {
+  if (values.length === 0) return [];
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  if (max === min) return values.map(() => "gold" as const);
+  return values.map((v) => (v === max ? ("success" as const) : v === min ? ("danger" as const) : ("gold" as const)));
+}
+
 /** Barras verticais (ex.: agendamentos por dia, horários de pico). */
 function barChartHTML(
-  items: Array<{ label: string; value: string; amount: number }>,
+  items: Array<{ label: string; value: string; amount: number; iso?: string }>,
   ariaLabel: string,
+  options: { hideLabels?: boolean; tones?: boolean } = {},
 ): string {
   const max = Math.max(...items.map((i) => i.amount), 1);
+  const tones = options.tones
+    ? barTones(items.map((i) => i.amount))
+    : items.map(() => "gold" as const);
   return `
     <div class="bar-chart" role="img" aria-label="${escapeHtml(ariaLabel)}">
       ${items
-        .map(
-          (i) => `
-        <div class="bar-chart__item">
+        .map((i, idx) => {
+          const tone = tones[idx] ?? "gold";
+          // Tooltip nativo: data completa dd/mm/aaaa quando `iso` existe.
+          const titleAttr = i.iso ? ` title="${escapeHtml(formatDateShort(i.iso))}"` : "";
+          return `
+        <div class="bar-chart__item"${titleAttr}>
           <span class="bar-chart__value">${escapeHtml(i.value)}</span>
-          <span class="bar-chart__track"><span class="bar-chart__bar" style="--bar: ${i.amount / max}"></span></span>
-          <span class="bar-chart__label">${escapeHtml(i.label)}</span>
-        </div>`,
-        )
+          <span class="bar-chart__track"><span class="bar-chart__bar bar-chart__bar--${tone}" style="--bar: ${i.amount / max}"></span></span>
+          ${options.hideLabels ? "" : `<span class="bar-chart__label">${escapeHtml(i.label)}</span>`}
+        </div>`;
+        })
         .join("")}
     </div>
   `;
@@ -234,19 +335,24 @@ function barChartHTML(
 function hbarChartHTML(
   items: Array<{ label: string; value: string; amount: number }>,
   ariaLabel: string,
+  options: { tones?: boolean } = {},
 ): string {
   const max = Math.max(...items.map((i) => i.amount), 1);
+  const tones = options.tones
+    ? barTones(items.map((i) => i.amount))
+    : items.map(() => "gold" as const);
   return `
     <div class="hbar-chart" role="img" aria-label="${escapeHtml(ariaLabel)}">
       ${items
-        .map(
-          (i) => `
+        .map((i, idx) => {
+          const tone = tones[idx] ?? "gold";
+          return `
         <div class="hbar-chart__item">
           <span class="hbar-chart__name">${escapeHtml(i.label)}</span>
-          <span class="hbar-chart__track"><span class="hbar-chart__bar" style="--bar: ${i.amount / max}"></span></span>
+          <span class="hbar-chart__track"><span class="hbar-chart__bar hbar-chart__bar--${tone}" style="--bar: ${i.amount / max}"></span></span>
           <strong class="hbar-chart__count">${escapeHtml(i.value)}</strong>
-        </div>`,
-        )
+        </div>`;
+        })
         .join("")}
     </div>
   `;
@@ -346,7 +452,26 @@ export function renderManage(container: HTMLElement): () => void {
     const selectedYear = years.includes(state.ano) ? state.ano : years[years.length - 1] ?? new Date().getFullYear();
     state.ano = selectedYear;
 
+    // Alerta de comissões pendentes de configuração (admin): atendimentos
+    // concluídos sem % cadastrada. Falha na leitura degrada para "sem alerta"
+    // sem bloquear o dashboard (o endpoint já exige `ver_financeiro`).
+    const pendenciasComissao = isAdmin
+      ? await listarPendenciasComissao().catch(() => [])
+      : [];
+    const comissaoPendenciaAlerta =
+      pendenciasComissao.length > 0
+        ? `
+      <div class="alert alert--info" role="status">
+        ${icon("alert-circle", 16)}
+        <p>
+          <strong>[${pendenciasComissao.length}] ${pendenciasComissao.length === 1 ? "comissão pendente" : "comissões pendentes"} de configuração</strong><br>
+          Alguns atendimentos foram concluídos sem % de comissão cadastrada para o profissional.
+        </p>
+      </div>`
+        : "";
+
     content.innerHTML = `
+      ${comissaoPendenciaAlerta}
       <div class="panel__section dashboard-filter">
         <div class="dashboard-filter__grid">
           <div class="dashboard-filter__col">
@@ -602,11 +727,15 @@ export function renderManage(container: HTMLElement): () => void {
     // agendamentos por dia (últimos 7 ou 30 dias) e horários de pico.
     const daySeries = lastNDaysIso(state.diasGrafico);
     const byDay = countAppointmentsByDay(filtered, daySeries);
-    const peak = peakHours(filtered);
+    // Top 3 horários de pico (regra do dashboard: apenas maior volume).
+    const peak = peakHours(filtered, 3);
     const daysBars = daySeries.map((d, i) => ({
-      label: formatDateShort(d),
+      // Eixo X: no filtro de 7 dias exibe dia/mês; em 30 dias as labels
+      // ficam ocultas (hideLabels) para não encavalar os textos.
+      label: state.diasGrafico === 7 ? formatDayMonth(d) : "",
       value: String(byDay[i] ?? 0),
       amount: byDay[i] ?? 0,
+      iso: d,
     }));
     const peakBars = peak.map((p) => ({
       label: p.hora.slice(0, 5),
@@ -671,17 +800,17 @@ export function renderManage(container: HTMLElement): () => void {
               <button type="button" class="chart-toggle__btn ${state.diasGrafico === 30 ? "is-active" : ""}" data-dias="30">30 dias</button>
             </div>
           </div>
-          ${hasAny ? barChartHTML(daysBars, "Agendamentos por dia nos últimos " + state.diasGrafico + " dias") : `<p class="panel__empty chart-card__empty">Sem agendamentos nesse recorte.</p>`}
+          ${hasAny ? barChartHTML(daysBars, "Agendamentos por dia nos últimos " + state.diasGrafico + " dias", { hideLabels: state.diasGrafico === 30 }) : `<p class="panel__empty chart-card__empty">Sem agendamentos nesse recorte.</p>`}
         </div>
         <div class="chart-card">
           <h3 class="chart-card__title">${icon("clock", 16)} Horários de pico</h3>
-          ${hasAny ? barChartHTML(peakBars, "Horários com mais agendamentos") : `<p class="panel__empty chart-card__empty">Sem agendamentos nesse recorte.</p>`}
+          ${hasAny ? barChartHTML(peakBars, "Horários com mais agendamentos", { tones: true }) : `<p class="panel__empty chart-card__empty">Sem agendamentos nesse recorte.</p>`}
         </div>
       </div>
       ${financial ? `
       <div class="chart-card chart-card--full">
         <h3 class="chart-card__title">${icon("scissors", 16)} Serviços mais vendidos</h3>
-        ${topBars.length === 0 ? `<p class="panel__empty">Ainda não há dados suficientes.</p>` : hbarChartHTML(topBars, "Serviços mais vendidos")}
+        ${topBars.length === 0 ? `<p class="panel__empty">Ainda não há dados suficientes.</p>` : hbarChartHTML(topBars, "Serviços mais vendidos", { tones: true })}
       </div>` : ""}
     `;
   }
@@ -757,6 +886,11 @@ export function renderManage(container: HTMLElement): () => void {
     const defaultStart = `${currentYear}-01-01`;
     const defaultEnd = `${currentYear}-12-31`;
 
+    // Paginação client-side (dados completos chegam do backend): estado local
+    // da tela; qualquer nova consulta reseta para a primeira página.
+    const paginacao = criarPaginacaoEstado();
+    let totalFiltrado = appointments.length;
+
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -803,7 +937,7 @@ export function renderManage(container: HTMLElement): () => void {
         </div>
       </div>
       <div class="table-wrap" id="manage-agenda-table">
-        ${buildAgendamentosTable(appointments)}
+        ${buildAgendamentosTable(paginar(appointments, paginacao), appointments.length, paginacao)}
       </div>
     `;
 
@@ -825,11 +959,23 @@ export function renderManage(container: HTMLElement): () => void {
         if (fimv && a.data > fimv) return false;
         return true;
       });
-      $("#manage-agenda-table", content)!.innerHTML = buildAgendamentosTable(filtered);
+      // Paginação: limita a página atual ao novo total filtrado e renderiza
+      // somente a fatia da página (client-side, dados já completos).
+      totalFiltrado = filtered.length;
+      paginacao.paginaAtual = limitarPagina(paginacao.paginaAtual, filtered.length, paginacao.itensPorPagina);
+      $("#manage-agenda-table", content)!.innerHTML = buildAgendamentosTable(
+        paginar(filtered, paginacao),
+        filtered.length,
+        paginacao,
+      );
       bindAgendaRows();
     };
 
-    const applyHandler = (): void => applyFilters();
+    const applyHandler = (): void => {
+      // Nova consulta (busca, status ou filtro de datas): volta para a página 1.
+      paginacao.paginaAtual = 1;
+      applyFilters();
+    };
     search?.addEventListener("input", applyHandler);
     filter?.addEventListener("change", applyHandler);
     inicio?.addEventListener("change", applyHandler);
@@ -842,6 +988,7 @@ export function renderManage(container: HTMLElement): () => void {
         if (fim) fim.value = defaultEnd;
         if (search) search.value = "";
         if (filter) filter.value = "todos";
+        paginacao.paginaAtual = 1;
         applyFilters();
       };
       clearBtn.addEventListener("click", clearHandler);
@@ -871,6 +1018,11 @@ export function renderManage(container: HTMLElement): () => void {
     }
 
     bindAgendaRows();
+
+    // Controles de paginação (delegação única por renderização): mudar o
+    // select de itens por página ou navegar re-aplica filtros e re-renderiza.
+    const cleanupPag = bindPaginacao(content, paginacao, () => totalFiltrado, applyFilters);
+    cleanups.push(cleanupPag);
   }
 
   function bindAgendaRows(): void {
@@ -1017,7 +1169,11 @@ if (status === "cancelado") {
     await renderAgendamentos();
   }
 
-  function buildAgendamentosTable(appointments: Appointment[]): string {
+  function buildAgendamentosTable(
+    appointments: Appointment[],
+    total: number,
+    paginacao: PaginacaoEstado,
+  ): string {
     if (appointments.length === 0) {
       return `<p class="panel__empty">Nenhum agendamento encontrado.</p>`;
     }
@@ -1072,6 +1228,7 @@ if (status === "cancelado") {
             .join("")}
         </tbody>
       </table>
+      ${paginacaoHtml(total, paginacao)}
     `;
   }
 
@@ -1319,11 +1476,14 @@ if (status === "cancelado") {
   // --------------------------------------------------------------- Serviços
   function renderServicos(): void {
     refreshCaches();
+    const paginacao = criarPaginacaoEstado();
     const actionsHeader = canManageServices ? `<th>Ações</th>` : "";
     const actionsCell = (id: string): string =>
       canManageServices
         ? `<td><span class="cell-actions"><button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-service="${escapeHtml(id)}">Editar</button><button type="button" class="btn btn--sm btn--danger-outline" data-delete-service="${escapeHtml(id)}">Excluir</button></span></td>`
         : "";
+    // Partição client-side da lista completa (mesma abordagem dos agendamentos).
+    const pagina = paginar(servicesCache, paginacao);
 
     content.innerHTML = `
       <div class="panel__section manage-head">
@@ -1347,7 +1507,7 @@ if (status === "cancelado") {
             </tr>
           </thead>
           <tbody>
-            ${servicesCache
+            ${pagina
               .map(
                 (s) => `
                   <tr>
@@ -1360,7 +1520,7 @@ if (status === "cancelado") {
               .join("")}
           </tbody>
         </table>
-        ${servicesCache.length === 0 ? `<p class="panel__empty">Nenhum serviço cadastrado.</p>` : ""}
+        ${servicesCache.length === 0 ? `<p class="panel__empty">Nenhum serviço cadastrado.</p>` : paginacaoHtml(servicesCache.length, paginacao, "serviço", "serviços")}
       </div>
     `;
 
@@ -1391,6 +1551,12 @@ if (status === "cancelado") {
       btn.addEventListener("click", h);
       cleanups.push(() => btn.removeEventListener("click", h));
     });
+
+    // Controles de paginação (delegação única por renderização, mesmo padrão
+    // dos agendamentos): trocar o select de itens por página volta para a
+    // página 1; cada navegação re-renderiza a lista.
+    const cleanupPag = bindPaginacao(content, paginacao, () => servicesCache.length, () => renderServicos());
+    cleanups.push(cleanupPag);
   }
 
   async function handleDeleteService(service: Service): Promise<void> {
@@ -1645,6 +1811,14 @@ if (status === "cancelado") {
       btn.addEventListener("click", h);
       cleanups.push(() => btn.removeEventListener("click", h));
     });
+
+    // Deep-link (Financeiro → Profissionais): se o admin veio pela ação
+    // "Configurar agora" de uma pendência, abre o modal com foco no serviço.
+    const deepLink = consumirComissaoDeepLink();
+    if (deepLink) {
+      const pro = prosCache.find((p) => p.id === deepLink.funcionarioId) ?? null;
+      if (pro) void openProModal(pro, deepLink.servicoId);
+    }
   }
 
   async function handleDeletePro(id: string): Promise<void> {
@@ -1666,16 +1840,68 @@ if (status === "cancelado") {
     await renderProfissionais();
   }
 
-  async function openProModal(pro: Professional | null): Promise<void> {
+  async function openProModal(pro: Professional | null, focoServicoId?: string): Promise<void> {
     const isEdit = Boolean(pro);
     const categories = loadCategories();
-    const usuario = pro ? await findByProfessionalId(pro.id) : null;
+    if (servicesCache.length === 0) await ensureCatalogLoaded();
+
+    // Regra global de comissão (spec 3.4): o helper canônico de financeiro
+    // (`obterConfiguracaoComissao`) é a fonte do interruptor — não há cache em
+    // localStorage. Falha de leitura degrada para `comissao_ativa: false`
+    // (mesmo padrão do GET do backend) sem bloquear a abertura do modal.
+    const [usuario, comissaoConfig, comissoesExistentes] = await Promise.all([
+      pro ? findByProfessionalId(pro.id) : Promise.resolve(null),
+      obterConfiguracaoComissao().catch(() => ({ comissao_ativa: false })),
+      pro ? listarComissoesFuncionario(pro.id).catch(() => []) : Promise.resolve([]),
+    ]);
+    const comissaoAtiva = comissaoConfig.comissao_ativa;
+    const comissoesPorServico = new Map(
+      comissoesExistentes.map((c) => [c.servico_id, c.percentual] as const),
+    );
 
     // RBAC-F1/F2: seleção de cargo restrita. Admin escolhe entre os 3 cargos;
     // recepcionista só pode cadastrar barbeiros.
     const cargoAtual: CargoFuncionario = pro
       ? (pro.cargo ?? inferCargo(pro.role))
       : "barbeiro";
+
+    // Spec 3.5 + restrição de cargo: a seção "Comissão por serviço" só entra
+    // no DOM quando a regra global está ligada E o cargo é barbeiro (único
+    // papel que executa serviços e recebe comissão). A mudança de cargo no
+    // select esconde/mostra a seção em tempo real (ver listener abaixo).
+    const showComissao = comissaoAtiva && cargoAtual === "barbeiro";
+    const comissaoSectionHtml = showComissao
+      ? `
+          <fieldset class="field pro-comissao-section" data-comissao-section>
+            <legend class="field__label">COMISSÃO POR SERVIÇO</legend>
+            <p class="field__hint">DEFINA O PERCENTUAL QUE O PROFISSIONAL RECEBE POR SERVIÇO. VAZIO = NÃO PAGA COMISSÃO.</p>
+            <div class="pro-comissao-list">
+              ${ordenarServicosComissao(servicesCache)
+                .map((servico) => {
+                  const percentual = comissoesPorServico.get(servico.id) ?? "";
+                  const label = labelComissaoServico(servico.name);
+                  return `
+                  <label class="pro-comissao-row">
+                    <span class="pro-comissao-name">${escapeHtml(label)}</span>
+                    <span class="pro-comissao-value">
+                      <input
+                        type="text"
+                        inputmode="numeric"
+                        class="pro-comissao w-20 p-2 border rounded text-right uppercase"
+                        maxlength="3"
+                        placeholder="—"
+                        data-servico-id="${escapeHtml(servico.id)}"
+                        aria-label="Comissão percentual para ${escapeHtml(labelBaseComissaoServico(servico.name))}"
+                        value="${escapeHtml(percentual)}"
+                      >
+                    </span>
+                  </label>`;
+                })
+                .join("")}
+            </div>
+          </fieldset>
+        `
+      : "";
 
     const roleOptions = isAdmin
       ? `
@@ -1754,6 +1980,7 @@ if (status === "cancelado") {
                 <span class="field__error">${SENHA_FORTE_MESSAGE}</span>
               </div>
             `}
+          ${comissaoSectionHtml}
           <div class="modal__footer">
             <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
             <button type="submit" class="btn btn--primary">${isEdit ? "Salvar" : "Cadastrar"}</button>
@@ -1782,15 +2009,25 @@ if (status === "cancelado") {
     }
 
     // RBAC-F3: mostra/oculta o campo de categorias conforme o cargo selecionado.
+    // A seção de comissão segue a mesma regra: só para barbeiro (e apenas
+    // quando o interruptor global de comissão está ligado).
     if (isAdmin) {
       const roleSelect = overlay.querySelector<HTMLSelectElement>("#pro-role");
       const categoriasWrap = overlay.querySelector<HTMLElement>("#pro-categorias-wrap");
+      const comissaoSection = overlay.querySelector<HTMLElement>("[data-comissao-section]");
       if (roleSelect && categoriasWrap) {
         roleSelect.addEventListener("change", () => {
           categoriasWrap.hidden = roleSelect.value !== "barbeiro";
+          if (comissaoSection) {
+            comissaoSection.hidden = !(roleSelect.value === "barbeiro" && comissaoAtiva);
+          }
         });
       }
     }
+
+    // Máscara estrita de percentual (spec 3.5): somente inteiros 1–100. O "%"
+    // é sufixo visual do markup (classe pendente de estilização UI/UX).
+    overlay.querySelectorAll<HTMLInputElement>("input.pro-comissao").forEach(attachPercentMask);
 
     const submitHandler = async (event: Event): Promise<void> => {
       event.preventDefault();
@@ -1858,6 +2095,16 @@ if (status === "cancelado") {
             dadosAtualizacao.categorias = role === "barbeiro" ? categorias : [];
             await updateUsuarioInterno(existing.id, dadosAtualizacao);
           }
+          if (comissaoAtiva) {
+            try {
+              // Spec 3.5: persiste as comissões por serviço (REPLACE) quando a
+              // regra global está ligada. Payload minúsculo conforme contrato
+              // `RequestSalvarComissoesFuncionario`; `pro.id` é o funcionarioId.
+              await atualizarComissoesFuncionario(pro.id, coletarComissoesDoForm(overlay));
+            } catch (error) {
+              showToast(errorMessage(error, "Profissional atualizado, mas não foi possível salvar as comissões."), "error");
+            }
+          }
           showToast(senhaInformada ? "Profissional atualizado. Nova senha definida." : "Profissional atualizado.");
         } catch (error) {
           showToast(errorMessage(error, "Erro ao atualizar profissional."), "error");
@@ -1888,7 +2135,16 @@ if (status === "cancelado") {
         if (especialidade) payload.especialidade = especialidade;
         if (role === "barbeiro" && categorias.length > 0) payload.categorias = categorias;
         if (senhaInformada) payload.senha = senha;
-        await createUsuarioInterno(payload);
+        const criado = await createUsuarioInterno(payload);
+        if (comissaoAtiva && criado.professionalId) {
+          try {
+            // Spec 3.5: persiste as comissões por serviço do recém-criado no
+            // endpoint dedicado (o backend exige o funcionarioId criado).
+            await atualizarComissoesFuncionario(criado.professionalId, coletarComissoesDoForm(overlay));
+          } catch (error) {
+            showToast(errorMessage(error, "Profissional cadastrado, mas não foi possível salvar as comissões."), "error");
+          }
+        }
         if (senhaInformada) {
           showToast(`Profissional cadastrado! Senha de acesso: ${senha}. O primeiro login obrigará a troca.`, "success");
         } else {
@@ -1910,6 +2166,19 @@ if (status === "cancelado") {
     });
     document.body.appendChild(overlay);
     openModal(overlay);
+
+    // Deep-link (Financeiro → Profissionais): quando o admin chega pela ação
+    // "Configurar agora" de uma pendência, foca o input percentual do serviço
+    // pendente para preenchimento imediato.
+    if (focoServicoId) {
+      const alvo = Array.from(
+        overlay.querySelectorAll<HTMLInputElement>("input.pro-comissao"),
+      ).find((el) => el.getAttribute("data-servico-id") === focoServicoId);
+      if (alvo) {
+        alvo.scrollIntoView({ block: "center" });
+        alvo.focus({ preventScroll: true });
+      }
+    }
   }
 
   // ------------------------------------------------- Gerenciar permissões
