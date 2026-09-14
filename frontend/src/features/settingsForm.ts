@@ -46,6 +46,11 @@ export function renderSettingsForm(
   /** Foto escolhida localmente; só entra no contexto global (Session) ao Salvar. */
   let pendingPhoto: string | null = null;
 
+  // Staff (admin/recepcionista/profissional) saem pela sidebar; o botão de
+  // sair nas Configurações permanece somente para o Cliente.
+  const isStaff =
+    current?.role === "admin" || current?.role === "recepcionista" || current?.role === "profissional";
+
   container.innerHTML = `
     <div class="config-card">
       <div class="config-photo">
@@ -98,9 +103,10 @@ export function renderSettingsForm(
         </div>
       </form>
 
+      ${isStaff ? "" : `
       <div class="config-actions config-actions--logout">
         <button type="button" class="btn btn--danger-outline" data-profile-logout>${icon("logout", 18)} Sair da conta</button>
-      </div>
+      </div>`}
     </div>
   `;
 

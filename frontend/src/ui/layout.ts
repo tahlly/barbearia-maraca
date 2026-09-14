@@ -48,6 +48,11 @@ export function renderPanel(container: HTMLElement, options: PanelOptions): Pane
   const session = getSession();
   const user = session?.userName ?? "Usuário";
 
+  // Staff (admin/recepcionista/profissional) saem pela sidebar; o Cliente
+  // permanece saindo pelas Configurações.
+  const showSidebarLogout =
+    session?.role === "admin" || session?.role === "recepcionista" || session?.role === "profissional";
+
   const COLLAPSE_KEY = "maraca.panel.collapsed";
   const isCollapsed = localStorage.getItem(COLLAPSE_KEY) === "1";
 
@@ -83,6 +88,10 @@ export function renderPanel(container: HTMLElement, options: PanelOptions): Pane
               <small>${escapeHtml(options.roleLabel)}</small>
             </div>
           </div>
+          ${showSidebarLogout ? `
+          <button type="button" class="panel__logout" data-panel-logout title="Sair da conta">
+            ${icon("logout", 16)}<span>Sair</span>
+          </button>` : ""}
         </div>
       </aside>
       <div class="panel__backdrop" data-panel-backdrop></div>

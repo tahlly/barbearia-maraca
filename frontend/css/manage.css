@@ -59,6 +59,12 @@
   font-size: 2.3rem;
 }
 
+/* Faturamento do profissional destaque: valor em tamanho de destaque,
+   igual ao Lucro Líquido (Linha 3), para separar do corpo dos demais KPIs. */
+.kpi-card--destaque .kpi-card__value {
+  font-size: 2.3rem;
+}
+
 .kpi-card--lucro-positivo {
   border-color: var(--color-gold-border);
   background-color: var(--color-gold-soft);
@@ -422,9 +428,12 @@
   font-size: 0.85rem;
 }
 
-/* ----- Dashboard compacto (Desktop ≥ 1024px) ----------------------------
-   Em lg+ o dashboard deve caber no viewport (shell 100vh) sem rolagem
-   vertical em monitores padrão. Compactação deliberada e escopada:
+/* ----- Dashboard compacto (Desktop ≥ 1024px, paisagem) -------------------
+   Em lg+ (somente viewports em PAISAGEM, ex.: monitores e tablets deitados)
+   o dashboard deve caber no viewport (shell 100vh) sem rolagem vertical em
+   monitores padrão. Compactação deliberada e escopada — NÃO se aplica em
+   retrato (ex.: iPad Pro em pé, 1032px), onde o conteúdo deve preencher a
+   altura disponível com o layout espaçoso padrão:
    - respiro uniforme: padding interno dos cards em p-3 (12px) e gaps de
      grid/linhas em gap-3 (12px);
    - alturas de gráficos e avatar do destaque reduzidas para o respiro maior
@@ -434,7 +443,7 @@
    O container já é o .panel (100vh) com .panel__content flex:1; mantém-se
    overflow-y:auto como fallback para janelas muito baixas — não aplicamos
    overflow:hidden forçado que poderia cortar conteúdo inacessível. */
-@media (min-width: 1024px) {
+@media (min-width: 1024px) and (orientation: landscape) {
   /* Container principal do Dashboard: respiro uniforme entre linhas (gap-3).
      Padding vertical reduzido (p-2) para o respiro maior caber no viewport;
      margens laterais seguem p-4 para preservar o alinhamento do painel. */
@@ -484,6 +493,10 @@
   }
 
   .kpi-card--lucro .kpi-card__value {
+    font-size: 1.7rem;
+  }
+
+  .kpi-card--destaque .kpi-card__value {
     font-size: 1.7rem;
   }
 
@@ -625,32 +638,32 @@ body.light-theme .manage-toolbar select.input {
 }
 
 /* ----- Coluna Ações da agenda compartilhada (Recepção/Admin) -----
-   Os botões .btn--sm ficam empilhados na largura real da célula (coluna Ações
-   ~11%), sem estourá-la em viewports médias/estreitas:
-   - min-width 0 + flex: 1 1 auto: lado a lado quando a coluna permite e, no
-     caso comum (coluna estreita), botões com a mesma largura por linha;
-   - white-space normal permite o texto quebrar dentro do botão (ex.: o
-     label longo "Reverter conclusão");
-   - linhas alinhadas à esquerda, sem quebra torta, e alturas uniformes. */
+   Os botões .btn--sm ficam empilhados na largura real da célula (coluna Ações),
+   sem estourá-la em viewports médias/estreitas:
+   - flex-direction: column + align-items: stretch: botões sempre em coluna,
+     cada um com a LARGURA TOTAL da célula (nunca lado a lado espremidos);
+   - a coluna Ações ganha min-width (ver .table--agenda th/td:nth-child(6))
+     para os rótulos (CONFIRMAR/REAGENDAR/CANCELAR/REVERTER) caberem numa
+     linha — sem texto cortado nem quebra no meio da palavra;
+   - white-space normal + overflow-wrap apenas como fallback de segurança. */
 #manage-agenda-table .actions-cell {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  column-gap: var(--space-3);
-  row-gap: var(--space-2);
+  gap: var(--space-2);
   width: 100%;
   min-width: 0;
 }
 
 #manage-agenda-table .actions-cell .btn--sm {
   min-width: 0;
-  flex: 1 1 auto;
-  width: auto;
+  width: 100%;
+  flex: 0 0 auto;
   padding: 6px 10px;
   justify-content: center;
   text-align: center;
-  white-space: normal;
+  white-space: nowrap;
   overflow-wrap: break-word;
 }
 
@@ -1259,6 +1272,14 @@ body.light-theme .manage-toolbar select.input {
   word-break: normal;
 }
 
+/* Padrão de Data/Hora consistente em todas as listas de agendamentos:
+   o horário fica SEMPRE ao lado do mês (mesmo comportamento da tabela
+   de Gestão .table--agenda, que já é nowrap). Aqui cobrimos a tabela
+   do Profissional (#pro-agenda-table). */
+#pro-agenda-table .table td:nth-child(3) {
+  white-space: nowrap;
+}
+
 /* Colunas Status (5ª) e Ações (6ª) com mais respiro para a badge e o botão
    REVERTER. Larguras são sugestão semântica (table-layout auto), não
    precisam fechar 100%. Vale em todos os viewports: a tabela mantém linhas
@@ -1273,6 +1294,7 @@ body.light-theme .manage-toolbar select.input {
 .table--agenda th:nth-child(6),
 .table--agenda td:nth-child(6) {
   width: 16%;
+  min-width: 150px;
   padding-left: var(--space-2);
   padding-right: var(--space-3);
 }

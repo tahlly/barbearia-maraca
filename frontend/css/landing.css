@@ -425,6 +425,10 @@ body.light-theme .theme-toggle--nav:hover {
 }
 
 @media (max-width: 576px) {
+  .hero {
+    min-height: auto;
+  }
+
   .hero__actions {
     flex-direction: column;
     align-items: stretch;
@@ -694,9 +698,10 @@ body.light-theme .theme-toggle--nav:hover {
 }
 
 .hours-list li {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-4);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
   color: var(--color-text-secondary);
   border-bottom: 1px dashed var(--color-border);
   padding-bottom: 6px;

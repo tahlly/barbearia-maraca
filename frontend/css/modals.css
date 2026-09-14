@@ -108,12 +108,29 @@
 
 .modal__footer {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   gap: var(--space-2);
   padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--color-border);
   flex-shrink: 0;
+}
+
+/* Mobile: mantém os botões de ação lado a lado em uma única linha — evita
+   que o botão principal (ex.: "Salvar despesa") quebre para baixo do
+   secundário ("Cancelar") em larguras estreitas. */
+@media (max-width: 560px) {
+  .modal__footer {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .modal__footer .btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: 12px;
+    font-size: 0.68rem;
+    letter-spacing: 0.05em;
+  }
 }
 
 .steps {
@@ -592,6 +609,7 @@ body.light-theme .badge--neutral {
   padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--color-border);
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .wizard__footer--summary {
@@ -601,6 +619,7 @@ body.light-theme .badge--neutral {
 .wizard__total {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .wizard__total span {
@@ -619,6 +638,26 @@ body.light-theme .badge--neutral {
 .wizard__actions {
   display: flex;
   gap: var(--space-2);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* Mobile: footer empilha e os botões ocupam a largura toda — evita que o
+   botão "Continuar" (à direita) seja cortado pelo overflow do modal em
+   larguras intermediárias. */
+@media (max-width: 560px) {
+  .wizard__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wizard__footer .wizard__total {
+    align-items: flex-start;
+  }
+
+  .wizard__actions .btn {
+    flex: 1 1 auto;
+  }
 }
 
 .success-card {

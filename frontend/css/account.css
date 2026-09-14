@@ -137,14 +137,17 @@
   font-size: 18px;
 }
 
-/* Cabeçalho do card padronizado com .kpi-card__label do dashboard. */
+/* Cabeçalho do card padronizado com .kpi-card__label do dashboard.
+   margin-bottom abre respiro entre o título e o conteúdo (lista de
+   horários, endereço, telefone etc.) — sem ele, o título colava no
+   conteúdo logo abaixo. */
 .contact-section--panel .contact__item h3 {
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--color-text-muted);
-  margin-bottom: 0;
+  margin-bottom: var(--space-2);
 }
 
 .contact-section--panel .contact__item p,
@@ -255,6 +258,62 @@
 [data-servicos-wrap] .table,
 [data-dependentes-wrap] .table {
   min-width: 600px;
+}
+
+#conta-agenda-table .table {
+  min-width: 800px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tabela de agendamentos do Cliente — coluna Ações sem sobreposição  */
+/*  ------------------------------------------------------------------ */
+/* O problema: com larguras originais (Ações 20% ≈ 120px em 600px),
+   os botões REAGENDAR/CANCELAR (min-width 96px cada) vazavam da célula
+   e pintavam por cima do badge de Status ("Pendente").
+   Ajuste: tabela com min-width 800px (já rola horizontalmente no mobile
+   via .table-wrap) e coluna Ações de 32% para os dois botões ficarem
+   lado a lado, contidos na célula, sem sobrepor a coluna Status.
+   A coluna Data/Hora (22%) ganhou largura e nowrap para o horário ficar
+   SEMPRE ao lado do mês, igual à tabela da Gestão (.table--agenda). */
+#conta-agenda-table .table--conta th:nth-child(1),
+#conta-agenda-table .table--conta td:nth-child(1) { width: 19%; }
+
+#conta-agenda-table .table--conta th:nth-child(2),
+#conta-agenda-table .table--conta td:nth-child(2) { width: 13%; }
+
+#conta-agenda-table .table--conta th:nth-child(3),
+#conta-agenda-table .table--conta td:nth-child(3) { width: 22%; }
+
+#conta-agenda-table .table--conta th:nth-child(4),
+#conta-agenda-table .table--conta td:nth-child(4) { width: 14%; }
+
+#conta-agenda-table .table--conta th:nth-child(5),
+#conta-agenda-table .table--conta td:nth-child(5) { width: 32%; }
+
+#conta-agenda-table .table--conta td:nth-child(3) {
+  white-space: nowrap;
+}
+
+#conta-agenda-table .table--conta .cell-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+}
+
+#conta-agenda-table .table--conta .cell-actions .btn--sm {
+  min-width: 0;
+  flex: 1 1 auto;
+  width: auto;
+  padding: 6px 8px;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .btn--danger-text:hover {

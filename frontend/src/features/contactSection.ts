@@ -27,14 +27,14 @@ export function contactSectionHtml(): string {
         <span class="contact__icon" aria-hidden="true">${icon("pin", 20)}</span>
         <div>
           <h3>Endereço</h3>
-          <p>R. Francisco Real, 763 - Lj "C - Padre Miguel<br>Rio de Janeiro — RJ, 21810-041</p>
+          <p>R. Francisco Real, 763</p>
         </div>
       </div>
       <div class="contact__item">
         <span class="contact__icon" aria-hidden="true">${icon("phone", 20)}</span>
         <div>
           <h3>Telefone</h3>
-          <p><a href="tel:+5521966420270">(21) 96642-0270</a></p>
+          <p><a href="tel:+5521999999999">(21) 99999-9999</a></p>
         </div>
       </div>
       <div class="contact__item">
@@ -45,8 +45,8 @@ export function contactSectionHtml(): string {
         </div>
       </div>
       <div class="contact__socials">
-        <a href="https://wa.me/5521966420270" target="_blank" rel="noopener noreferrer" class="social-btn" aria-label="WhatsApp da Barbearia Maracá">${icon("whatsapp", 20)}</a>
-        <a href="https://www.instagram.com/barbeariamaraca/" target="_blank" rel="noopener noreferrer" class="social-btn" aria-label="Instagram da Barbearia Maracá">${icon("instagram", 20)}</a>
+        <a href="https://wa.me/5521999999999" target="_blank" rel="noopener noreferrer" class="social-btn" aria-label="WhatsApp">${icon("whatsapp", 20)}</a>
+        <a href="https://www.instagram.com/" target="_blank" rel="noopener noreferrer" class="social-btn" aria-label="Instagram">${icon("instagram", 20)}</a>
       </div>
     </div>
   `;
