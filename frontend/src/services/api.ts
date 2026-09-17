@@ -91,7 +91,7 @@ interface ApiErrorBody {
 }
 
 /** Extrai a mensagem legível de erro do corpo da resposta, quando houver. */
-async function readErrorMessage(response: Response): Promise<string | null> {
+export async function readErrorMessage(response: Response): Promise<string | null> {
   try {
     const body = (await response.json()) as ApiErrorBody;
     for (const key of ["mensagem", "message", "error"] as const) {
