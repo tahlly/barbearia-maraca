@@ -10,6 +10,7 @@
     "migrate:rollback": "npx tsx node_modules/knex/bin/cli.js migrate:rollback --knexfile src/knexfile.ts",
     "seed": "npx tsx node_modules/knex/bin/cli.js seed:run --knexfile src/knexfile.ts",
     "build": "tsc",
+    "typecheck:seeds": "tsc -p tsconfig.seeds.json",
     "start": "node dist/server.js",
     "test": "vitest run",
     "swagger": "npx tsx swagger.ts"
