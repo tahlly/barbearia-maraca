@@ -11,6 +11,7 @@ import {
   createServico,
   updateServico,
   setServicoStatus,
+  refetchProfessionals,
 } from "../services/catalog.js";
 import {
   listAppointments,
@@ -1728,6 +1729,18 @@ if (status === "cancelado") {
 
   // ----------------------------------------------------------- Profissionais
   async function renderProfissionais(): Promise<void> {
+    // Mesmo padrão do Dashboard: aguarda o catálogo antes de ler os caches
+    // síncronos. Sem este await, a primeira abertura da aba podia renderizar
+    // lista vazia/parcial (o cache de profissionais ainda estava sendo primado).
+    // A espera é best-effort: se o prime do catálogo falhar no boot, seguimos
+    // mesmo assim com o cache vazio/obsoleto — o `listAppointments()` abaixo
+    // já possui try/catch próprio com mensagem de erro para o usuário.
+    try {
+      await ensureCatalogLoaded();
+    } catch {
+      // Best-effort: apenas evita rejeição não tratada (unhandled rejection nos
+      // call sites com `void`) sem quebrar o render do restante da página.
+    }
     refreshCaches();
     let appts: Appointment[] = [];
     try {
@@ -1883,6 +1896,21 @@ if (status === "cancelado") {
     }
   }
 
+  /**
+   * Revalida o cache do catálogo de profissionais após uma mutação bem-sucedida
+   * (criar/editar/excluir). O `ensureCatalogLoaded()` do boot é idempotente e
+   * nunca refaz o fetch; sem esta revalidação o novo card só apareceria após
+   * reload completo da página. Falha de rede aqui é best-effort: mantém a lista
+   * anterior e o próximo render segue com o cache disponível.
+   */
+  async function revalidateProfessionalsCache(): Promise<void> {
+    try {
+      await refetchProfessionals();
+    } catch {
+      // Best-effort: não bloqueia o fluxo pós-mutação.
+    }
+  }
+
   async function handleDeletePro(id: string): Promise<void> {
     const pro = prosCache.find((p) => p.id === id);
     const confirmed = await confirmDialog({
@@ -1899,6 +1927,9 @@ if (status === "cancelado") {
     } catch (error) {
       showToast(errorMessage(error, "Erro ao excluir profissional."), "error");
     }
+    // A desativação remove o profissional do `GET /funcionarios` público;
+    // revalida o cache para o card sumir sem reload.
+    await revalidateProfessionalsCache();
     await renderProfissionais();
   }
 
@@ -2168,13 +2199,18 @@ if (status === "cancelado") {
             }
           }
           showToast(senhaInformada ? "Profissional atualizado. Nova senha definida." : "Profissional atualizado.");
+          // Só fecha o modal e revalida o cache após a mutação confirmada; em
+          // caso de falha, o catch abaixo mantém o formulário aberto e o toast
+          // de erro permanece como único feedback (nada é re-renderizado).
+          finish();
+          await revalidateProfessionalsCache();
+          await renderProfissionais();
         } catch (error) {
           showToast(errorMessage(error, "Erro ao atualizar profissional."), "error");
+          return;
         } finally {
           setBusy(false);
         }
-        finish();
-        await renderProfissionais();
         return;
       }
 
@@ -2213,6 +2249,7 @@ if (status === "cancelado") {
           showToast("Profissional cadastrado! Uma senha temporária foi gerada; o primeiro login obrigará a troca.", "success");
         }
         finish();
+        await revalidateProfessionalsCache();
         await renderProfissionais();
       } catch (error) {
         showToast(errorMessage(error, "Não foi possível cadastrar o profissional. Verifique se o e-mail já está em uso."), "error");
