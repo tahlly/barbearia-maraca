@@ -2,11 +2,16 @@
 
 SPA full-stack para gestão de uma barbearia — agendamentos online, operação da agenda e administração, com **quatro papéis**: Cliente, Barbeiro (profissional), Recepcionista e Administrador.
 
+A aplicação está em **estágio de MVP funcional (homologação)** e já conta com área pública, autenticação (JWT e login Google), agendamentos online, operação da agenda, dashboard, gestão de profissionais/serviços/categorias/permissões, horários de trabalho com exceções, comissões por serviço e financeiro (restrito ao Administrador).
+
+> 🌐 **Aplicação publicada:** https://lab.alphaedtech.org.br/server02/#/
+
 ---
 
 ## 📋 Sumário
 
 - [Stack / Tecnologias](#stack)
+- [Aplicação publicada (deploy)](#aplicação-publicada)
 - [Arquitetura do projeto](#arquitetura-do-projeto)
 - [Estrutura de pastas](#estrutura-de-pastas)
 - [Como iniciar o projeto](#como-iniciar-o-projeto)
@@ -31,6 +36,18 @@ SPA full-stack para gestão de uma barbearia — agendamentos online, operação
 | **ORM / Migrations** | Knex (configuração, migrations e seeds) |
 | **Autenticação** | JWT (`jsonwebtoken`) + bcrypt para senhas; suporte a login Google (OAuth) |
 | **Validação** | Zod (schemas de entrada) |
+
+---
+
+## <a name="aplicação-publicada"></a>🌐 Aplicação publicada (deploy)
+
+A versão atual do projeto está publicada e pode ser acessada em:
+
+**https://lab.alphaedtech.org.br/server02/#/**
+
+- A aplicação é uma **SPA com roteamento por hash** — o link termina em `#/` e a navegação interna usa `#/...` (ex.: `#/login`, `#/recepcionista/profissionais`).
+- Para entrar como os perfis de demonstração, use as credenciais do seed (veja [Usuários de teste](#usuários-de-teste-seed)).
+- Os comandos deste README (`npm run dev:up`, `npm run dev`, etc.) servem para executar o projeto **localmente** e não afetam o ambiente publicado.
 
 ---
 
@@ -367,7 +384,7 @@ npm run dev            # ou reinicie o backend já em execução
 
 ### Como criar uma nova rota para ela aparecer no Swagger
 
-Follow os 5 passos abaixo. O passo **3 é o mais fácil de esquecer** — o swagger-jsdoc só escaneia os arquivos listados em `backend/swagger.ts`.
+Siga os 5 passos abaixo. O passo **3 é o mais fácil de esquecer** — o swagger-jsdoc só escaneia os arquivos listados em `backend/swagger.ts`.
 
 **1. Implemente a rota no Express** em `backend/src/rotas/meu-recurso-routes.ts` e monte-a no `server.ts`:
 
@@ -448,6 +465,34 @@ npm run swagger
 - Defina `tags` para agrupar os endpoints na UI.
 - Se o endpoint retorna um shape novo, declare um `schema` novo no bloco `components.schemas` do mesmo arquivo de rotas.
 
+
+## <a name="estado-atual-do-projeto--avaliação-de-qa"></a>Estado atual do projeto — avaliação de QA
+
+O projeto está em **estágio de MVP funcional (homologação)**, com a aplicação publicada no ambiente indicado na seção [Aplicação publicada (deploy)](#aplicação-publicada).
+
+### O que está implementado
+
+- Área pública com landing, serviços, profissionais e páginas institucionais (privacidade/termos).
+- Autenticação com JWT para funcionários e clientes, com suporte a login Google (exige credenciais no `.env`).
+- Áreas por papel: **Cliente** (agendamentos e dados próprios), **Barbeiro** (agenda e atendimentos próprios), **Recepcionista** (operação sem acesso financeiro) e **Administrador** (acesso completo, incluindo financeiro e configurações).
+- Agendamentos com wizard (cliente e operador), reagendamento, confirmação, conclusão, cancelamento e reversão.
+- Agenda dos profissionais: horários de trabalho (semana), exceções/folgas e agenda padrão automática para barbeiros novos.
+- Dashboard com indicadores, gráficos e filtros; **Financeiro** (faturamento/despesas/lucro/lucratividade) restrito ao Administrador.
+- Gestão de profissionais (CRUD com RBAC), serviços, categorias, comissões por serviço e permissões granulares.
+- API REST documentada em OpenAPI/Swagger (veja [Documentação da API](#documentação-da-api-swagger)).
+
+### Qualidade
+
+- TypeScript em modo estrito no backend e no frontend; `any` e casts inseguros não são usados como atalho.
+- Suíte de testes automatizados (backend e frontend) e revisão de QA por rodadas antes de cada merge.
+- Migrations versionadas e idempotentes; restrição de dupla reserva garantida por índice único parcial no banco.
+
+### Pendências conhecidas
+
+- O toggle de **mock API** (`VITE_USE_MOCK_API`) está documentado no `.env.example`, mas não é lido pelo código — a aplicação sempre opera em modo API (ver [Observações importantes](#observações-importantes)).
+- Login **Google** fica indisponível sem as credenciais (`VITE_GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_ID`).
+
+---
 
 ## <a name="outras-documentações"></a>Outras documentações
 
