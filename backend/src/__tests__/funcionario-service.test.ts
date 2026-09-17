@@ -142,6 +142,9 @@ describe('criarFuncionario (RBAC)', () => {
     expect(criarRepoMock).toHaveBeenCalledWith(
       expect.objectContaining({ categorias: ['Corte'] }),
     );
+    // PR #93: barbeiro recém-criado ativa a agenda padrão.
+    expect(inserirHorariosPadraoMock).toHaveBeenCalledTimes(1);
+    expect(inserirHorariosPadraoMock).toHaveBeenCalledWith('func-novo');
   });
 
   it('recepcionista create cargo administrador → 403', async () => {
@@ -188,6 +191,8 @@ describe('criarFuncionario (RBAC)', () => {
 
     expect(resultado.cargo).toBe('administrador');
     expect(criarRepoMock).toHaveBeenCalledTimes(1);
+    // PR #93: cargo ≠ barbeiro NÃO ativa agenda padrão.
+    expect(inserirHorariosPadraoMock).not.toHaveBeenCalled();
   });
 
   it('admin sem permissão criar_admin → 403 (gate granular Item 1)', async () => {
@@ -250,6 +255,8 @@ describe('criarFuncionario (RBAC)', () => {
 
     expect(resultado.id).toBe('func-novo');
     expect(criarRepoMock).toHaveBeenCalledTimes(1);
+    // PR #93: cargo ≠ barbeiro NÃO ativa agenda padrão.
+    expect(inserirHorariosPadraoMock).not.toHaveBeenCalled();
   });
 
   it('role fora de admin/recep no create → 403 (negar por padrão)', async () => {
@@ -412,6 +419,24 @@ describe('atualizarFuncionario — regra hierárquica de edição', () => {
     ).rejects.toBeInstanceOf(NotFoundError);
     expect(atualizarRepoMock).not.toHaveBeenCalled();
   });
+
+  it('promover funcionário a barbeiro → inserirHorariosPadrao é chamado', async () => {
+    buscarPorIdMock.mockResolvedValue(FUNCIONARIO_RECEPCIONISTA);
+    atualizarRepoMock.mockResolvedValue(alvoCargo('barbeiro', 'func-r1', 'u-r1'));
+
+    const resultado = await atualizarFuncionario(
+      'func-r1',
+      { cargo: 'barbeiro' },
+      'u-admin',
+      'admin',
+    );
+
+    expect(resultado.cargo).toBe('barbeiro');
+    expect(atualizarRepoMock).toHaveBeenCalledTimes(1);
+    // PR #93: promoção para barbeiro ativa a agenda padrão.
+    expect(inserirHorariosPadraoMock).toHaveBeenCalledTimes(1);
+    expect(inserirHorariosPadraoMock).toHaveBeenCalledWith('func-r1');
+  });
 });
 
 // ── Testes: alternarStatusFuncionario (RBAC) ──────────────────
@@ -471,6 +496,16 @@ describe('alternarStatusFuncionario — regra hierárquica de status', () => {
     expect(resultado).toBe(true);
     expect(trocarStatusMock).toHaveBeenCalledTimes(1);
     expect(trocarStatusMock).toHaveBeenCalledWith('func-a1', false);
+  });
+
+  it('reativar barbeiro → inserirHorariosPadrao é chamado', async () => {
+    const resultado = await alternarStatusFuncionario('func-b1', true, 'u-admin', 'admin');
+
+    expect(resultado).toBe(true);
+    expect(trocarStatusMock).toHaveBeenCalledWith('func-b1', true);
+    // PR #93: reativação de barbeiro garante a agenda padrão.
+    expect(inserirHorariosPadraoMock).toHaveBeenCalledTimes(1);
+    expect(inserirHorariosPadraoMock).toHaveBeenCalledWith('func-b1');
   });
 
   it('alternar status sem permissão excluir_desativar_funcionario → 403 (gate granular Item 1)', async () => {
