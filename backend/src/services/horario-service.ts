@@ -52,6 +52,29 @@ export interface DisponibilidadeFuncionario {
   ocupados: string[];
 }
 
+/**
+ * Extrai o dia da semana (0=domingo ... 6=sábado) de uma data ISO
+ * "YYYY-MM-DD" de forma IMUNE a fuso horário. `new Date('YYYY-MM-DD').getDay()`
+ * interpreta a string como UTC e converte para o TZ local do processo, o que em
+ * fusos negativos (ex.: America/Sao_Paulo) devolve o dia ANTERIOR. O cálculo
+ * com `Date.UTC` + `getUTCDay` preserva o dia informado em qualquer TZ.
+ */
+export function diaDaSemanaDaDataISO(data: string): number {
+  const [ano, mes, dia] = data.split('-').map(Number);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+    throw new ValidationError('data deve estar em formato ISO válido');
+  }
+  const d = new Date(Date.UTC(ano, mes - 1, dia));
+  if (
+    d.getUTCFullYear() !== ano ||
+    d.getUTCMonth() !== mes - 1 ||
+    d.getUTCDate() !== dia
+  ) {
+    throw new ValidationError('data deve estar em formato ISO válido');
+  }
+  return d.getUTCDay();
+}
+
 function compararHoras(inicio: string, fim: string): number {
   const [ih, im, is = '00'] = inicio.split(':');
   const [fh, fm, fs = '00'] = fim.split(':');

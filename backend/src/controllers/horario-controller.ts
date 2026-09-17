@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Request, Response } from 'express';
 import * as service from '../services/horario-service';
+import { diaDaSemanaDaDataISO } from '../services/horario-service';
 import type { ReqUser } from '../services/horario-service';
 import { UnauthorizedError } from '../errors/UnauthorizedError';
 import { ValidationError } from '../errors/ValidationError';
@@ -17,6 +18,7 @@ const updateSchema = z
     dia_semana: z.number().int('dia_semana deve ser inteiro').min(0).max(6).optional(),
     hora_inicio: z.string().min(1, 'hora_inicio inválida').optional(),
     hora_fim: z.string().min(1, 'hora_fim inválida').optional(),
+    ativo: z.boolean().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'Nenhum campo para atualizar',
@@ -54,13 +56,10 @@ function extrairDiaSemanaDaData(data?: string): number | undefined {
   if (!data) {
     return undefined;
   }
-  const d = new Date(data);
-  if (Number.isNaN(d.getTime())) {
-    throw new ValidationError('data deve estar em formato ISO válido');
-  }
-  // "YYYY-MM-DD" é data de calendário (sem hora): usa componentes UTC para
-  // obter o dia da semana independente do fuso do servidor.
-  return d.getUTCDay(); // 0=domingo ... 6=sábado (igual ao domínio)
+  // diaDaSemanaDaDataISO calcula o dia a partir das partes de "YYYY-MM-DD"
+  // (Date.UTC + getUTCDay), imune ao fuso do processo/banco. O helper valida e
+  // lança ValidationError em datas inválidas.
+  return diaDaSemanaDaDataISO(data);
 }
 
 export async function listarHorarios(req: Request, res: Response): Promise<void> {

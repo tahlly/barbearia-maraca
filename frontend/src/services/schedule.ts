@@ -26,6 +26,7 @@ interface UpdateHorarioRequest {
   dia_semana?: number;
   hora_inicio?: string;
   hora_fim?: string;
+  ativo?: boolean;
 }
 
 // ── Tipos públicos (mantidos para compatibilidade com views) ────────────
@@ -211,9 +212,13 @@ export async function saveSchedule(
     `/horarios?funcionario_id=${encodeURIComponent(funcionarioId)}`,
   );
 
+  // Mantém o melhor candidato por dia: registros ativos E inativos entram na
+  // conta, para que um dia desmarcado use PUT `ativo=false` e não perca o
+  // horário configurado (nunca DELETE).
   const existingByDay = new Map<number, HorarioTrabalhoDTO>();
   for (const h of existing) {
-    if (h.ativo) {
+    const previous = existingByDay.get(h.dia_semana);
+    if (!previous || previous.ativo) {
       existingByDay.set(h.dia_semana, h);
     }
   }
@@ -224,23 +229,25 @@ export async function saveSchedule(
 
     if (dayCfg.open) {
       if (existingRecord) {
-        // Atualiza se horário mudou
+        // Garante horário E `ativo=true` (re-ativa um registro desativado).
         const currentStart = normalizeTime(existingRecord.hora_inicio);
         const currentEnd = normalizeTime(existingRecord.hora_fim);
-        if (currentStart !== dayCfg.start || currentEnd !== dayCfg.end) {
-          await httpJson<HorarioTrabalhoDTO>(
-            `/horarios/${existingRecord.id}`,
-            {
-              method: "PUT",
-              body: JSON.stringify({
-                hora_inicio: dayCfg.start,
-                hora_fim: dayCfg.end,
-              } satisfies UpdateHorarioRequest),
-            },
-          );
+        if (
+          !existingRecord.ativo ||
+          currentStart !== dayCfg.start ||
+          currentEnd !== dayCfg.end
+        ) {
+          await httpJson<HorarioTrabalhoDTO>(`/horarios/${existingRecord.id}`, {
+            method: "PUT",
+            body: JSON.stringify({
+              hora_inicio: dayCfg.start,
+              hora_fim: dayCfg.end,
+              ativo: true,
+            } satisfies UpdateHorarioRequest),
+          });
         }
       } else {
-        // Cria novo horário para este dia
+        // Cria novo horário para este dia (ativo por padrão no banco)
         await httpJson<HorarioTrabalhoDTO>("/horarios", {
           method: "POST",
           body: JSON.stringify({
@@ -251,10 +258,11 @@ export async function saveSchedule(
           } satisfies CreateHorarioRequest),
         });
       }
-    } else if (existingRecord) {
-      // Dia fechado mas tem registro → remove
-      await httpJson<void>(`/horarios/${existingRecord.id}`, {
-        method: "DELETE",
+    } else if (existingRecord?.ativo) {
+      // Dia fechado mas com registro ativo → desativa, preservando o diff.
+      await httpJson<HorarioTrabalhoDTO>(`/horarios/${existingRecord.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ ativo: false } satisfies UpdateHorarioRequest),
       });
     }
   }
@@ -303,4 +311,33 @@ export async function isDateOpen(
 
   const slots = await slotsForDate(dateIso, funcionarioId);
   return slots.length > 0;
+}
+
+/**
+ * Dia da semana (0=domingo ... 6=sábado) de uma data ISO "YYYY-MM-DD",
+ * calculado pelas partes com `Date.UTC` — imune ao fuso local do navegador
+ * (mesmo critério do backend, que adota America/Sao_Paulo).
+ */
+export function weekdayOf(dateIso: string): number {
+  const [ano, mes, dia] = dateIso.split("-").map(Number);
+  return new Date(Date.UTC(ano, (mes ?? 1) - 1, dia ?? 1)).getUTCDay();
+}
+
+/**
+ * Dias da semana (0-6) em que o funcionário possui horário ATIVO, via endpoint
+ * público de disponibilidade SEM data. Permite diferenciar "profissional sem
+ * agenda cadastrada" de "fechado nesta data" e avaliar se outros profissionais
+ * cobrem o dia.
+ */
+export async function professionalWorkdays(
+  funcionarioId: string,
+): Promise<number[]> {
+  try {
+    const resp = await httpJson<{ horarios: HorarioTrabalhoDTO[]; ocupados: string[] }>(
+      `/horarios/funcionario-disponibilidade?funcionario_id=${encodeURIComponent(funcionarioId)}`,
+    );
+    return [...new Set(resp.horarios.filter((h) => h.ativo).map((h) => h.dia_semana))];
+  } catch {
+    return [];
+  }
 }

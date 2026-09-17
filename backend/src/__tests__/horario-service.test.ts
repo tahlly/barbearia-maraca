@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenError } from '../errors/ForbiddenError';
+import { ValidationError } from '../errors/ValidationError';
 import type { HorarioTrabalho, FuncionarioMin } from '../dtos/horario-dto';
 
 const listarHorariosRepoMock = vi.fn();
@@ -20,7 +21,7 @@ vi.mock('../repositories/agendamento-repository', () => ({
   buscarHorariosOcupados: vi.fn(),
 }));
 
-const { listarHorarios } = await import('../services/horario-service');
+const { listarHorarios, diaDaSemanaDaDataISO } = await import('../services/horario-service');
 
 const HORARIO_PROFISSIONAL: HorarioTrabalho = {
   id: 'h1',
@@ -39,6 +40,27 @@ const FUNCIONARIO_PROPRIO: FuncionarioMin = {
   nome: 'Barbeiro 1',
   ativo: true,
 };
+
+describe('diaDaSemanaDaDataISO', () => {
+  it('mapeia a data para o dia da semana informado, sem deslocar por fuso', () => {
+    // 2026-09-17 é quinta-feira; em TZ America/Sao_Paulo o parsing ingênuo
+    // (new Date('YYYY-MM-DD').getDay()) retornaria 3 (quarta).
+    expect(diaDaSemanaDaDataISO('2026-09-17')).toBe(4);
+    // 2026-09-13 é domingo (0) e 2026-09-19 é sábado (6).
+    expect(diaDaSemanaDaDataISO('2026-09-13')).toBe(0);
+    expect(diaDaSemanaDaDataISO('2026-09-19')).toBe(6);
+  });
+
+  it('rejeita datas em formato inválido', () => {
+    expect(() => diaDaSemanaDaDataISO('17/09/2026')).toThrow(ValidationError);
+    expect(() => diaDaSemanaDaDataISO('2026-9-17')).toThrow(ValidationError);
+  });
+
+  it('rejeita datas fora do calendário', () => {
+    expect(() => diaDaSemanaDaDataISO('2026-02-30')).toThrow(ValidationError);
+    expect(() => diaDaSemanaDaDataISO('2026-13-01')).toThrow(ValidationError);
+  });
+});
 
 describe('listarHorarios (RBAC)', () => {
   beforeEach(() => {

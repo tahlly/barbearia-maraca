@@ -97,10 +97,11 @@ export function paginacaoHtml(
 /**
  * Liga os controles de paginação presentes em `container` por delegação.
  *
- * - `data-pag-itens` (select, evento `change`): muda `itensPorPagina` e volta
- *   para a página 1. É tratado no `change` (e não no `click`) para não
- *   re-renderizar e fechar o dropdown nativo no momento em que ele abre.
- * - `data-pag-first|prev|next|last` (evento `click`): navegam na página atual.
+* - `data-pag-itens` (select): muda `itensPorPagina` e volta para a página 1.
+ *   Ouvido no evento `change` (não `click`): clicar apenas para ABRIR o menu
+ *   nativo não dispara re-render no meio da interação — re-render no `click`
+ *   fazia a lista abrir e fechar instantaneamente, inutilizável em mobile.
+ * - `data-pag-first|prev|next|last`: navegam na página atual (evento `click`).
  *
  * `obterTotal` retorna o total de itens da lista filtrada atual; `aoNavegar`
  * re-renderiza a página. Retorna a função de cleanup.

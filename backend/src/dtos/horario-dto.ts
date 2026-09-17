@@ -27,6 +27,8 @@ export interface UpdateHorarioInput {
   dia_semana?: number;
   hora_inicio?: string;
   hora_fim?: string;
+  // `ativo=false` desativa o registro sem removê-lo (mantém o diff da agenda).
+  ativo?: boolean;
 }
 
 export interface FuncionarioMin {
