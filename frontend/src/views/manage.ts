@@ -1239,7 +1239,7 @@ if (status === "cancelado") {
     // A agenda é por funcionário: o alvo vem do card do profissional (aba
     // Profissionais), e não do usuário logado.
     const pro = prosCache.find((p) => p.id === professionalId);
-    const config = await loadSchedule(professionalId);
+    let config = await loadSchedule(professionalId);
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.setAttribute("aria-hidden", "true");
@@ -1335,6 +1335,7 @@ if (status === "cancelado") {
         const newConfig: ScheduleConfig = { ...config, blockedDates: blocked };
         void saveSchedule(newConfig, professionalId)
           .then(() => {
+            config = newConfig;
             showToast("Data bloqueada.");
           })
           .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível bloquear a data."), "error"));
@@ -1356,8 +1357,10 @@ if (status === "cancelado") {
       }
       let exceptions = config.exceptions.filter((e) => e.dateIso !== dateIso);
       exceptions = [...exceptions, { dateIso, start, end }];
-      void saveSchedule({ ...config, exceptions }, professionalId)
+      const newConfig: ScheduleConfig = { ...config, exceptions };
+      void saveSchedule(newConfig, professionalId)
         .then(() => {
+          config = newConfig;
           showToast("Abertura excepcional adicionada.");
         })
         .catch((error: unknown) => showToast(errorMessage(error, "Não foi possível adicionar a abertura excepcional."), "error"));
@@ -1380,6 +1383,7 @@ if (status === "cancelado") {
       };
       void saveSchedule(newConfig, professionalId)
         .then(() => {
+          config = newConfig;
           btn.closest("li")?.remove();
           showToast("Data desbloqueada.");
         })
@@ -1396,6 +1400,7 @@ if (status === "cancelado") {
       };
       void saveSchedule(newConfig, professionalId)
         .then(() => {
+          config = newConfig;
           btn.closest("li")?.remove();
           showToast("Exceção removida.");
         })

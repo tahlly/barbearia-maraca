@@ -1,4 +1,4 @@
-import { httpJson } from "./api.js";
+import { apiFetch, httpJson, ApiError, readErrorMessage } from "./api.js";
 
 // ── Tipos de contrato HTTP (espelho de shared/types — mantidos localmente
 // para evitar import fora do rootDir do frontend) ────────────────────────
@@ -27,6 +27,36 @@ interface UpdateHorarioRequest {
   hora_inicio?: string;
   hora_fim?: string;
   ativo?: boolean;
+}
+
+interface HorarioExcecaoDTO {
+  id: string;
+  funcionario_id: string;
+  funcionario_nome: string;
+  data: string;
+  hora_inicio: string;
+  hora_fim: string;
+  tipo: "bloqueio" | "liberacao";
+  motivo: string | null;
+  created_at: Date | string;
+  updated_at: Date | string;
+}
+
+interface CreateHorarioExcecaoRequest {
+  funcionario_id: string;
+  data: string;
+  hora_inicio: string;
+  hora_fim: string;
+  tipo: "bloqueio" | "liberacao";
+  motivo?: string | null;
+}
+
+interface UpdateHorarioExcecaoRequest {
+  data?: string;
+  hora_inicio?: string;
+  hora_fim?: string;
+  tipo?: "bloqueio" | "liberacao";
+  motivo?: string | null;
 }
 
 // ── Tipos públicos (mantidos para compatibilidade com views) ────────────
@@ -109,7 +139,9 @@ function normalizeTime(raw: string): string {
  * Decisão de mapeamento:
  * - Cada registro com `ativo=true` define o horário de um dia da semana.
  * - Dias sem registro ficam fechados (`open: false`).
- * - `blockedDates` e `exceptions` não são modelados pelo backend; retornam [].
+ * - `blockedDates` e `exceptions` voltam vazios aqui: exceções de horário
+ *   são mapeadas separadamente por `excecoesToScheduleConfig`, com fonte na
+ *   API `/horario-excecoes`.
  * - Se há mais de um registro para o mesmo `dia_semana`, prevalece o último.
  */
 function horariosToScheduleConfig(horarios: HorarioTrabalhoDTO[]): ScheduleConfig {
@@ -140,9 +172,171 @@ function horariosToScheduleConfig(horarios: HorarioTrabalhoDTO[]): ScheduleConfi
 
   return {
     weekly,
-    blockedDates: [], // Backend não modela datas bloqueadas
-    exceptions: [], // Backend não modela exceções de agenda
+    blockedDates: [], // Mapeado por excecoesToScheduleConfig (GET /horario-excecoes)
+    exceptions: [], // Mapeado por excecoesToScheduleConfig (GET /horario-excecoes)
   };
+}
+
+// ── Exceções de horário (dias bloqueados e aberturas excepcionais) ──────
+
+/**
+ * Horários fixos do mapeamento obrigatório de data bloqueada: dia inteiro
+ * ⇄ `tipo='bloqueio'` com `hora_inicio='00:00'` e `hora_fim='23:59'`.
+ */
+const BLOCKED_START = "00:00";
+const BLOCKED_END = "23:59";
+
+/** Campos de exceção de `ScheduleConfig` derivados da API de exceções. */
+export interface ScheduleExcecoesView {
+  blockedDates: string[];
+  exceptions: ScheduleException[];
+}
+
+/**
+ * Mapeia `HorarioExcecaoDTO[]` (resposta do backend) para os campos de
+ * exceção de `ScheduleConfig`:
+ * - `tipo='bloqueio'` → `blockedDates` (data bloqueada por inteiro);
+ * - `tipo='liberacao'` → `exceptions` (abertura excepcional com horário).
+ *
+ * Se há mais de um registro para o mesmo par `(tipo, data)`, prevalece o
+ * último (mesmo critério do mapeamento semanal).
+ */
+export function excecoesToScheduleConfig(
+  excecoes: HorarioExcecaoDTO[],
+): ScheduleExcecoesView {
+  const blockedDates: string[] = [];
+  const exceptions: ScheduleException[] = [];
+  const seenBlocked = new Set<string>();
+  const seenException = new Set<string>();
+
+  for (const e of excecoes) {
+    if (e.tipo === "bloqueio") {
+      if (!seenBlocked.has(e.data)) {
+        seenBlocked.add(e.data);
+        blockedDates.push(e.data);
+      }
+    } else if (e.tipo === "liberacao") {
+      if (!seenException.has(e.data)) {
+        seenException.add(e.data);
+        exceptions.push({
+          dateIso: e.data,
+          start: normalizeTime(e.hora_inicio),
+          end: normalizeTime(e.hora_fim),
+        });
+      }
+    }
+  }
+
+  return { blockedDates, exceptions };
+}
+
+/** Operação de atualização (PUT) de uma exceção existente. */
+export interface HorarioExcecaoUpdateItem {
+  id: string;
+  body: UpdateHorarioExcecaoRequest;
+}
+
+/** Diff calculado entre o estado desejado e as exceções atuais do backend. */
+export interface HorarioExcecaoDiff {
+  create: CreateHorarioExcecaoRequest[];
+  update: HorarioExcecaoUpdateItem[];
+  remove: string[];
+}
+
+/**
+ * Calcula o diff entre o estado desejado (`config`) e as exceções atuais
+ * (`existing`), produzindo operações idempotentes:
+ * - cria (`POST`) exceções que ainda não existem;
+ * - atualiza (`PUT`) registros reutilizáveis cujo valor mudou;
+ * - remove (`DELETE`) apenas o que realmente saiu do estado desejado.
+ *
+ * `blockedDates` e `exceptions` são tratados como buckets independentes
+ * (`tipo='bloqueio'` e `tipo='liberacao'` no backend): um registro de um
+ * tipo nunca é reaproveitado para representar o outro. Datas repetidas no
+ * mesmo estado desejado geram uma única operação.
+ */
+export function diffScheduleExceptions(
+  config: ScheduleConfig,
+  existing: HorarioExcecaoDTO[],
+  funcionarioId: string,
+): HorarioExcecaoDiff {
+  const create: CreateHorarioExcecaoRequest[] = [];
+  const update: HorarioExcecaoUpdateItem[] = [];
+  const remove: string[] = [];
+
+  // Último registro por (tipo, data) — "prevalece o último" (mesmo critério
+  // do diff semanal, que mantém o melhor candidato por dia).
+  const existingByTipoData = new Map<string, HorarioExcecaoDTO>();
+  for (const e of existing) {
+    existingByTipoData.set(`${e.tipo}|${e.data}`, e);
+  }
+
+  // Bloqueios: data inteira com horas fixas (uma operação por data).
+  const desiredBlockedDates = [...new Set(config.blockedDates)];
+  for (const dateIso of desiredBlockedDates) {
+    const rec = existingByTipoData.get(`bloqueio|${dateIso}`);
+    if (!rec) {
+      create.push({
+        funcionario_id: funcionarioId,
+        data: dateIso,
+        hora_inicio: BLOCKED_START,
+        hora_fim: BLOCKED_END,
+        tipo: "bloqueio",
+        motivo: null,
+      });
+    } else if (
+      normalizeTime(rec.hora_inicio) !== BLOCKED_START ||
+      normalizeTime(rec.hora_fim) !== BLOCKED_END
+    ) {
+      // Reaproveita o registro normalizando para o bloqueio de dia inteiro.
+      update.push({
+        id: rec.id,
+        body: { hora_inicio: BLOCKED_START, hora_fim: BLOCKED_END },
+      });
+    }
+  }
+
+  // Aberturas excepcionais: uma por data, com os horários desejados
+  // (prevalece a última exceção quando há datas repetidas).
+  const desiredExceptionByDate = new Map<string, ScheduleException>();
+  for (const ex of config.exceptions) {
+    desiredExceptionByDate.set(ex.dateIso, ex);
+  }
+  for (const ex of desiredExceptionByDate.values()) {
+    const rec = existingByTipoData.get(`liberacao|${ex.dateIso}`);
+    if (!rec) {
+      create.push({
+        funcionario_id: funcionarioId,
+        data: ex.dateIso,
+        hora_inicio: ex.start,
+        hora_fim: ex.end,
+        tipo: "liberacao",
+        motivo: null,
+      });
+    } else if (
+      normalizeTime(rec.hora_inicio) !== ex.start ||
+      normalizeTime(rec.hora_fim) !== ex.end
+    ) {
+      // Reaproveita o registro atualizando apenas os horários.
+      update.push({
+        id: rec.id,
+        body: { hora_inicio: ex.start, hora_fim: ex.end },
+      });
+    }
+  }
+
+  // Remoções: registros existentes que não estão no estado desejado.
+  const desiredBlocked = new Set(config.blockedDates);
+  for (const e of existing) {
+    const stillDesired =
+      (e.tipo === "bloqueio" && desiredBlocked.has(e.data)) ||
+      (e.tipo === "liberacao" && desiredExceptionByDate.has(e.data));
+    if (!stillDesired) {
+      remove.push(e.id);
+    }
+  }
+
+  return { create, update, remove };
 }
 
 /**
@@ -180,7 +374,11 @@ export function isDateBlocked(
 
 /**
  * Carrega a configuração de horários de um funcionário via
- * `GET /horarios?funcionario_id={id}`.
+ * `GET /horarios?funcionario_id={id}` e as exceções de horário via
+ * `GET /horario-excecoes?funcionario_id={id}`.
+ *
+ * A busca de exceções degrada para `[]` em falha (ex.: papel sem acesso,
+ * 403) sem quebrar o carregamento do horário semanal.
  */
 export async function loadSchedule(
   funcionarioId?: string,
@@ -190,7 +388,22 @@ export async function loadSchedule(
       ? `?funcionario_id=${encodeURIComponent(funcionarioId)}`
       : "";
     const horarios = await httpJson<HorarioTrabalhoDTO[]>(`/horarios${qs}`);
-    return horariosToScheduleConfig(horarios);
+    const config = horariosToScheduleConfig(horarios);
+
+    // Exceções exigem autenticação e só fazem sentido com funcionário alvo.
+    if (funcionarioId) {
+      try {
+        const excecoes = await httpJson<HorarioExcecaoDTO[]>(
+          `/horario-excecoes?funcionario_id=${encodeURIComponent(funcionarioId)}`,
+        );
+        return { ...config, ...excecoesToScheduleConfig(excecoes) };
+      } catch {
+        // Degrada para sem exceções (mantém o weekly carregado).
+        return config;
+      }
+    }
+
+    return config;
   } catch {
     return defaultSchedule();
   }
@@ -199,6 +412,10 @@ export async function loadSchedule(
 /**
  * Salva a configuração de horários de um funcionário, comparando o estado
  * desejado com o backend e executando `POST`/`PUT`/`DELETE` por dia.
+ *
+ * Além do diff semanal, aplica o diff de exceções (`blockedDates` e
+ * `exceptions`): cria o que falta, atualiza registros reutilizáveis e
+ * exclui apenas o que foi removido.
  */
 export async function saveSchedule(
   config: ScheduleConfig,
@@ -264,6 +481,42 @@ export async function saveSchedule(
         method: "PUT",
         body: JSON.stringify({ ativo: false } satisfies UpdateHorarioRequest),
       });
+    }
+  }
+
+  // ── Exceções de horário (dias bloqueados e aberturas excepcionais) ──
+  // Difere contra o estado atual e emite POST/PUT/DELETE idempotente.
+  const excecoesAtuais: HorarioExcecaoDTO[] = await httpJson<HorarioExcecaoDTO[]>(
+    `/horario-excecoes?funcionario_id=${encodeURIComponent(funcionarioId)}`,
+  );
+  const diff = diffScheduleExceptions(config, excecoesAtuais, funcionarioId);
+
+  for (const item of diff.create) {
+    await httpJson<HorarioExcecaoDTO>("/horario-excecoes", {
+      method: "POST",
+      body: JSON.stringify(item satisfies CreateHorarioExcecaoRequest),
+    });
+  }
+  for (const item of diff.update) {
+    await httpJson<HorarioExcecaoDTO>(
+      `/horario-excecoes/${encodeURIComponent(item.id)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(item.body satisfies UpdateHorarioExcecaoRequest),
+      },
+    );
+  }
+  // DELETE responde 204 sem corpo: usa apiFetch (httpJson faria response.json()).
+  for (const id of diff.remove) {
+    const res = await apiFetch(
+      `/horario-excecoes/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    );
+    if (!res.ok) {
+      const serverMessage =
+        (await readErrorMessage(res)) ??
+        `Erro ao excluir exceção de horário (${res.status}).`;
+      throw new ApiError(serverMessage, res.status);
     }
   }
 }
