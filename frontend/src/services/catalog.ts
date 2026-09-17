@@ -182,6 +182,22 @@ export function ensureCatalogLoaded(): Promise<void> {
   return _primePromise;
 }
 
+/**
+ * Revalida o cache de profissionais explicitamente após mutações (CRUD de
+ * usuários internos).
+ *
+ * O `ensureCatalogLoaded()` é idempotente no boot e NUNCA refaz o fetch;
+ * sem esta função, um profissional recém-cadastrado/alterado/desativado só
+ * apareceria na lista de gestão após reload completo da página (que reinicia
+ * os módulos e re-prima o catálogo). Ela força uma nova leitura de
+ * `GET /funcionarios` (público — retorna apenas ativos) e substitui o cache
+ * global, devolvendo a lista atualizada. Não altera o contrato HTTP nem a
+ * idempotência do `ensureCatalogLoaded()`.
+ */
+export function refetchProfessionals(): Promise<Professional[]> {
+  return fetchProfessionals();
+}
+
 /* ------------------------------------------------------------------ */
 /*  Admin CRUD — serviços (API real)                                   */
 /* ------------------------------------------------------------------ */
