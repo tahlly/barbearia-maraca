@@ -342,9 +342,6 @@ export function renderMinhaConta(container: HTMLElement): () => void {
 
   // ---------------------------------------------------- Serviços Disponíveis
   function renderServicos(): void {
-    const paginacao = criarPaginacaoEstado();
-    let ultimaLista: Service[] = [];
-
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -362,9 +359,7 @@ export function renderMinhaConta(container: HTMLElement): () => void {
     // Área do cliente: sem CRUD. A tabela tem uma única ação por linha —
     // AGENDAR — que pré-seleciona o serviço e abre o wizard de agendamento
     // direto na etapa de data/profissional.
-    // A paginação é client-side (mesma abordagem dos agendamentos): a função
-    // recebe a PÁGINA atual de serviços, o total real e o estado de paginação.
-    function buildTable(services: Service[], total: number, estado: PaginacaoEstado): string {
+    function buildTable(services: Service[]): string {
       if (services.length === 0) {
         return `<p class="panel__empty">Nenhum serviço disponível no momento.</p>`;
       }
@@ -394,21 +389,18 @@ export function renderMinhaConta(container: HTMLElement): () => void {
               .join("")}
           </tbody>
         </table>
-        ${paginacaoHtml(total, estado, "serviço", "serviços")}
       `;
     }
 
     function montar(services: Service[]): void {
       if (!wrap) return;
-      const pagina = paginar(services, paginacao);
-      wrap.innerHTML = buildTable(pagina, services.length, paginacao);
+      wrap.innerHTML = buildTable(services);
       bindBookButtons(services);
     }
 
     async function load(): Promise<void> {
       try {
         const services = await fetchServices();
-        ultimaLista = services;
         montar(services);
       } catch (error) {
         const message =
@@ -431,12 +423,6 @@ export function renderMinhaConta(container: HTMLElement): () => void {
         cleanups.push(() => btn.removeEventListener("click", h));
       });
     }
-
-    // Controles de paginação (delegação única por renderização, mesmo padrão
-    // dos agendamentos): trocar o select de itens por página volta para a
-    // página 1; navegar re-monta a tabela da última lista carregada.
-    const cleanupPag = bindPaginacao(content, paginacao, () => ultimaLista.length, () => montar(ultimaLista));
-    cleanups.push(cleanupPag);
 
     void load();
   }

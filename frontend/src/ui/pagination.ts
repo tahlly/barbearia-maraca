@@ -98,7 +98,10 @@ export function paginacaoHtml(
  * Liga os controles de paginação presentes em `container` por delegação.
  *
  * - `data-pag-itens` (select): muda `itensPorPagina` e volta para a página 1.
- * - `data-pag-first|prev|next|last`: navegam na página atual.
+ *   Ouvido no evento `change` (não `click`): clicar apenas para ABRIR o menu
+ *   nativo não dispara re-render no meio da interação — re-render no `click`
+ *   fazia a lista abrir e fechar instantaneamente, inutilizável em mobile.
+ * - `data-pag-first|prev|next|last`: navegam na página atual (evento `click`).
  *
  * `obterTotal` retorna o total de itens da lista filtrada atual; `aoNavegar`
  * re-renderiza a página. Retorna a função de cleanup.
@@ -109,18 +112,8 @@ export function bindPaginacao(
   obterTotal: () => number,
   aoNavegar: () => void,
 ): () => void {
-  const handle = (event: Event): void => {
+  const handleClick = (event: Event): void => {
     const target = event.target as HTMLElement;
-    const select = target.closest<HTMLSelectElement>("[data-pag-itens]");
-    if (select) {
-      const novo = Number(select.value);
-      if (Number.isFinite(novo) && novo > 0) {
-        estado.itensPorPagina = novo;
-        estado.paginaAtual = 1;
-        aoNavegar();
-      }
-      return;
-    }
     const btn = target.closest<HTMLElement>(
       "[data-pag-first],[data-pag-prev],[data-pag-next],[data-pag-last]",
     );
@@ -133,6 +126,21 @@ export function bindPaginacao(
     else if (btn.hasAttribute("data-pag-last")) estado.paginaAtual = paginas;
     aoNavegar();
   };
-  container.addEventListener("click", handle);
-  return () => container.removeEventListener("click", handle);
+  const handleChange = (event: Event): void => {
+    const target = event.target as HTMLElement;
+    const select = target.closest<HTMLSelectElement>("[data-pag-itens]");
+    if (!select) return;
+    const novo = Number(select.value);
+    if (Number.isFinite(novo) && novo > 0) {
+      estado.itensPorPagina = novo;
+      estado.paginaAtual = 1;
+      aoNavegar();
+    }
+  };
+  container.addEventListener("click", handleClick);
+  container.addEventListener("change", handleChange);
+  return () => {
+    container.removeEventListener("click", handleClick);
+    container.removeEventListener("change", handleChange);
+  };
 }

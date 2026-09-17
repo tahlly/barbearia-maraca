@@ -108,6 +108,25 @@ export async function seed(knex: Knex): Promise<void> {
     [funcionarios[3].id]: ['Barba'],
   };
 
+  // Horário padrão de trabalho dos barbeiros: segunda (1) a sábado (6),
+  // 09:00–19:00. Sem estes registros o wizard de agendamento não encontra slots
+  // e o ambiente fica completamente não-agendável.
+  const HORARIO_PADRAO_INICIO = '09:00:00';
+  const HORARIO_PADRAO_FIM = '19:00:00';
+  const DIAS_UTEIS = [1, 2, 3, 4, 5, 6]; // seg a sáb
+
+  const horariosTrabalho = barbeiroIds.flatMap((funcionarioId) =>
+    DIAS_UTEIS.map((dia_semana) => ({
+      funcionario_id: funcionarioId,
+      dia_semana,
+      hora_inicio: HORARIO_PADRAO_INICIO,
+      hora_fim: HORARIO_PADRAO_FIM,
+      ativo: true,
+    })),
+  );
+
+  await knex('horario_trabalho').insert(horariosTrabalho);
+
   // ── Fidelidade ao backfill RBAC (migration 20260909000001) ──────────────
   // O reset acima apaga todos os usuários e, com eles, as linhas de
   // `permissao_usuario` (FK CASCADE). A matriz default do permissao-service já

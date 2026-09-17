@@ -31,6 +31,11 @@ vi.mock('../repositories/auth-repository', () => ({
   incrementarTokenVersion: (...args: unknown[]) => incrementarTokenVersionMock(...args),
 }));
 
+const inserirHorariosPadraoMock = vi.fn(async () => {});
+vi.mock('../repositories/horario-repository', () => ({
+  inserirHorariosPadrao: (...args: unknown[]) => inserirHorariosPadraoMock(...args),
+}));
+
 vi.mock('../services/permissao-service', () => ({
   exigirPermissao: (...args: unknown[]) => exigirPermissaoMock(...args),
 }));
@@ -92,6 +97,7 @@ function resetAll(): void {
   listarCategoriasAtivasMock.mockReset();
   incrementarTokenVersionMock.mockReset();
   exigirPermissaoMock.mockReset();
+  inserirHorariosPadraoMock.mockReset();
 }
 
 function seedRepoBasico(): void {

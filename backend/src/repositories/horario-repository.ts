@@ -100,6 +100,7 @@ export async function atualizarHorario(
   if (data.dia_semana !== undefined) patch.dia_semana = data.dia_semana;
   if (data.hora_inicio !== undefined) patch.hora_inicio = data.hora_inicio;
   if (data.hora_fim !== undefined) patch.hora_fim = data.hora_fim;
+  if (data.ativo !== undefined) patch.ativo = data.ativo;
 
   await db('horario_trabalho').where('id', id).update(patch);
 
@@ -112,4 +113,31 @@ export async function atualizarHorario(
 
 export async function excluirHorario(id: string): Promise<void> {
   await db('horario_trabalho').where('id', id).del();
+}
+
+// Agenda padrão de um barbeiro recém-criado ou reativado: Seg–Sáb (1–6).
+// Mesmo intervalo do seed, garantindo consistência entre dados iniciais e
+// novos cadastros.
+export const DIAS_SEMANA_PADRAO = [1, 2, 3, 4, 5, 6];
+export const HORA_INICIO_PADRAO = '09:00:00';
+export const HORA_FIM_PADRAO = '19:00:00';
+
+/**
+ * Insere os horários de trabalho padrão (Seg–Sáb, 09:00–19:00, ativos) para um
+ * funcionário. Idempotente: dias já existentes (`funcionario_id, dia_semana`)
+ * não são alterados, preservando o que o próprio profissional configurou.
+ */
+export async function inserirHorariosPadrao(funcionarioId: string): Promise<void> {
+  await db('horario_trabalho')
+    .insert(
+      DIAS_SEMANA_PADRAO.map((diaSemana) => ({
+        funcionario_id: funcionarioId,
+        dia_semana: diaSemana,
+        hora_inicio: HORA_INICIO_PADRAO,
+        hora_fim: HORA_FIM_PADRAO,
+        ativo: true,
+      })),
+    )
+    .onConflict(['funcionario_id', 'dia_semana'])
+    .ignore();
 }

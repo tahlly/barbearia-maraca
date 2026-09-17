@@ -5,7 +5,7 @@ import { createAppointment, reschedule } from "../services/booking.js";
 import { buscarClientes, criarCliente } from "../services/clientes.js";
 import { getSession } from "../services/auth.js";
 import { findUsuarioByEmail } from "../services/usuarios.js";
-import { isDateOpen, slotsForDate } from "../services/schedule.js";
+import { isDateOpen, professionalWorkdays, slotsForDate, weekdayOf } from "../services/schedule.js";
 import { $, $$, clearElement, clearFormErrors, escapeHtml, initials } from "../ui/dom.js";
 import { icon, serviceIcon } from "../ui/icons.js";
 import { formatCurrency, formatDateLong, toIsoDate } from "../ui/format.js";
@@ -197,7 +197,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     return isDateOpen(iso, state.professionalId);
   }
 
-  async function defaultDateIso(): Promise<string> {
+  async function defaultDateIso(): Promise<string | null> {
     const candidate = new Date(today);
     for (let attempt = 0; attempt < 7; attempt++) {
       const iso = toIsoDate(candidate);
@@ -205,12 +205,54 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       try {
         enabled = await isDateEnabled(iso);
       } catch {
-        return minIso;
+        return null;
       }
       if (enabled) return iso;
       candidate.setDate(candidate.getDate() + 1);
     }
-    return minIso;
+    // Nenhum dia aberto nos próximos 7 dias (ex.: profissional sem horário
+    // cadastrado): deixa a data em branco em vez de forçar "hoje" e exibir o
+    // aviso de fechado para uma data que o usuário não escolheu.
+    return null;
+  }
+
+  /**
+   * Mensagem adequada quando uma data não tem horários para o profissional
+   * selecionado. Diferencia:
+   * - profissional sem agenda cadastrada (workdays vazios);
+   * - "barbearia fechada" quando NENHUM barbeiro ativo trabalha no dia;
+   * - folga individual ("sem agenda para esta data");
+   * - dia aberto, porém com todos os horários ocupados.
+   */
+  async function dateClosedMessage(dateIso: string): Promise<string> {
+    const professionalId = state.professionalId;
+    if (!professionalId) {
+      return "Escolha um profissional para ver os horários disponíveis.";
+    }
+    const workdays = await professionalWorkdays(professionalId);
+    if (workdays.length === 0) {
+      return "Profissional sem horário de atendimento cadastrado. Configure a agenda antes de agendar.";
+    }
+    const day = weekdayOf(dateIso);
+    // Mesma base do seletor de profissional: barbeiros ativos de plantão.
+    const outros = catalogProfessionals.filter(
+      (p) => p.active && p.cargo === "barbeiro" && p.id !== professionalId,
+    );
+    let algumOutroTrabalha = false;
+    try {
+      const workdaysPorOutro = await Promise.all(
+        outros.map((p) => professionalWorkdays(p.id)),
+      );
+      algumOutroTrabalha = workdaysPorOutro.some((dias) => dias.includes(day));
+    } catch {
+      // Se a checagem dos demais falhar, mantém a mensagem individual.
+    }
+    if (!workdays.includes(day)) {
+      return algumOutroTrabalha
+        ? "Este profissional está sem agenda para esta data."
+        : "A barbearia está fechada nesta data. Escolha outra.";
+    }
+    return "Este profissional está com todos os horários ocupados nesta data.";
   }
 
   function initDateField(): void {
@@ -248,7 +290,7 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
           return;
         }
         if (!enabled) {
-          showToast("A barbearia está fechada nesta data. Escolha outra.", "error");
+          showToast(await dateClosedMessage(value), "error");
           dateInput.value = state.dateIso ?? "";
           return;
         }
@@ -391,12 +433,14 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       showSlotsHint(message);
       return;
     }
+    const dateIso = state.dateIso;
+    const professionalId = state.professionalId;
 
     // slotsForDate() já retorna apenas slots realmente livres (filtra
     // ocupados via endpoint /horarios/funcionario-disponibilidade).
     let slots: string[];
     try {
-      slots = await slotsForDate(state.dateIso, state.professionalId);
+      slots = await slotsForDate(dateIso, professionalId);
     } catch (error) {
       if (renderSeq !== slotsRenderSeq) return;
       const message =
@@ -408,7 +452,9 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     }
     if (slots.length === 0) {
       if (renderSeq !== slotsRenderSeq) return;
-      showSlotsHint("A barbearia está fechada nesta data. Escolha outra.", "error");
+      const message = await dateClosedMessage(dateIso);
+      if (renderSeq !== slotsRenderSeq) return;
+      showSlotsHint(message, "error");
       return;
     }
 
@@ -611,7 +657,7 @@ onBookingCreatedRef?.();
     form.reset();
     clearFormErrors(form);
     resetPasswordReveal();
-    dateInput.value = state.dateIso;
+    dateInput.value = state.dateIso ?? "";
     quemRadios.forEach((radio) => {
       radio.checked = radio.value === "mim";
     });
@@ -943,7 +989,7 @@ onBookingCreatedRef?.();
     } else {
       state.dateIso = await defaultDateIso();
     }
-    dateInput.value = state.dateIso;
+    dateInput.value = state.dateIso ?? "";
     state.time = appointment.data === state.dateIso ? appointment.hora : null;
     renderSlots();
     goToStep(positionOf("horario"));

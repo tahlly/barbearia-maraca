@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import { findUsuarioByEmail, incrementarTokenVersion } from '../repositories/auth-repository';
 import * as funcionarioRepo from '../repositories/funcionario-repository';
+import { inserirHorariosPadrao } from '../repositories/horario-repository';
 import { listarCategoriasAtivas } from './categoria-service';
 import { exigirPermissao } from './permissao-service';
 import { ValidationError } from '../errors/ValidationError';
@@ -157,7 +158,7 @@ export async function criarFuncionario(
   const senha = dados.senha ?? SENHA_PADRAO;
   const senhaHash = await bcrypt.hash(senha, SALT_ROUNDS);
 
-  return funcionarioRepo.criar({
+  const criado = await funcionarioRepo.criar({
     email: dados.email,
     senhaHash,
     nome: dados.nome,
@@ -166,6 +167,12 @@ export async function criarFuncionario(
     especialidade: dados.especialidade,
     categorias,
   });
+  // Barbeiro recém-criado já nasce com agenda padrão (Seg–Sáb), evitando
+  // retrabalho manual. Idempotente: não sobrescreve nada.
+  if (criado.cargo === 'barbeiro') {
+    await inserirHorariosPadrao(criado.id);
+  }
+  return criado;
 }
 
 // ── Atualização ───────────────────────────────────────────────
@@ -252,6 +259,11 @@ export async function atualizarFuncionario(
   if (cargoFinal !== alvo.cargo) {
     await incrementarTokenVersion(alvo.usuarioId);
   }
+  // Cargo final barbeiro (novo barbeiro ou promoção à vaga de barbeiro)
+  // garante a agenda padrão, sem sobrescrever o que já existir.
+  if (cargoFinal === 'barbeiro' && alvo.ativo) {
+    await inserirHorariosPadrao(atualizado.id);
+  }
   return atualizado;
 }
 
@@ -308,5 +320,9 @@ export async function alternarStatusFuncionario(
   }
   // Item 1: desativar/rebaixar invalida imediatamente as sessões do alvo.
   await incrementarTokenVersion(alvo.usuarioId);
+  // Ao REATIVAR um barbeiro, a agenda padrão é garantida (idempotente).
+  if (ativo && alvo.cargo === 'barbeiro') {
+    await inserirHorariosPadrao(alvo.id);
+  }
   return alterado;
 }

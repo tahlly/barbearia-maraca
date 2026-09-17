@@ -16,10 +16,12 @@
  * DECISÃO (paginação): o Backend passou a responder `GET /api/despesas` com um
  * envelope paginado. A tela ainda não tem controles de paginação visual e hoje
  * lista todas as despesas, então `listarDespesas()` mantém a assinatura
- * `Promise<Despesa[]>` (sem quebrar quem chama) e internamente pede `limit=100`
- * (teto máximo do Backend) para preservar o comportamento atual de listar tudo
- * enquanto não houver paginação visual. Quando a paginação visual for construída,
- * migramos para o envelope (items/total/page/limit/totalPages) — fora de escopo.
+ * `Promise<Despesa[]>` (sem quebrar quem chama) e internamente percorre todas
+ * as páginas do envelope (teto de 100 por página no Backend) para preservar o
+ * comportamento atual de listar tudo — requisito também do modo "todos" do
+ * dashboard, que precisa da soma real completa. Quando a paginação visual for
+ * construída, migramos para o envelope (items/total/page/limit/totalPages) —
+ * fora de escopo.
  */
 
 import { apiFetch, httpJson } from "./api.js";
@@ -126,14 +128,26 @@ interface DespesaPaginada {
  * Lista as despesas (o Backend ordena por data, mais recentes primeiro).
  *
  * DECISÃO: mantém a assinatura `Promise<Despesa[]>` (quem chama não muda) e
- * internamente extrai `items` do envelope paginado, pedindo `limit=100` (teto
- * máximo) para continuar listando tudo enquanto não existir paginação visual.
- * Ver comentário do módulo. Parâmetros `page`/`limit` ficam para a futura tela
- * paginada — fora de escopo.
+ * percorre todas as páginas do envelope paginado (teto de 100 por página no
+ * Backend) para preservar o comportamento de listar TUDAS as despesas —
+ * inclusive o modo "todos" do dashboard precisa da soma real completa, não
+ * apenas da primeira página. Parâmetros `page`/`limit` ficam para a futura
+ * tela paginada — fora de escopo.
  */
 export async function listarDespesas(): Promise<Despesa[]> {
-  const envelope = await httpJson<DespesaPaginada>("/despesas?limit=100");
-  return envelope.items.map(toDespesa);
+  const LIMITE_TETO = 100;
+  const todas: Despesa[] = [];
+  let page = 1;
+  let totalPages = 1;
+  do {
+    const envelope = await httpJson<DespesaPaginada>(
+      `/despesas?limit=${LIMITE_TETO}&page=${page}`,
+    );
+    todas.push(...envelope.items.map(toDespesa));
+    totalPages = envelope.totalPages;
+    page += 1;
+  } while (page <= totalPages);
+  return todas;
 }
 
 /** Cria uma despesa manual no Backend e devolve a despesa persistida. */

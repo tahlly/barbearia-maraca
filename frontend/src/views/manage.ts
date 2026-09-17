@@ -658,12 +658,14 @@ export function renderManage(container: HTMLElement): () => void {
     for (const a of filtered) counts[a.status] += 1;
 
     // Bloco financeiro restrito ao Administrador (PRD: recepcionista não tem acesso financeiro).
+    // Regra: apenas agendamentos CONCLUÍDOS compõem faturamento — pendente/confirmado
+    // ainda não geraram receita e cancelado está fora. Mesma base do resumirFaturamento.
     const financial = isAdmin
       ? (() => {
           let revenue = 0;
           const sold: Record<string, number> = {};
           for (const a of filtered) {
-            if (a.status === "cancelado") continue;
+            if (a.status !== "concluido") continue;
             revenue += serviceTotal(a.servicoId);
             sold[a.servicoId] = (sold[a.servicoId] ?? 0) + 1;
           }
@@ -695,7 +697,7 @@ export function renderManage(container: HTMLElement): () => void {
     let destaqueFaturamento = 0;
     if (financial && destaque) {
       for (const a of filtered) {
-        if (a.status === "cancelado") continue;
+        if (a.status !== "concluido") continue;
         if (a.funcionarioId === destaque.id) destaqueFaturamento += serviceTotal(a.servicoId);
       }
     }
@@ -1002,7 +1004,7 @@ export function renderManage(container: HTMLElement): () => void {
     const openAgendaBtn = $<HTMLButtonElement>("[data-open-agenda]", content);
     if (openAgendaBtn) {
       const h = (): void => {
-        void openScheduleModal();
+        openSchedulePicker();
       };
       openAgendaBtn.addEventListener("click", h);
       cleanups.push(() => openAgendaBtn.removeEventListener("click", h));
@@ -1233,14 +1235,10 @@ if (status === "cancelado") {
   }
 
   // ------------------------------------------------------- Agenda config modal
-  async function openScheduleModal(): Promise<void> {
-    // Em modo API, horários são por funcionário; resolve o perfil do usuário logado.
-    const usuario = await findUsuarioByEmail(session.userEmail);
-    const professionalId = usuario?.professionalId ?? null;
-    if (!professionalId) {
-      showToast("Não foi possível identificar seu perfil de funcionário.", "error");
-      return;
-    }
+  async function openScheduleModal(professionalId: string): Promise<void> {
+    // A agenda é por funcionário: o alvo vem do card do profissional (aba
+    // Profissionais), e não do usuário logado.
+    const pro = prosCache.find((p) => p.id === professionalId);
     const config = await loadSchedule(professionalId);
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
@@ -1248,7 +1246,7 @@ if (status === "cancelado") {
     overlay.innerHTML = `
       <div class="modal modal--lg" role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title">
         <div class="modal__header">
-          <h2 class="modal__title" id="schedule-modal-title">Configuração de funcionamento da agenda</h2>
+          <h2 class="modal__title" id="schedule-modal-title">Configuração de funcionamento${pro ? ` — ${escapeHtml(pro.name)}` : ""}</h2>
           <button type="button" class="modal__close" data-close aria-label="Fechar">${icon("x", 18)}</button>
         </div>
         <div class="modal__body">
@@ -1431,6 +1429,60 @@ if (status === "cancelado") {
     openModal(overlay);
   }
 
+  // Seletor do profissional-alvo da "Configurar agenda" (aba Agendamentos):
+  // a agenda é por funcionário, então pedimos qual barbeiro configurar antes
+  // de abrir o modal de horários.
+  function openSchedulePicker(): void {
+    const barbeiros = prosCache.filter(
+      (p) => (p.cargo ?? inferCargo(p.role)) === "barbeiro",
+    );
+    if (barbeiros.length === 0) {
+      showToast("Nenhum barbeiro cadastrado para configurar a agenda.", "error");
+      return;
+    }
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.innerHTML = `
+      <div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="schedule-picker-title">
+        <div class="modal__header">
+          <h2 class="modal__title" id="schedule-picker-title">Configurar agenda de qual profissional?</h2>
+          <button type="button" class="modal__close" data-close aria-label="Fechar">${icon("x", 18)}</button>
+        </div>
+        <div class="modal__body">
+          <ul class="schedule-list">
+            ${barbeiros
+              .map(
+                (p) =>
+                  `<li><span>${escapeHtml(p.name)}</span><button type="button" class="btn btn--sm btn--primary" data-pick-pro="${escapeHtml(p.id)}">Configurar</button></li>`,
+              )
+              .join("")}
+          </ul>
+          <div class="modal__footer">
+            <button type="button" class="btn btn--ghost" data-close>Cancelar</button>
+          </div>
+        </div>
+      </div>
+    `;
+    const finish = (): void => {
+      closeModal(overlay);
+      window.setTimeout(() => overlay.remove(), 300);
+    };
+    $$("[data-pick-pro]", overlay).forEach((btn) => {
+      const id = btn.getAttribute("data-pick-pro")!;
+      btn.addEventListener("click", () => {
+        finish();
+        void openScheduleModal(id);
+      });
+    });
+    overlay.querySelectorAll("[data-close]").forEach((el) => el.addEventListener("click", finish));
+    overlay.addEventListener("mousedown", (event) => {
+      if (event.target === overlay) finish();
+    });
+    document.body.appendChild(overlay);
+    openModal(overlay);
+  }
+
   // --------------------------------------------------------- Detail modal
   function openDetailModal(app: Appointment): void {
     const name = app.servicoNome ?? "-";
@@ -1476,15 +1528,11 @@ if (status === "cancelado") {
   // --------------------------------------------------------------- Serviços
   function renderServicos(): void {
     refreshCaches();
-    const paginacao = criarPaginacaoEstado();
     const actionsHeader = canManageServices ? `<th>Ações</th>` : "";
     const actionsCell = (id: string): string =>
       canManageServices
         ? `<td><span class="cell-actions"><button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-service="${escapeHtml(id)}">Editar</button><button type="button" class="btn btn--sm btn--danger-outline" data-delete-service="${escapeHtml(id)}">Excluir</button></span></td>`
         : "";
-    // Partição client-side da lista completa (mesma abordagem dos agendamentos).
-    const pagina = paginar(servicesCache, paginacao);
-
     content.innerHTML = `
       <div class="panel__section manage-head">
         <div class="manage-head__titles">
@@ -1507,7 +1555,7 @@ if (status === "cancelado") {
             </tr>
           </thead>
           <tbody>
-            ${pagina
+            ${servicesCache
               .map(
                 (s) => `
                   <tr>
@@ -1520,7 +1568,7 @@ if (status === "cancelado") {
               .join("")}
           </tbody>
         </table>
-        ${servicesCache.length === 0 ? `<p class="panel__empty">Nenhum serviço cadastrado.</p>` : paginacaoHtml(servicesCache.length, paginacao, "serviço", "serviços")}
+        ${servicesCache.length === 0 ? `<p class="panel__empty">Nenhum serviço cadastrado.</p>` : ""}
       </div>
     `;
 
@@ -1552,11 +1600,6 @@ if (status === "cancelado") {
       cleanups.push(() => btn.removeEventListener("click", h));
     });
 
-    // Controles de paginação (delegação única por renderização, mesmo padrão
-    // dos agendamentos): trocar o select de itens por página volta para a
-    // página 1; cada navegação re-renderiza a lista.
-    const cleanupPag = bindPaginacao(content, paginacao, () => servicesCache.length, () => renderServicos());
-    cleanups.push(cleanupPag);
   }
 
   async function handleDeleteService(service: Service): Promise<void> {
@@ -1729,8 +1772,13 @@ if (status === "cancelado") {
         ? `<span class="avatar avatar--photo" style="background-image:url('${escapeHtml(p.photoUrl)}')"></span>`
         : `<span class="avatar">${initials(p.name)}</span>`;
 
+      const scheduleBtn = cargo === "barbeiro"
+        ? `<button type="button" class="btn btn--sm btn--ghost" data-schedule-pro="${escapeHtml(p.id)}">${icon("clock", 16)} Horários</button>`
+        : "";
+
       const actionsHtml = canOperate
         ? `<div class="pro-card__actions">
+            ${scheduleBtn}
             ${
               canManageProfessional(p, session.role, selfProfessionalId)
                 ? `<button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-edit-pro="${escapeHtml(p.id)}">Editar</button>
@@ -1807,6 +1855,15 @@ if (status === "cancelado") {
       const id = btn.getAttribute("data-del-pro")!;
       const h = (): void => {
         void handleDeletePro(id);
+      };
+      btn.addEventListener("click", h);
+      cleanups.push(() => btn.removeEventListener("click", h));
+    });
+
+    $$("[data-schedule-pro]", content).forEach((btn) => {
+      const id = btn.getAttribute("data-schedule-pro")!;
+      const h = (): void => {
+        void openScheduleModal(id);
       };
       btn.addEventListener("click", h);
       cleanups.push(() => btn.removeEventListener("click", h));
