@@ -197,7 +197,7 @@ export async function validateClienteLogin(email: string, senha: string): Promis
   try {
     const res = await apiFetch("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password: senha }),
+      body: JSON.stringify({ email, password: senha, tipoAcesso: "cliente" }),
     });
 
     if (!res.ok) return null;

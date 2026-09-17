@@ -5,7 +5,10 @@ import {
   contarAgendamentosPorHora,
 } from '../repositories/dashboard-repository';
 import { resumirFaturamento } from '../repositories/agendamento-repository';
-import { buscarConfiguracaoComissao } from '../repositories/comissao-repository';
+import {
+  buscarConfiguracaoComissao,
+  listarComissoesDoFuncionario,
+} from '../repositories/comissao-repository';
 import { somarComissaoFuncionarioPeriodo } from '../repositories/despesa-repository';
 import { buscarFuncionarioPorUsuarioId } from '../repositories/horario-repository';
 import { ForbiddenError } from '../errors/ForbiddenError';
@@ -21,6 +24,7 @@ vi.mock('../repositories/agendamento-repository', () => ({
 
 vi.mock('../repositories/comissao-repository', () => ({
   buscarConfiguracaoComissao: vi.fn(),
+  listarComissoesDoFuncionario: vi.fn(),
 }));
 
 vi.mock('../repositories/despesa-repository', () => ({
@@ -89,6 +93,7 @@ beforeEach(() => {
   vi.mocked(contarAgendamentosPorHora).mockResolvedValue([]);
   vi.mocked(buscarConfiguracaoComissao).mockResolvedValue(false);
   vi.mocked(somarComissaoFuncionarioPeriodo).mockResolvedValue('0');
+  vi.mocked(listarComissoesDoFuncionario).mockResolvedValue([]);
 });
 
 describe('obterPainelBarbeiro', () => {
@@ -148,6 +153,10 @@ describe('obterPainelBarbeiro', () => {
     vi.mocked(somarComissaoFuncionarioPeriodo)
       .mockResolvedValueOnce('142.50')
       .mockResolvedValueOnce('130.00');
+    vi.mocked(listarComissoesDoFuncionario).mockResolvedValue([
+      { servico_id: 's1', servico_nome: 'Corte', percentual: '10' },
+      { servico_id: 's2', servico_nome: 'Barba', percentual: '15' },
+    ]);
 
     const painel = await obterPainelBarbeiro('user-1', 'profissional');
 
@@ -167,6 +176,11 @@ describe('obterPainelBarbeiro', () => {
     expect(painel.horariosMaisConcorridos).toEqual([
       { hora: '09:30', quantidade: 5 },
       { hora: '14:00', quantidade: 2 },
+    ]);
+    // Percentuais por serviço do próprio profissional (espelho do catálogo).
+    expect(painel.comissoesServico).toEqual([
+      { servicoId: 's1', servicoNome: 'Corte', percentual: '10' },
+      { servicoId: 's2', servicoNome: 'Barba', percentual: '15' },
     ]);
     // Comparativo usa o mês civil anterior.
     expect(somarComissaoFuncionarioPeriodo).toHaveBeenNthCalledWith(1, {

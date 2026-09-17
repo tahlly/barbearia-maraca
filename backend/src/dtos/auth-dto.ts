@@ -18,8 +18,11 @@ export interface GoogleLoginRequestDTO {
   idToken: string;
 }
 
+export type TipoAcesso = 'interno' | 'cliente';
+
 export interface LoginLocalRequestDTO {
   email: string;
   senha?: string;
   password?: string;
+  tipoAcesso: TipoAcesso;
 }

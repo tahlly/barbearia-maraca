@@ -98,15 +98,20 @@ export async function registrarUsuario(req: Request, res: Response): Promise<voi
 }
 
 export async function loginLocal(req: Request, res: Response): Promise<void> {
-  const { email, password } = req.body;
+  const { email, password, tipoAcesso } = req.body;
 
   if (!email || typeof email !== 'string' || !password || typeof password !== 'string') {
     res.status(400).json({ erro: true, mensagem: 'Email e senha obrigatorios' });
     return;
   }
 
+  if (tipoAcesso !== 'interno' && tipoAcesso !== 'cliente') {
+    res.status(400).json({ erro: true, mensagem: 'Tipo de acesso inválido' });
+    return;
+  }
+
   try {
-    const resultado = await login({ email, senha: password });
+    const resultado = await login({ email, senha: password, tipoAcesso });
     const permissoes = await obterPermissoesEfetivasUsuario({ id: resultado.user.id, role: resultado.role });
     res.status(200).json({
       token: resultado.token,

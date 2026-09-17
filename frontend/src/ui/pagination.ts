@@ -97,7 +97,7 @@ export function paginacaoHtml(
 /**
  * Liga os controles de paginação presentes em `container` por delegação.
  *
- * - `data-pag-itens` (select): muda `itensPorPagina` e volta para a página 1.
+* - `data-pag-itens` (select): muda `itensPorPagina` e volta para a página 1.
  *   Ouvido no evento `change` (não `click`): clicar apenas para ABRIR o menu
  *   nativo não dispara re-render no meio da interação — re-render no `click`
  *   fazia a lista abrir e fechar instantaneamente, inutilizável em mobile.
