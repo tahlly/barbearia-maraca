@@ -53,6 +53,7 @@ const BOXICON_MAP: Record<string, string> = {
   "trending-down": "bx-trending-down",
   "pie-chart": "bx-pie-chart-alt",
   "bar-chart": "bx-bar-chart-alt-2",
+  "credit-card": "bx-credit-card",
 };
 
 export function icon(name: string, size = 20): string {

@@ -265,6 +265,24 @@
 }
 
 /* ------------------------------------------------------------------ */
+/*  Checkout Bricks (Card Payment Brick) — pagamento do Cliente        */
+/*  O MP injeta os próprios estilos do formulário; aqui apenas o        */
+/*  contêiner garante largura total e altura mínima para o render.     */
+/* ------------------------------------------------------------------ */
+.card-payment-brick {
+  width: 100%;
+  min-height: 320px;
+  margin: var(--space-3) 0;
+}
+
+.card-pay__resumo {
+  font-size: 0.92rem;
+  color: var(--color-text-secondary);
+  text-align: center;
+  margin-bottom: var(--space-2);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Tabela de agendamentos do Cliente — coluna Ações sem sobreposição  */
 /*  ------------------------------------------------------------------ */
 /* O problema: com larguras originais (Ações 20% ≈ 120px em 600px),
@@ -314,6 +332,39 @@
   letter-spacing: 0.04em;
   text-align: center;
   white-space: nowrap;
+}
+
+/* Botão PAGAR da coluna Ações (`.btn--gold-outline` + `data-pay`): herdava um
+   contorno dourado idêntico ao do REAGENDAR (`.btn--ghost-gold`), mas são ações
+   diferentes. O PAGAR passa a ser DOURADO PREENCHIDO — mesma cor de ação já
+   usada no "Tentar pagar novamente" da tela de retorno (`.btn--primary`), sem
+   token novo e sem sair da identidade. A distinção com o REAGENDAR passa a ser
+   de peso (preenchido x contorno), preservando o verde exclusivamente como cor
+   de ESTADO ("PAGAMENTO REALIZADO" em `.badge--success`), o que evita que a
+   mesma cor signifique "pague agora" e "já pago" na mesma lista.
+   O atributo `data-pay` é exclusivo deste botão (nenhuma outra tela o emite),
+   então o escopo não vaza para os demais usos de `.btn--gold-outline` (foto de
+   perfil, cadastro do cliente etc.). Só cor: medida, forma e os estados
+   desabilitado/carregando continuam vindo de .btn/.btn--sm, e o hover não ganha
+   transform/shadow para não introduzir movimento novo. `.btn[data-pay]` supera
+   a especificidade de `.btn--gold-outline` sem depender da ordem dos arquivos.
+   Tema claro: o dourado da paleta fica escuro (#8a6d1d) e o texto escuro do
+   tema escuro daria contraste fraco (~3,9:1); o branco entrega ~4,9:1. */
+.btn[data-pay] {
+  border-color: var(--color-gold);
+  background-color: var(--color-gold);
+  color: #16130a;
+}
+
+.btn[data-pay]:hover {
+  border-color: var(--color-gold-strong);
+  background-color: var(--color-gold-strong);
+  color: #16130a;
+}
+
+body.light-theme .btn[data-pay],
+body.light-theme .btn[data-pay]:hover {
+  color: #fff;
 }
 
 .btn--danger-text:hover {

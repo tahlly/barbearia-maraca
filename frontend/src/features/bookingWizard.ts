@@ -95,6 +95,13 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
   // via applyOperatorMode().
   let operatorMode = false;
 
+  // Modo REAGENDAÇÃO (toggle visual): o usuário escolhe SOMENTE nova data e
+  // horário. Serviço e profissional vêm do agendamento original e permanecem
+  // fixos (state.serviceId/state.professionalId); o passo "servicos" e o
+  // seletor de profissional ficam ocultos. Não pode vazar entre abas: toda
+  // abertura de novo agendamento chama resetWizard(), que restaura o visual.
+  let rescheduleMode = false;
+
   const overlay = $("#booking-modal")!;
   const form = $<HTMLFormElement>("#booking-form")!;
   const stepsItems = $$("#booking-steps .steps__item");
@@ -124,6 +131,11 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
 
   const clientStepItem = stepsItems.find((el) => el.dataset.stepName === "cliente");
   const clientPanel = panels.find((el) => el.dataset.stepName === "cliente");
+
+  // Passo Serviços (oculto no modo reagendação junto com o seletor de
+  // profissional: reagendar altera somente data/horário da MESMA linha).
+  const servicesStepItem = stepsItems.find((el) => el.dataset.stepName === "servicos");
+  const servicesPanel = panels.find((el) => el.dataset.stepName === "servicos");
 
   // Passo "Quem será atendido?" (somente Cliente autenticado).
   const dependentesStepItem = stepsItems.find((el) => el.dataset.stepName === "dependentes");
@@ -158,10 +170,52 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     if (clientPanel) clientPanel.hidden = !operatorMode;
     if (dependentesStepItem) dependentesStepItem.hidden = !showDependentes;
     if (dependentesPanel) dependentesPanel.hidden = !showDependentes;
+    recomputeSteps();
+  }
+
+  /**
+   * Re-deriva os passos visíveis do wizard a partir do estado `hidden` atual
+   * dos itens e painéis. Chamado por `applyOperatorMode()` e pelo toggle do
+   * modo reagendação para manter `steps`/`stepPanels`/`stepNames`/`TOTAL_STEPS`
+   * coerentes com a visibilidade real a cada abertura.
+   */
+  function recomputeSteps(): void {
     steps = stepsItems.filter((el) => !el.hidden);
     stepPanels = panels.filter((el) => !el.hidden);
     stepNames = stepPanels.map((el) => el.dataset.stepName as StepName);
     TOTAL_STEPS = stepPanels.length;
+  }
+
+  /**
+   * Toggle do modo reagendação: esconde/mostra o passo "servicos" (item do
+   * stepper e painel), o seletor de profissional (`#booking-professionals`) e
+   * o passo "Quem será atendido?" (dependentes). No modo ativo,
+   * `serviceId`/`professionalId` já vêm preenchidos do agendamento e ficam
+   * fixos para validação e resumo; o usuário escolhe apenas data e horário, e
+   * o atendido continua sendo o cliente do agendamento original (o endpoint
+   * /reagendar aceita somente data/hora/timezone). Não mexe no passo "cliente".
+   */
+  function applyRescheduleMode(active: boolean): void {
+    rescheduleMode = active;
+    if (servicesStepItem) servicesStepItem.hidden = active;
+    if (servicesPanel) servicesPanel.hidden = active;
+    prosBox.hidden = active;
+    if (active) {
+      // Reagendação: dependente não é aplicado (payload só aceita data/hora),
+      // então o passo "Quem será atendido?" fica oculto.
+      if (dependentesStepItem) dependentesStepItem.hidden = true;
+      if (dependentesPanel) dependentesPanel.hidden = true;
+    } else {
+      // Restaura o passo de dependentes conforme o papel/sessão ATUAL — mesma
+      // regra de applyOperatorMode — para que resetWizard() coincida com o que
+      // o fluxo de novo agendamento espera (visível só para Cliente autenticado).
+      const session = getSession();
+      const role = session?.role;
+      const showDependentes = role === "cliente" && !operatorMode;
+      if (dependentesStepItem) dependentesStepItem.hidden = !showDependentes;
+      if (dependentesPanel) dependentesPanel.hidden = !showDependentes;
+    }
+    recomputeSteps();
   }
   applyOperatorMode();
   const positionOf = (name: StepName): number => {
@@ -595,6 +649,12 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
       .join("");
   }
 
+  /**
+   * Decisão aprovada: o wizard NÃO inicia pagamento automaticamente após criar
+   * o agendamento. O pagamento é iniciado pelo próprio usuário na tela "Minha
+   * conta" (nova aba). Aqui, o wizard apenas salva, exibe o toast de sucesso e
+   * finaliza na tela de confirmação.
+   */
   async function submit(): Promise<void> {
     if (!state.professionalId || !state.serviceId || !state.dateIso || !state.time) return;
     if (operatorMode && !state.cliente) return;
@@ -612,9 +672,15 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
     try {
       let appointment: Appointment;
       if (state.rescheduleId) {
-        // Decisão aprovada: reagendar = cancelar + criar.
-        await reschedule(state.rescheduleId);
-        appointment = await createAppointment(draft);
+        // Decisão aprovada: reagendar NÃO é mais "cancelar + criar". O endpoint
+        // /reagendar atualiza SOMENTE data/hora na MESMA linha, preservando
+        // pagamento, status, serviço e profissional. O original NÃO é cancelado.
+        const { appointment: reagendado } = await reschedule(state.rescheduleId, {
+          data: state.dateIso,
+          hora: state.time,
+          timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
+        });
+        appointment = reagendado;
       } else {
         appointment = await createAppointment(draft);
       }
@@ -629,8 +695,8 @@ export function initBookingWizard(options: BookingWizardOptions = {}): BookingWi
           ? "Horário do agendamento atualizado."
           : "Agendamento criado! Aguarde a confirmação da barbearia.",
       );
-onBookingCreatedRef?.();
-    } catch (error) {
+    onBookingCreatedRef?.();
+  } catch (error) {
       const message =
         error instanceof Error && error.message.trim() !== ""
           ? error.message
@@ -642,6 +708,11 @@ onBookingCreatedRef?.();
   }
 
   async function resetWizard(): Promise<void> {
+    // Restaura o visual de novo agendamento: o modo reagendação ocultou o
+    // passo "servicos" e o seletor de profissional; qualquer abertura seguinte
+    // (openNew/openForService/openForReschedule/#booking-restart/fechar modal)
+    // passa por resetWizard(), que os reapresenta antes de recalcular o estado.
+    applyRescheduleMode(false);
     state.serviceId = null;
     state.professionalId = null;
     state.dateIso = await defaultDateIso();
@@ -965,6 +1036,12 @@ onBookingCreatedRef?.();
       };
     }
     state.rescheduleId = appointment.id;
+    // Modo reagendação: trava serviço e profissional no agendamento original.
+    // O usuário escolhe SOMENTE nova data/horário — o passo "servicos" e o
+    // seletor de profissional ficam ocultos. O original NÃO é cancelado: o
+    // endpoint /reagendar altera data/hora na MESMA linha (preservando
+    // pagamento e status). Os passos visíveis são re-derivados aqui.
+    applyRescheduleMode(true);
     if (appointment.servicoId) {
       state.serviceId = appointment.servicoId;
       const input = servicesBox.querySelector<HTMLInputElement>(
@@ -975,7 +1052,12 @@ onBookingCreatedRef?.();
     }
     state.professionalId = appointment.funcionarioId;
     renderServices();
-    renderProfessionals();
+    // No modo reagendação o seletor fica oculto; renderizar a lista aqui não
+    // atende o usuário e ainda poderia zerar professionalId quando o barbeiro
+    // não estiver mais na lista de disponíveis — o valor precisa ficar fixo.
+    if (!rescheduleMode) {
+      renderProfessionals();
+    }
 
     let rescheduleIso = appointment.data;
     let rescheduleOpen = false;

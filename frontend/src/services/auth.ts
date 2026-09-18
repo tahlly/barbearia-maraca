@@ -193,14 +193,24 @@ export function requireSession(): Session {
   return session;
 }
 
+/**
+ * Define a tela de login correspondente à rota protegida.
+ * Clientes SEMPRE voltam para a área do cliente (`/login-cliente`);
+ * demais perfis usam o login administrativo interno (`/login`).
+ */
+function loginPathFor(allowed: UserRole[]): string {
+  const onlyCliente = allowed.length === 1 && allowed[0] === "cliente";
+  return onlyCliente ? "/login-cliente" : "/login";
+}
+
 export function requireRole(allowed: UserRole[]): Session {
   const session = getSession();
   if (!session) {
-    navigateTo("/login");
+    navigateTo(loginPathFor(allowed));
     throw new Error("Sessão expirada");
   }
   if (session.precisaTrocarSenha) {
-    navigateTo("/login");
+    navigateTo(loginPathFor(allowed));
     throw new Error("Primeiro acesso pendente");
   }
   if (!allowed.includes(session.role)) {

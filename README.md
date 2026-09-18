@@ -511,7 +511,7 @@ O projeto está em **estágio de MVP funcional (homologação)**, com a aplicaç
 
 - **Porta 3000**: o backend usa a porta 3000 por padrão. Se outro serviço (ex.: Whaticket) estiver usando-a, libere a porta antes de subir o projeto.
 - **Seed destrutivo**: `npm run seed` apaga e recria os dados — rode apenas quando quiser dados limpos.
-- **Modo mock**: o `config.ts` do frontend usa `useMockApi: false` (integração real com o backend). A variável `VITE_USE_MOCK_API` está documentada no `.env.example`, mas **não é lida** pelo código — mudá-la não tem efeito (pendência) e a aplicação sempre funciona em modo API.
+- **Modo mock**: não existe campo `useMockApi` nem variável `VITE_USE_MOCK_API` no código do frontend — `frontend/src/config.ts` expõe apenas `apiBaseUrl` (default `/api`) e variáveis `VITE_*` reais. O frontend sempre opera em modo API real; menções antigas a `useMockApi` ou `VITE_USE_MOCK_API` em documentação são resíduo e não devem ser seguidas.
 - **Login Google**: requer `VITE_GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_ID` no `.env` da raiz; sem configuração, o fluxo Google fica indisponível.
 - **Migrations não devem ser reescritas** após aplicadas — para mudanças, crie uma nova migration.
 

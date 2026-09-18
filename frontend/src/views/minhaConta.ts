@@ -5,8 +5,12 @@ import { icon } from "../ui/icons.js";
 import { formatCurrency, formatDateMedium } from "../ui/format.js";
 import { fetchServices, loadProfessionals } from "../services/catalog.js";
 import { listAppointments, cancelAppointment } from "../services/booking.js";
+import { createCardPayment, createPayment, type PagamentoDTO } from "../services/pagamento.js";
+import { pagamentoAcoesHtml } from "../features/pagamentoAcoes.js";
 import { showToast } from "../ui/toast.js";
-import { confirmDialog } from "../ui/modal.js";
+import { closeModal, confirmDialog, openModal } from "../ui/modal.js";
+import { montarCardPaymentBrick } from "../features/cardPaymentBrick.js";
+import { CONFIG } from "../config.js";
 import { initBookingWizard } from "../features/bookingWizard.js";
 import { renderSettingsForm } from "../features/settingsForm.js";
 import { contactSectionHtml } from "../features/contactSection.js";
@@ -276,17 +280,18 @@ export function renderMinhaConta(container: HTMLElement): () => void {
               const name = a.servicoNome ?? "-";
               let actions = `<span class="muted-note">-</span>`;
               if (a.status === "pendente" || a.status === "confirmado") {
-                actions = `<span class="cell-actions">
-                  <button type="button" class="btn btn--sm btn--ghost btn--ghost-gold" data-reschedule="${escapeHtml(a.id)}">REAGENDAR</button>
-                  <button type="button" class="btn btn--sm btn--danger-outline" data-cancel="${escapeHtml(a.id)}">Cancelar</button>
-                </span>`;
+                // Ações da linha em `pagamentoAcoesHtml` (função pura):
+                // badge para pagamento aprovado/cancelado, botão PAGAR
+                // apenas para agendamento pendente sem pagamento concluído,
+                // e REAGENDAR/Cancelar sempre disponíveis.
+                actions = pagamentoAcoesHtml(a);
               }
               return `
                 <tr>
                   <td><strong>${escapeHtml(name)}</strong></td>
                   <td>${escapeHtml(a.funcionarioNome ?? professionalName(a.funcionarioId))}</td>
                   <td>${formatDateMedium(a.data)} · ${a.hora}</td>
-                  <td>${statusBadge(a.status)}</td>
+                  <td><span class="status-badges">${statusBadge(a.status)}</span></td>
                   <td>${actions}</td>
                 </tr>`;
             })
@@ -317,16 +322,216 @@ export function renderMinhaConta(container: HTMLElement): () => void {
       btn.addEventListener("click", h);
       cleanups.push(() => btn.removeEventListener("click", h));
     });
+
+    $$("[data-pay]", content).forEach((btn) => {
+      const id = btn.getAttribute("data-pay")!;
+      const appointment = appointments.find((a) => a.id === id);
+      if (!appointment) return;
+      const h = (): void => {
+        void handlePay(appointment);
+      };
+      btn.addEventListener("click", h);
+      cleanups.push(() => btn.removeEventListener("click", h));
+    });
+  }
+
+  // ------------------------------------------------------- Pagamento (cartão)
+  /**
+   * Abre o modal com o Card Payment Brick (Checkout Bricks) para cobrar um
+   * agendamento pendente. O valor exibido vem do `pagamento.valorCentavos`
+   * (criado pelo backend a partir do preço do serviço no banco).
+   *
+   * O token do cartão é gerado pelo próprio Brick; o frontend envia apenas o
+   * token + dados do pagador ao backend, que processa a cobrança e define o
+   * valor/parcelas. Estados intermediários são finalizados pelo webhook.
+   */
+  async function abrirModalPagamentoCartao(
+    pagamento: PagamentoDTO,
+    appointment: Appointment,
+  ): Promise<void> {
+    if (pagamento.valorCentavos <= 0) {
+      showToast("Pagamento sem valor definido. Contate o suporte.", "error");
+      renderAgendamentos();
+      return;
+    }
+
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.innerHTML = `
+      <div class="modal modal--sm" role="dialog" aria-modal="true" aria-labelledby="card-pay-title">
+        <div class="modal__header">
+          <h2 class="modal__title" id="card-pay-title">Pagamento com cartão</h2>
+          <button type="button" class="modal__close" data-close aria-label="Fechar">${icon("x", 18)}</button>
+        </div>
+        <div class="modal__body">
+          <p class="card-pay__resumo">
+            <strong>${escapeHtml(appointment.servicoNome ?? "Serviço")}</strong><br>
+            ${formatCurrency(pagamento.valorCentavos / 100)}
+          </p>
+          <div class="card-payment-brick" aria-label="Formulário de pagamento com cartão"></div>
+          <button type="button" class="btn btn--ghost btn--block" data-close-alt>Pagamento indisponível? Voltar</button>
+        </div>
+      </div>`;
+
+    const container = overlay.querySelector<HTMLElement>(".card-payment-brick")!;
+    let desmontar: (() => void) | null = null;
+
+    function limpar(): void {
+      if (!overlay.isConnected) return;
+      window.setTimeout(() => {
+        void desmontar?.();
+        overlay.remove();
+      }, 300);
+    }
+
+    function fechar(): void {
+      closeModal(overlay);
+      limpar();
+    }
+
+    overlay.querySelector("[data-close]")?.addEventListener("click", fechar);
+    overlay.querySelector("[data-close-alt]")?.addEventListener("click", fechar);
+    overlay.addEventListener("mousedown", (event) => {
+      if (event.target === overlay) fechar();
+    });
+    // Escape (tratado globalmente no modal.ts) também dispara `modal:close`.
+    overlay.addEventListener("modal:close", limpar);
+
+    document.body.appendChild(overlay);
+    openModal(overlay);
+
+    // Monta o Brick com o modal visível (evita falha de layout do MP).
+    window.setTimeout(() => {
+      void montarCardPaymentBrick({
+        container,
+        amount: pagamento.valorCentavos / 100,
+        callbacks: {
+          onError: (error) =>
+            showToast(
+              error instanceof Error
+                ? error.message
+                : "Erro ao carregar o pagamento. Tente novamente.",
+              "error",
+            ),
+          onSubmit: async (formData) => {
+            try {
+              const { status } = await createCardPayment(appointment.id, {
+                token: formData.token,
+                paymentMethodId: formData.payment_method_id,
+                payer: {
+                  email: formData.payer?.email ?? "",
+                  firstName: formData.payer?.first_name ?? undefined,
+                  lastName: formData.payer?.last_name ?? undefined,
+                  identification: formData.payer?.identification
+                    ? {
+                        type: formData.payer.identification.type,
+                        number: formData.payer.identification.number,
+                      }
+                    : undefined,
+                },
+              });
+
+              if (status === "aprovado") {
+                showToast("Pagamento aprovado!", "success");
+                fechar();
+                renderAgendamentos();
+                return true;
+              }
+              if (status === "pendente") {
+                showToast(
+                  "Pagamento em processamento. Acompanhe o status em seus agendamentos.",
+                  "info",
+                );
+                fechar();
+                renderAgendamentos();
+                return true;
+              }
+              showToast(`Pagamento ${status}.`, "error");
+              return false;
+            } catch (error) {
+              showToast(
+                error instanceof Error
+                  ? error.message
+                  : "Não foi possível processar o pagamento. Tente novamente.",
+                "error",
+              );
+              return false;
+            }
+          },
+        },
+      })
+        .then((desmontarFn) => {
+          desmontar = desmontarFn;
+        })
+        .catch((error: unknown) => {
+          showToast(
+            error instanceof Error
+              ? error.message
+              : "Não foi possível carregar o pagamento. Tente novamente.",
+            "error",
+          );
+          fechar();
+        });
+    }, 80);
+  }
+
+  async function handlePay(appointment: Appointment): Promise<void> {
+    try {
+      const { checkoutUrl, pagamento } = await createPayment(appointment.id);
+
+      // Checkout Bricks é o caminho principal quando a Public Key está
+      // configurada; sem ela, mantém o Checkout Pro (fallback histórico).
+      if (CONFIG.mercadopagoPublicKey) {
+        await abrirModalPagamentoCartao(pagamento, appointment);
+        return;
+      }
+
+      if (checkoutUrl) {
+        // MESMA ABA (não `window.open`): a sessão da SPA vive em sessionStorage,
+        // que NÃO é compartilhado com uma nova aba. Abrir o Checkout Pro em nova
+        // aba faz o retorno do MP cair sem token — o polling/confirmação
+        // falhavam com 401 e o botão "Voltar para minha conta" caía no login.
+        // Redirecionar a aba atual preserva a sessão durante todo o fluxo.
+        showToast("Redirecionando para o pagamento...", "info");
+        window.location.href = checkoutUrl;
+        return;
+      }
+      // Sem URL de checkout: backend registrou pagamento sem link (já
+      // aprovado ou recusado). Re-renderiza para refletir o badge real.
+      showToast(`Pagamento ${pagamento.status}.`, "info");
+      renderAgendamentos();
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Não foi possível iniciar o pagamento. Tente novamente.",
+        "error",
+      );
+    }
   }
 
   async function handleCancel(appointment: Appointment): Promise<void> {
-    const confirmed = await confirmDialog({
-      title: "Cancelar agendamento",
-      message: `Tem certeza que deseja cancelar o agendamento de ${appointment.servicoNome ?? "serviço"}? Essa ação não pode ser desfeita.`,
-      confirmLabel: "Sim, cancelar",
-      cancelLabel: "Manter",
-      danger: true,
-    });
+    // Agendamento já pago: o cancelamento não reembolsa automaticamente.
+    // Pagamento aprovado NÃO confirma o agendamento (estados separados),
+    // mas o cliente precisa saber que o valor pago não será devolvido.
+    const isPaid = appointment.pagamentoStatus === "aprovado";
+    const confirmed = await confirmDialog(
+      isPaid
+        ? {
+            title: "Cancelar agendamento",
+            message:
+              "Este agendamento já foi pago. O valor pago não será reembolsado automaticamente. Deseja continuar mesmo assim?",
+            confirmLabel: "Cancelar mesmo assim",
+            cancelLabel: "Voltar",
+            danger: true,
+          }
+        : {
+            title: "Cancelar agendamento",
+            message: `Tem certeza que deseja cancelar o agendamento de ${appointment.servicoNome ?? "serviço"}? Essa ação não pode ser desfeita.`,
+            confirmLabel: "Sim, cancelar",
+            cancelLabel: "Manter",
+            danger: true,
+          },
+    );
     if (!confirmed) return;
     try {
       if (appointment.status === "pendente" || appointment.status === "confirmado") {

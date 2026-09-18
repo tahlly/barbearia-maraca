@@ -10,6 +10,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+  <!-- SDK do Mercado Pago (Checkout Bricks — Card Payment Brick).
+       Carregado com `defer` para não bloquear a renderização; o feature
+       cardPaymentBrick injeta/aguarda o script de forma idempotente
+       (importa apenas a Public Key, que não é segredo). -->
+  <script src="https://sdk.mercadopago.com/js/v2" defer></script>
   <link rel="stylesheet" href="css/variables.css">
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/components.css">

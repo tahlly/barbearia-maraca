@@ -1,13 +1,16 @@
+import type { Knex } from 'knex';
 import {
   criar,
   buscarPorId,
   listar,
   atualizarStatus,
+  atualizarDataHora,
   buscarClientePorUsuarioId,
   buscarFuncionarioPorUsuarioId,
   funcionarioExisteAtivo,
   servicoExisteAtivo,
   resumirFaturamento,
+  buscarDadosServicoDoAgendamento,
   type AgendamentoRow,
 } from '../repositories/agendamento-repository';
 import db from '../database/connection';
@@ -19,10 +22,18 @@ import { NotFoundError } from '../errors/NotFoundError';
 import { ValidationError } from '../errors/ValidationError';
 import { buscarClientePorId } from '../repositories/cliente-repository';
 import { somarDespesasPeriodo } from '../repositories/despesa-repository';
+import {
+  buscarStatusPagamentoPorAgendamentos,
+  buscarPorAgendamentoMaisRecente as buscarPagamentoMaisRecente,
+  buscarPendentePorAgendamento,
+  atualizarStatus as atualizarStatusPagamento,
+  criarPagamentoPresencial,
+} from '../repositories/pagamento-repository';
 import { exigirPermissao, temPermissao } from './permissao-service';
 import { formatarData, formatarHora } from '../utils/formatadores';
 import { paraCentavos, deCentavos, normalizarDecimal } from '../utils/dinheiro';
 import { validarIntervaloData } from '../utils/validadores';
+import type { PagamentoStatus } from '../dtos/pagamento-dto';
 
 type Role = 'admin' | 'recepcionista' | 'profissional' | 'cliente';
 
@@ -37,7 +48,7 @@ function isRole(value: string): value is Role {
   return value === 'admin' || value === 'recepcionista' || value === 'profissional' || value === 'cliente';
 }
 
-function toDTO(row: AgendamentoRow): AgendamentoDTO {
+function toDTO(row: AgendamentoRow, pagamentoStatus?: PagamentoStatus | null): AgendamentoDTO {
   return {
     id: row.id,
     clienteId: row.cliente_id,
@@ -51,6 +62,10 @@ function toDTO(row: AgendamentoRow): AgendamentoDTO {
     status: row.status,
     observacao: row.observacao,
     criadoEm: row.created_at ?? undefined,
+    // Quando `pagamentoStatus` é undefined (fluxos não relacionados a
+    // pagamento), a chave é omitida pelo JSON.stringify — exatamente o
+    // comportamento aditivo do contrato.
+    pagamentoStatus,
   };
 }
 
@@ -199,7 +214,10 @@ export async function listarAgendamentos(
   }
 
   const rows = await listar(opcoes);
-  return rows.map(toDTO);
+  // Status do pagamento mais recente por agendamento em UM batch (distinctOn),
+  // evitando N+1. Chave sempre presente (null quando não há pagamento).
+  const statusPorAgendamento = await buscarStatusPagamentoPorAgendamentos(rows.map((r) => r.id));
+  return rows.map((row) => toDTO(row, statusPorAgendamento.get(row.id) ?? null));
 }
 
 async function verificarOwnership(
@@ -235,7 +253,8 @@ export async function obterAgendamento(
   }
 
   await verificarOwnership(usuarioId, role, row);
-  return toDTO(row);
+  const pagamento = await buscarPagamentoMaisRecente(id);
+  return toDTO(row, pagamento?.status ?? null);
 }
 
 export async function cancelarAgendamento(
@@ -272,13 +291,162 @@ export async function cancelarAgendamento(
   return toDTO({ ...row, status: 'cancelado' });
 }
 
+/**
+ * Reagendamento: altera SOMENTE `data` e `hora` da MESMA linha de
+ * `agendamento`. Pagamento, status, serviço, funcionário, observação e
+ * created_at permanecem intactos — o pagamento vinculado ao agendamento
+ * nunca é perdido (diferente do fluxo antigo "cancelar + criar", que gerava
+ * linha nova e fazia o PAGAR reaparecer com risco de cobrança dupla).
+ *
+ * Autorização idêntica a `cancelarAgendamento`:
+ * - cliente: somente os próprios agendamentos;
+ * - recepcionista/admin: exigem a permissão efetiva `agendar_para_cliente`;
+ * - profissional: exige `agendar_para_cliente` E somente a própria agenda.
+ */
+export async function reagendarAgendamento(
+  usuarioId: string,
+  role: string,
+  id: string,
+  dados: { data: string; hora: string; timezone_offset_minutes?: number | null },
+): Promise<AgendamentoDTO> {
+  if (!isRole(role)) {
+    throw new ForbiddenError('Acesso negado');
+  }
+
+  const row = await buscarPorId(id);
+  if (!row) {
+    throw new NotFoundError('Agendamento não encontrado');
+  }
+
+  if (role === 'cliente') {
+    const cliente = await buscarClientePorUsuarioId(usuarioId);
+    if (!cliente || cliente.id !== row.cliente_id) {
+      throw new ForbiddenError('Acesso negado');
+    }
+  } else {
+    await exigirPermissao({ id: usuarioId, role }, 'agendar_para_cliente');
+    if (role === 'profissional') {
+      const funcionario = await buscarFuncionarioPorUsuarioId(usuarioId);
+      if (!funcionario || funcionario.id !== row.funcionario_id) {
+        throw new ForbiddenError('Acesso negado');
+      }
+    }
+  }
+
+  // Reagendamento só faz sentido para agendamentos ainda ativos
+  // (`pendente` ou `confirmado`). Cada caso inválido tem mensagem própria.
+  if (row.status === 'cancelado') {
+    throw new ValidationError('Agendamento cancelado não pode ser reagendado');
+  }
+  if (row.status === 'concluido') {
+    throw new ValidationError('Agendamento concluído não pode ser reagendado');
+  }
+
+  validarDataHora(dados.data, dados.hora, dados.timezone_offset_minutes);
+
+  try {
+    await atualizarDataHora(id, dados.data, dados.hora);
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new ValidationError('Horário indisponível');
+    }
+    throw error;
+  }
+
+  // Re-consulta a linha atualizada para montar o DTO com os dados corretos e
+  // refletir o pagamento mais recente (preservado no reagendamento).
+  const rowAtualizada = await buscarPorId(id);
+  if (!rowAtualizada) {
+    throw new NotFoundError('Agendamento não encontrado');
+  }
+  const pagamento = await buscarPagamentoMaisRecente(id);
+  return toDTO(rowAtualizada, pagamento?.status ?? null);
+}
+
+/**
+ * Opções da conclusão de agendamento (PATCH /:id/concluir).
+ *
+ * `registrarPagamentoPresencial` (flag `registrar_pagamento_presencial: true`
+ * no corpo): SOMENTE recepcionista. Registra, na MESMA transação da conclusão,
+ * a linha de pagamento presencial aprovada — valor NUNCA vem do request, é o
+ * snapshot do preço do serviço do agendamento lido do banco (a recepção não
+ * vê valores, PRD sem acesso financeiro).
+ */
+export interface ConcluirOpcoes {
+  registrarPagamentoPresencial?: boolean;
+}
+
+async function registrarPagamentoPresencialNaConclusao(
+  input: {
+    agendamentoId: string;
+    usuarioId: string;
+    trx: Knex.Transaction;
+  },
+): Promise<void> {
+  const { agendamentoId, usuarioId, trx } = input;
+
+  // Guarda de idempotência/duplicidade: já existe pagamento aprovado para o
+  // agendamento → erro de validação e rollback total (o agendamento NÃO é
+  // concluído). O índice único parcial `uq_pagamento_agendamento_aprovado` é a
+  // proteção estrutural para a corrida; esta checagem dá a mensagem amigável.
+  const maisRecente = await buscarPagamentoMaisRecente(agendamentoId, trx);
+  if (maisRecente?.status === 'aprovado') {
+    throw new ValidationError('Pagamento já registrado para este agendamento');
+  }
+
+  // Cliente já pagou no balcão: cancela o pendente do Mercado Pago na MESMA
+  // transação, para ele não pagar duas vezes (nem concluir com pendente vivo).
+  const pendente = await buscarPendentePorAgendamento(agendamentoId, trx);
+  if (pendente) {
+    await atualizarStatusPagamento(pendente.id, 'cancelado', { trx });
+  }
+
+  // Preço vem do banco (decimal(10,2)); converte para centavos (int da coluna).
+  // Mesma regra do pagamento-service: nunca confiar em valor do request.
+  const servico = await buscarDadosServicoDoAgendamento(agendamentoId, trx);
+  if (!servico) {
+    throw new NotFoundError('Serviço do agendamento não encontrado');
+  }
+  const valorCentavos = Number(paraCentavos(servico.preco));
+
+  try {
+    await criarPagamentoPresencial(
+      {
+        agendamentoId,
+        valorCentavos,
+        registradoPorUsuarioId: usuarioId,
+      },
+      trx,
+    );
+  } catch (error) {
+    // Corrida: outra requisição registrou a aprovação entre a checagem e o
+    // INSERT (23505 do uq_pagamento_agendamento_aprovado). Mensagem amigável,
+    // rollback total — nunca erro 500.
+    if (isUniqueViolation(error)) {
+      throw new ValidationError('Pagamento já registrado para este agendamento');
+    }
+    throw error;
+  }
+}
+
 async function alterarStatusOperacional(
   usuarioId: string,
   role: string,
   id: string,
   destino: 'confirmado' | 'concluido',
+  opcoes: ConcluirOpcoes = {},
 ): Promise<AgendamentoDTO> {
   if (!isRole(role)) {
+    throw new ForbiddenError('Acesso negado');
+  }
+
+  const registrarPagamentoPresencial =
+    destino === 'concluido' && opcoes.registrarPagamentoPresencial === true;
+
+  // Flag de pagamento presencial é EXCLUSIVA da recepcionista (contrato
+  // congelado): qualquer outro papel que a envie → 403 ANTES de qualquer
+  // consulta/persistência (negação por padrão; sem vazar existência do recurso).
+  if (registrarPagamentoPresencial && role !== 'recepcionista') {
     throw new ForbiddenError('Acesso negado');
   }
 
@@ -302,7 +470,20 @@ async function alterarStatusOperacional(
   // 'concluido') remove a despesa vinculada. Se a transação falhar, NADA é
   // persistido — nunca fica agendamento concluído sem despesa correspondente,
   // nem despesa para agendamento não concluído.
+  //
+  // PAGAMENTO PRESENCIAL (decisão da usuária): quando a recepcionista marca
+  // "Sim, o cliente pagou", o registro da linha `presencial`/`aprovado`
+  // também acontece DENTRO desta transação — se qualquer passo falhar, nem o
+  // pagamento nem a conclusão são persistidos.
   await db.transaction(async (trx) => {
+    if (registrarPagamentoPresencial) {
+      await registrarPagamentoPresencialNaConclusao({
+        agendamentoId: id,
+        usuarioId,
+        trx,
+      });
+    }
+
     await atualizarStatus(id, destino, trx);
 
     if (destino === 'concluido') {
@@ -314,7 +495,13 @@ async function alterarStatusOperacional(
     }
   });
 
-  return toDTO({ ...row, status: destino });
+  // Com a flag, o estado do pagamento na resposta é deterministicamente
+  // 'aprovado' (acabamos de inserir a linha). Sem a flag, o campo é omitido
+  // do JSON — comportamento atual preservado.
+  const pagamentoStatus: PagamentoStatus | undefined = registrarPagamentoPresencial
+    ? 'aprovado'
+    : undefined;
+  return toDTO({ ...row, status: destino }, pagamentoStatus);
 }
 
 export async function confirmarAgendamento(
@@ -329,8 +516,9 @@ export async function concluirAgendamento(
   usuarioId: string,
   role: string,
   id: string,
+  opcoes: ConcluirOpcoes = {},
 ): Promise<AgendamentoDTO> {
-  return alterarStatusOperacional(usuarioId, role, id, 'concluido');
+  return alterarStatusOperacional(usuarioId, role, id, 'concluido', opcoes);
 }
 
 export async function reverterConclusaoAgendamento(

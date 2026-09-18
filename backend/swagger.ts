@@ -19,6 +19,8 @@ const options: swaggerJSDoc.Options = {
     path.join(__dirname, 'src', 'rotas', 'cliente-routes.ts'),
     path.join(__dirname, 'src', 'rotas', 'funcionario-routes.ts'),
     path.join(__dirname, 'src', 'rotas', 'agendamento-routes.ts'),
+    path.join(__dirname, 'src', 'rotas', 'pagamento-routes.ts'),
+    path.join(__dirname, 'src', 'rotas', 'webhook-routes.ts'),
     path.join(__dirname, 'src', 'rotas', 'horario-routes.ts'),
     path.join(__dirname, 'src', 'rotas', 'horario-excecao-routes.ts'),
     path.join(__dirname, 'src', 'rotas', 'dashboard-routes.ts'),

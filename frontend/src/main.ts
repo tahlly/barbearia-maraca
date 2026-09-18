@@ -7,6 +7,7 @@ import { renderPrivacidade } from "./views/privacidade.js";
 import { renderTermos } from "./views/termos.js";
 import { renderLogin } from "./views/login.js";
 import { renderLoginCliente } from "./views/loginCliente.js";
+import { renderPagamentoRetorno } from "./views/pagamentoRetorno.js";
 import { renderMinhaConta } from "./views/minhaConta.js";
 import { renderManage } from "./views/manage.js";
 import { renderFinanceiro } from "./views/financeiro.js";
@@ -23,6 +24,7 @@ function init(): void {
   registerRoute("/termos", renderTermos);
   registerRoute("/login", renderLogin);
   registerRoute("/login-cliente", renderLoginCliente);
+  registerRoute("/pagamento/retorno", renderPagamentoRetorno);
   registerRoute("/minha-conta", renderMinhaConta);
   registerRoute("/minha-conta/servicos", renderMinhaConta);
   registerRoute("/minha-conta/contatos", renderMinhaConta);

@@ -5,6 +5,7 @@ import {
   listarAgendamentos,
   obterAgendamento,
   cancelarAgendamento,
+  reagendarAgendamento,
   confirmarAgendamento,
   concluirAgendamento,
   reverterConclusaoAgendamento,
@@ -31,6 +32,24 @@ const listarSchema = z.object({
   data: z.string().optional(),
   status: z.enum(['pendente', 'confirmado', 'cancelado', 'concluido']).optional(),
 });
+
+// Reagendamento altera somente data/hora; timezone_offset_minutes segue o
+// mesmo contrato de criarSchema (offset do navegador para checagem de passado).
+const reagendarSchema = z.object({
+  data: z.string(),
+  hora: z.string(),
+  timezone_offset_minutes: z.number().int().min(-840).max(840).nullable().optional(),
+});
+
+// Conclusão com pagamento presencial: corpo OPCIONAL `{ registrar_pagamento_presencial: true }`
+// (exclusivo da recepcionista — a service nega 403 para outros papéis). `.strict()`
+// rejeita campos desconhecidos (400) em vez de aceitá-los em silêncio: qualquer
+// tentativa de enviar valor/status/forma junto é erro, nunca dado considerado.
+const concluirSchema = z
+  .object({
+    registrar_pagamento_presencial: z.boolean().optional(),
+  })
+  .strict();
 
 const faturamentoSchema = z.object({
   inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inicial inválida').optional(),
@@ -75,6 +94,14 @@ export async function cancelarHandler(req: Request, res: Response): Promise<void
   res.json(agendamento);
 }
 
+export async function reagendarHandler(req: Request, res: Response): Promise<void> {
+  const user = exigirUsuario(req);
+  const id = idSchema.parse(req.params.id);
+  const dados = reagendarSchema.parse(req.body);
+  const agendamento = await reagendarAgendamento(user.id, user.role, id, dados);
+  res.json(agendamento);
+}
+
 export async function confirmarHandler(req: Request, res: Response): Promise<void> {
   const user = exigirUsuario(req);
   const id = idSchema.parse(req.params.id);
@@ -85,7 +112,12 @@ export async function confirmarHandler(req: Request, res: Response): Promise<voi
 export async function concluirHandler(req: Request, res: Response): Promise<void> {
   const user = exigirUsuario(req);
   const id = idSchema.parse(req.params.id);
-  const agendamento = await concluirAgendamento(user.id, user.role, id);
+  // `req.body` pode ser undefined quando a requisição PATCH não envia corpo
+  // (sem Content-Type JSON); o contrato exige corpo OPCIONAL.
+  const dados = concluirSchema.parse(req.body ?? {});
+  const agendamento = await concluirAgendamento(user.id, user.role, id, {
+    registrarPagamentoPresencial: dados.registrar_pagamento_presencial,
+  });
   res.json(agendamento);
 }
 

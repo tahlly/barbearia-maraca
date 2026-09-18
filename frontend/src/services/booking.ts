@@ -1,4 +1,5 @@
 import type { Appointment, AppointmentStatus, BookingDraft } from "../types.js";
+import type { PagamentoStatus } from "./pagamento.js";
 import { httpJson } from "./api.js";
 
 /* ------------------------------------------------------------------ */
@@ -21,6 +22,8 @@ interface AgendamentoDTO {
   status: AgendamentoStatusDTO;
   observacao: string | null;
   criadoEm?: string;
+  /** Aditivo do contrato: pode vir preenchido ou ausente/null. */
+  pagamentoStatus?: PagamentoStatus | null;
 }
 
 /**
@@ -41,6 +44,7 @@ export function mapAppointment(dto: AgendamentoDTO): Appointment {
     status: mapStatus(dto.status),
     observacao: dto.observacao ?? undefined,
     criadoEm: dto.criadoEm,
+    pagamentoStatus: dto.pagamentoStatus ?? null,
   };
 }
 
@@ -119,14 +123,35 @@ export async function confirmAppointment(id: string): Promise<Appointment> {
   return mapAppointment(dto);
 }
 
+/** Opções extras do PATCH /api/agendamentos/:id/concluir (contrato aprovado). */
+export interface ConcludeAppointmentOptions {
+  /**
+   * Recepção: registra a linha de pagamento presencial aprovada (valor já
+   * existente no sistema) junto da conclusão. O backend recusa com erro de
+   * validação (4xx) e NÃO conclui quando o agendamento já possui pagamento
+   * aprovado (ex.: Mercado Pago) — o frontend re-renderiza a tabela nesse caso.
+   */
+  registrarPagamentoPresencial?: boolean;
+}
+
 /**
  * Conclui um agendamento (profissional/recep/admin).
  * PATCH /api/agendamentos/:id/concluir
+ * Corpo OPCIONAL: `{ "registrar_pagamento_presencial": true }` — sem o corpo a
+ * chamada mantém exatamente o comportamento atual (qualquer papel que conclui).
  */
-export async function concludeAppointment(id: string): Promise<Appointment> {
+export async function concludeAppointment(
+  id: string,
+  options: ConcludeAppointmentOptions = {},
+): Promise<Appointment> {
   const dto = await httpJson<AgendamentoDTO>(
     `/agendamentos/${encodeURIComponent(id)}/concluir`,
-    { method: "PATCH" },
+    {
+      method: "PATCH",
+      ...(options.registrarPagamentoPresencial
+        ? { body: JSON.stringify({ registrar_pagamento_presencial: true }) }
+        : {}),
+    },
   );
   return mapAppointment(dto);
 }
@@ -144,20 +169,39 @@ export async function revertCompletion(id: string): Promise<Appointment> {
   return mapAppointment(dto);
 }
 
+/** Dados mínimos enviados no reagendamento: somente nova data e novo horário. */
+export interface RescheduleDados {
+  data: string;
+  hora: string;
+  timezoneOffsetMinutes?: number | null;
+}
+
 /**
- * Reagendar: não há endpoint próprio no backend. A composição recomendada é
- * **cancelar o agendamento antigo** e **criar um novo** com os novos dados.
- * Esta função cancela o antigo e devolve o agendamento cancelado; a view deve
- * então abrir o wizard de novo (estado "novo") com os dados pré-preenchidos.
+ * Reagenda um agendamento existente.
+ *
+ * Desde o contrato `/reagendar`, o fluxo NÃO é mais "cancelar + criar": o
+ * backend atualiza SOMENTE `data` e `hora` na MESMA linha, preservando
+ * pagamento, status, serviço e profissional. O `pagamentoStatus` do
+ * AgendamentoDTO retornado permanece como estava (pago ou não pago).
+ *
+ * PATCH /api/agendamentos/:id/reagendar
  */
 export async function reschedule(
   id: string,
-): Promise<{ canceled: Appointment }> {
-  const canceled = await cancelAppointment(id);
-  if (!canceled) {
-    throw new Error("Agendamento não encontrado para reagendar.");
-  }
-  return { canceled };
+  dados: RescheduleDados,
+): Promise<{ appointment: Appointment }> {
+  const dto = await httpJson<AgendamentoDTO>(
+    `/agendamentos/${encodeURIComponent(id)}/reagendar`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        data: dados.data,
+        hora: dados.hora,
+        timezone_offset_minutes: dados.timezoneOffsetMinutes ?? null,
+      }),
+    },
+  );
+  return { appointment: mapAppointment(dto) };
 }
 
 /* ------------------------------------------------------------------ */

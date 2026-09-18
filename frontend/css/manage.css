@@ -667,7 +667,7 @@ body.light-theme .manage-toolbar select.input {
    sem estourá-la em viewports médias/estreitas:
    - flex-direction: column + align-items: stretch: botões sempre em coluna,
      cada um com a LARGURA TOTAL da célula (nunca lado a lado espremidos);
-   - a coluna Ações ganha min-width (ver .table--agenda th/td:nth-child(6))
+   - a coluna Ações ganha min-width (ver .table--agenda th/td:nth-child(7))
      para os rótulos (CONFIRMAR/REAGENDAR/CANCELAR/REVERTER) caberem numa
      linha — sem texto cortado nem quebra no meio da palavra;
    - white-space normal + overflow-wrap apenas como fallback de segurança. */
@@ -1173,13 +1173,16 @@ body.light-theme .manage-toolbar select.input {
   }
 }
 
-/* Tabela da agenda compartilhada em telas estreitas: mantém os botões com
-   largura confortável e usa o scroll horizontal já previsto no .table-wrap
-   (mesmo padrão do .table base, min-width 640px + overflow-x auto). Fora do
-   mobile a tabela continua "fit" (ocupando a largura disponível). */
-@media (max-width: 640px) {
+/* Tabela da agenda compartilhada em telas estreitas: abaixo de 900px de
+   viewport o layout volta a ser automático (colunas dimensionadas pelo
+   conteúdo, como era antes das larguras explícitas de .table--agenda) — as
+   larguras fixas exigem esse piso para a coluna Status não espremer a badge.
+   O scroll horizontal continua por conta do .table-wrap (overflow-x: auto),
+   com o mesmo piso de 700px do .table base. */
+@media (max-width: 899px) {
   #manage-agenda-table .table {
-    min-width: 640px;
+    min-width: 700px;
+    table-layout: auto;
   }
 }
 
@@ -1276,24 +1279,27 @@ body.light-theme .manage-toolbar select.input {
   white-space: nowrap;
 }
 
-/* ── Tabela de Agendamentos: scroll horizontal responsivo ──────────────────
-   Escopado em .table--agenda (apenas a lista de agendamentos do painel
-   admin/recepção). O wrapper .table-wrap já rola horizontalmente
-   (overflow-x: auto); aqui a tabela assume largura mínima de 700px e
-   table-layout auto (mesmo comportamento da .table de Despesas), evitando
-   que as colunas sejam espremidas em viewports menores — o conteúdo rola
-   dentro do wrapper em vez de quebrar. */
+/* ── Tabela de Agendamentos (painel da Recepção e da Administração) ─────────
+   A lista tem 7 colunas, incluindo "Pagamento", para os DOIS papéis. Com
+   table-layout fixed e larguras explícitas, a largura das colunas deixa de
+   variar conforme o conteúdo da linha (o empilhamento vertical dos botões em
+   Ações não alarga mais a coluna) e todas as linhas ficam alinhadas.
+   O wrapper .table-wrap já rola horizontalmente (overflow-x: auto) e a tabela
+   tem piso de 900px: quando falta espaço quem cede é o scroll, nunca a coluna
+   Status — a badge tem largura fixa e não quebra linha, então encolher a
+   coluna a faria vazar sobre a vizinha. */
 .table--agenda {
-  min-width: 700px;
-  table-layout: auto;
+  min-width: 900px;
+  table-layout: fixed;
 }
 
-/* Células em linha única (nowrap) sem quebra de palavra: nomes, datas e
-   badges permanecem em uma linha contínua em todos os viewports. */
+/* Texto quebra dentro da própria coluna (mesmo comportamento do .table--fit):
+   nomes, serviços e datas longos quebram linha em vez de vazar. Status,
+   Pagamento e Ações são a exceção e ficam em linha única (regra ao final). */
 .table--agenda th,
 .table--agenda td {
-  white-space: nowrap;
-  overflow-wrap: normal;
+  white-space: normal;
+  overflow-wrap: break-word;
   word-break: normal;
 }
 
@@ -1305,23 +1311,80 @@ body.light-theme .manage-toolbar select.input {
   white-space: nowrap;
 }
 
-/* Colunas Status (5ª) e Ações (6ª) com mais respiro para a badge e o botão
-   REVERTER. Larguras são sugestão semântica (table-layout auto), não
-   precisam fechar 100%. Vale em todos os viewports: a tabela mantém linhas
-   e colunas e rola horizontalmente dentro do .table-wrap no mobile. */
+/* ── Larguras das 7 colunas (Recepção e Administração) — soma 100% ──────────
+   Percentuais calculados a partir do texto mais longo esperado de cada coluna
+   (dados reais do seed + formatos do app; método: largura aproximada por
+   glifo da fonte Inter, corpos de célula 0.9rem, cabeçalhos 0.68rem com
+   letter-spacing 0.12em e padding de célula 10px por lado — ver relatório da
+   task). Os valores valem para o piso de 900px da tabela (percentual × 900):
+     Cliente     "Maria Oliveira" (bold)      ≈120.8px  → ≥13.4% → 14%
+     Profissional cabeçalho "PROFISSIONAL"    ≈113.7px  → ≥12.6% → 13.5%
+     Serviço     "Corte + Barba"              ≈114px    → ≥12.7% → 13%
+     Data/Hora   "qui, 21 de set · 09:00"     ≈156.2px  → ≥17.4% → 18%
+     Status      badge "CONFIRMADO"           ≈127.7px  → ≥14.2% → 15%
+     Pagamento   cabeçalho "PAGAMENTO"        ≈99.9px   → ≥11.1% → 12%
+     Ações       botão "REAGENDAR"            ≈125.1px  → ≥13.9% → 14.5%
+   Soma = 100% exato. A folga total no piso (≈42.6px) fica nas colunas de nome
+   variável (Cliente/Profissional/Serviço) e como tolerância de métrica nas de
+   conteúdo fixo. Abaixo de 900px de viewport o layout volta a ser automático
+   (media query acima). */
+.table--agenda th:nth-child(1),
+.table--agenda td:nth-child(1) { width: 14%; } /* Cliente */
+
+.table--agenda th:nth-child(2),
+.table--agenda td:nth-child(2) { width: 13.5%; } /* Profissional */
+
+.table--agenda th:nth-child(3),
+.table--agenda td:nth-child(3) { width: 13%; } /* Serviço */
+
+.table--agenda th:nth-child(4),
+.table--agenda td:nth-child(4) { width: 18%; } /* Data/Hora */
+
 .table--agenda th:nth-child(5),
 .table--agenda td:nth-child(5) {
-  width: 14%;
+  width: 15%; /* Status */
   padding-left: var(--space-3);
   padding-right: var(--space-2);
 }
 
+/* min-width: 0 anula o min-width de 150px que a 6ª coluna herdava de regras
+   anteriores (quando a 6ª posição era a coluna de Ações do Admin): aqui a 6ª
+   coluna é Pagamento, estreita por definição. */
 .table--agenda th:nth-child(6),
 .table--agenda td:nth-child(6) {
-  width: 16%;
-  min-width: 150px;
-  padding-left: var(--space-2);
-  padding-right: var(--space-3);
+  width: 12%; /* Pagamento */
+  min-width: 0;
+}
+
+.table--agenda th:nth-child(7),
+.table--agenda td:nth-child(7) { width: 14.5%; } /* Ações */
+
+/* Com largura fixa o texto volta a poder quebrar linha (mesmo comportamento do
+   .table--fit): nome/serviço longos quebram dentro da própria coluna em vez de
+   vazar por cima da coluna vizinha.
+
+   Padding horizontal: 10px por lado em vez dos 14px 18px do .table base. A
+   tabela já carrega .table--fit (densidade pretendida 8px 10px) e a coluna
+   Status já usava 20px totais; sem essa redução as larguras calculadas acima
+   precisariam de ~954px no piso de 900px e não fechariam em 100%. */
+.table--agenda th,
+.table--agenda td {
+  padding-left: 10px;
+  padding-right: 10px;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* Status, Pagamento e Ações seguem em linha única: badge, indicador "Pago" e
+   botões não quebram ao meio. */
+.table--agenda th:nth-child(5),
+.table--agenda td:nth-child(5),
+.table--agenda th:nth-child(6),
+.table--agenda td:nth-child(6),
+.table--agenda th:nth-child(7),
+.table--agenda td:nth-child(7) {
+  white-space: nowrap;
 }
 
 /* ==================================================================
