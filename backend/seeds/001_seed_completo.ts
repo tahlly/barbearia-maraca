@@ -40,6 +40,9 @@ export async function seed(knex: Knex): Promise<void> {
   // tabelas que referenciam agendamento/funcionario/servico/categoria primeiro.
   await knex('comissao_pendencia').del();
   await knex('despesa').del();
+  await knex('funcionario_categoria').del();
+  await knex('servico_categoria').del();
+  await knex('categoria').del();
   await knex('agendamento').del();
   await knex('horario_excecao').del();
   await knex('horario_trabalho').del();
