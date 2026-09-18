@@ -43,7 +43,7 @@ import { renderSettingsForm } from "../features/settingsForm.js";
 import { initBookingWizard } from "../features/bookingWizard.js";
 import { attachPercentMask, attachUppercaseMask } from "../ui/mask.js";
 import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
-import { pagamentoBadgeHtml } from "../ui/pagamentoBadge.js";
+import { pagamentoBadgeHtml, pagamentoIndicadorPagoHtml } from "../ui/pagamentoBadge.js";
 import {
   devePerguntarPagamentoPresencial,
   opcoesDialogoPagamentoPresencial,
@@ -1251,6 +1251,14 @@ if (status === "cancelado") {
     if (appointments.length === 0) {
       return `<p class="panel__empty">Nenhum agendamento encontrado.</p>`;
     }
+    // Coluna "Pagamento" própria, para os DOIS papéis: o indicador leve "Pago"
+    // (ícone + texto, sem pílula) sai da célula Status, onde disputava espaço
+    // com a badge do agendamento (os dois selos ficavam empilhados e alargavam
+    // a coluna). O detalhamento financeiro completo — selo com o status do
+    // pagamento — continua no modal de detalhes, via pagamentoBadgePainel().
+    const pagamentoHeader = "<th>Pagamento</th>";
+    const pagamentoCell = (a: Appointment): string =>
+      `<td>${pagamentoIndicadorPagoHtml(a.pagamentoStatus)}</td>`;
     return `
       <table class="table table--fit table--agenda">
         <thead>
@@ -1259,7 +1267,7 @@ if (status === "cancelado") {
             <th>Profissional</th>
             <th>Serviço</th>
             <th>Data/Hora</th>
-            <th>Status</th>
+            <th>Status</th>${pagamentoHeader}
             <th>Ações</th>
           </tr>
         </thead>
@@ -1295,7 +1303,7 @@ if (status === "cancelado") {
                   <td>${escapeHtml(funcionario)}</td>
                   <td>${escapeHtml(name)}</td>
                   <td>${formatDateMedium(a.data)} · ${a.hora}</td>
-                  <td><span class="status-badges">${statusBadge(a.status)} ${pagamentoBadgeHtml(a.pagamentoStatus)}</span></td>
+                  <td><span class="status-badges">${statusBadge(a.status)}</span></td>${pagamentoCell(a)}
                   <td><span class="cell-actions">${actions}</span></td>
                 </tr>`;
             })
