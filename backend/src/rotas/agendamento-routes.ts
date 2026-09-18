@@ -228,7 +228,7 @@ const agendamentoRoutes = Router();
  *                 minimum: -840
  *                 maximum: 840
  *                 nullable: true
- *                 description: Offset do navegador em minutos (ex.: -180 para UTC-3); usado na checagem de horario passado.
+ *                 description: 'Offset do navegador em minutos (ex.: -180 para UTC-3); usado na checagem de horario passado.'
  *     responses:
  *       '200':
  *         description: Agendamento reagendado (mesma linha, mesmo pagamento)
