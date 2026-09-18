@@ -38,11 +38,14 @@ function dataOffset(hoje: Date, offset: number): string {
 export async function seed(knex: Knex): Promise<void> {
   // Ordem segura de reset por dependência (não altera nenhuma estrutura):
   // tabelas que referenciam agendamento/funcionario/servico/categoria primeiro.
+  // `pagamento` referencia `agendamento` (CASCADE) — o del() explícito antes
+  // de `agendamento` evita depender da cascata e mantém o reset previsível.
   await knex('comissao_pendencia').del();
   await knex('despesa').del();
   await knex('funcionario_categoria').del();
   await knex('servico_categoria').del();
   await knex('categoria').del();
+  await knex('pagamento').del();
   await knex('agendamento').del();
   await knex('horario_excecao').del();
   await knex('horario_trabalho').del();
@@ -56,14 +59,22 @@ export async function seed(knex: Knex): Promise<void> {
 
   const hash = await bcrypt.hash(DEFAULT_PASSWORD, SALT_ROUNDS);
 
+  // Ordem do array (usada em todo o seed): 0=Carlos (admin), 1=Ana (recep),
+  // 2=João (barbeiro), 3=Lucas (barbeiro), 4=Rafael (barbeiro),
+  // 5..10 = clientes (Maria, Pedro, Fernanda, Roberto, Juliana, Tiago).
   const usuarios = await knex('usuario')
     .insert([
       { email: 'carlos@barbeariamaraca.com.br', senha_hash: hash, tipo: 'funcionario' },
       { email: 'ana@barbeariamaraca.com.br', senha_hash: hash, tipo: 'funcionario' },
       { email: 'joao@barbeariamaraca.com.br', senha_hash: hash, tipo: 'funcionario' },
       { email: 'lucas@barbeariamaraca.com.br', senha_hash: hash, tipo: 'funcionario' },
+      { email: 'rafael@barbeariamaraca.com.br', senha_hash: hash, tipo: 'funcionario' },
       { email: 'maria@email.com', senha_hash: hash, tipo: 'cliente' },
       { email: 'pedro@email.com', senha_hash: hash, tipo: 'cliente' },
+      { email: 'fernanda@email.com', senha_hash: hash, tipo: 'cliente' },
+      { email: 'roberto@email.com', senha_hash: hash, tipo: 'cliente' },
+      { email: 'juliana@email.com', senha_hash: hash, tipo: 'cliente' },
+      { email: 'tiago@email.com', senha_hash: hash, tipo: 'cliente' },
     ])
     .returning('id');
 
@@ -100,15 +111,26 @@ export async function seed(knex: Knex): Promise<void> {
         especialidade: 'Barba',
         ativo: true,
       },
+      {
+        usuario_id: usuarios[4].id,
+        nome: 'Rafael Almeida',
+        telefone: '(11) 99999-7777',
+        cargo: 'barbeiro',
+        especialidade: 'Cabelo e Barba',
+        ativo: true,
+      },
     ])
     .returning('id');
 
-  // Barbeiros: índices 2 (João Pedro) e 3 (Lucas Mendes) no array inserido
-  const barbeiroIds = [funcionarios[2].id, funcionarios[3].id];
-  // João Pedro atende cabelos, Lucas Mendes atende barba
+  // Barbeiros: índices 2 (João Pedro), 3 (Lucas Mendes) e 4 (Rafael Almeida)
+  // no array inserido acima.
+  const barbeiroIds = [funcionarios[2].id, funcionarios[3].id, funcionarios[4].id];
+  // João Pedro atende cabelos; Lucas Mendes atende barba; Rafael Almeida
+  // atende cabelo E barba.
   const barbeiroCategoria = {
     [funcionarios[2].id]: ['Cabelo'],
     [funcionarios[3].id]: ['Barba'],
+    [funcionarios[4].id]: ['Cabelo', 'Barba'],
   };
 
   // Horário padrão de trabalho dos barbeiros: segunda (1) a sábado (6),
@@ -118,7 +140,7 @@ export async function seed(knex: Knex): Promise<void> {
   const HORARIO_PADRAO_FIM = '19:00:00';
   const DIAS_UTEIS = [1, 2, 3, 4, 5, 6]; // seg a sáb
 
-  // Total: 2 barbeiros × 6 dias = 12 registros. O onConflict mantém o insert
+  // Total: 3 barbeiros × 6 dias = 18 registros. O onConflict mantém o insert
   // idempotente com a mesma semântica de inserirHorariosPadrao do
   // horario-repository: pares (funcionario_id, dia_semana) já existentes são
   // ignorados, sem violar a unique horario_trabalho_funcionario_id_dia_semana_unique.
@@ -158,18 +180,39 @@ export async function seed(knex: Knex): Promise<void> {
     })),
   );
 
-  // Maria (usuarios[4]) e Pedro (usuarios[5]) — ordem dos clientes.
+  // Clientes: Maria (usuarios[5]), Pedro (usuarios[6]), Fernanda (usuarios[7]),
+  // Roberto (usuarios[8]), Juliana (usuarios[9]) e Tiago (usuarios[10]).
   const clientes = await knex('cliente')
     .insert([
       {
-        usuario_id: usuarios[4].id,
+        usuario_id: usuarios[5].id,
         nome: 'Maria Oliveira',
         telefone: '(11) 99999-5555',
       },
       {
-        usuario_id: usuarios[5].id,
+        usuario_id: usuarios[6].id,
         nome: 'Pedro Santos',
         telefone: '(11) 99999-6666',
+      },
+      {
+        usuario_id: usuarios[7].id,
+        nome: 'Fernanda Lima',
+        telefone: '(11) 99999-8888',
+      },
+      {
+        usuario_id: usuarios[8].id,
+        nome: 'Roberto Nunes',
+        telefone: '(11) 99999-9999',
+      },
+      {
+        usuario_id: usuarios[9].id,
+        nome: 'Juliana Castro',
+        telefone: '(11) 98888-1111',
+      },
+      {
+        usuario_id: usuarios[10].id,
+        nome: 'Tiago Rocha',
+        telefone: '(11) 98888-2222',
       },
     ])
     .returning('id');
@@ -247,6 +290,8 @@ export async function seed(knex: Knex): Promise<void> {
   });
 
   // Percentuais por serviço por profissional (UNIQUE funcionario+servico).
+  // Rafael NÃO tem percentual para 'Barba' (concluir Barba → comissao_pendencia,
+  // padrão atual de Lucas com 'Corte'); João não tem para 'Barba'.
   await knex('comissao_servico').insert([
     {
       funcionario_id: funcionarios[2].id,
@@ -268,29 +313,42 @@ export async function seed(knex: Knex): Promise<void> {
       servico_id: mapaServicos['Corte + Barba'],
       percentual: 25.0,
     },
+    {
+      funcionario_id: funcionarios[4].id,
+      servico_id: mapaServicos['Corte'],
+      percentual: 25.0,
+    },
+    {
+      funcionario_id: funcionarios[4].id,
+      servico_id: mapaServicos['Corte + Barba'],
+      percentual: 22.0,
+    },
   ]);
 
   // ── Agendamentos de demonstração (datas relativas a hoje) ────────────────
-  // Garantias de cobertura:
-  //  - concluídos no MÊS CORRENTE (para atendimentosMes, comissaoMes,
-  //    servicosMaisFeitos e horariosMaisConcorridos do Painel do Barbeiro e do
-  //    Resumo Financeiro do mês atual);
-  //  - concluídos nos ÚLTIMOS 7 DIAS (atendimentosPorDia do Painel);
+  // Garantias de cobertura da massa:
+  //  - concluídos no MÊS CORRENTE em TODOS os dias úteis (seg–sáb) já
+  //    ocorridos, 3 slots por barbeiro por dia → atendimentosMes,
+  //    atendimentosPorDia (últimos 7 dias), comissaoMes, servicosMaisFeitos e
+  //    horariosMaisConcorridos do Painel do Barbeiro e do Resumo Financeiro;
   //  - concluídos no MÊS ANTERIOR (comparativo de comissão e Resumo);
-  //  - 2 pendências de comissão ABERTAS: Lucas Mendes sem % para 'Corte'
-  //    uma no mês anterior e uma no mês corrente (data de amanhã-1);
-  //  - confirmados e pendentes em dias futuros próximos; cancelados no passado.
+  //  - pendências de comissão ABERTAS: Lucas sem % para 'Corte' e Rafael sem %
+  //    para 'Barba' (mecanismo idêntico ao hook real — conclusão sem %
+  //    cadastrado gera comissao_pendencia);
+  //  - confirmados e pendentes em dias úteis futuros próximos (horários dentro
+  //    dos slots do horario_trabalho); cancelados no passado recente.
   // Sem colisão de (funcionario, data, hora) — o índice único parcial da
-  // migration 20260902000004 cobre horário exato (status <> cancelado).
+  // migration 20260902000004 cobre horário exato (status <> cancelado); a
+  // geração abaixo também mantém slots disjuntos para os cancelados.
   type StatusAgendamento = 'pendente' | 'confirmado' | 'cancelado' | 'concluido';
   type ServicoNome = 'Corte' | 'Barba' | 'Corte + Barba';
 
-  // [data, hora, cliente(0=Maria,1=Pedro), funcionario(2=João,3=Lucas), servico, status]
+  // [data, hora, cliente(0..5), funcionario(2=João,3=Lucas,4=Rafael), servico, status]
   type LinhaAgendamento = [
     string,
     string,
-    0 | 1,
-    2 | 3,
+    0 | 1 | 2 | 3 | 4 | 5,
+    2 | 3 | 4,
     ServicoNome,
     StatusAgendamento,
   ];
@@ -300,89 +358,137 @@ export async function seed(knex: Knex): Promise<void> {
 
   const AGENDAMENTOS: LinhaAgendamento[] = [];
 
+  const BARBEIROS = [2, 3, 4] as const;
+  const SLOTS_POR_BARBEIRO_DIA = 3;
+  const HORAS_DIA = [
+    '09:00', '09:30', '10:00', '10:30', '11:00',
+    '14:00', '15:00', '16:00', '17:00', '18:00',
+  ] as const;
+
+  function ehDiaUtil(d: Date): boolean {
+    // Domingo (0) não tem horario_trabalho (seg–sáb 09:00–19:00).
+    return d.getDay() !== 0;
+  }
+
+  function clienteDe(indice: number): 0 | 1 | 2 | 3 | 4 | 5 {
+    return (indice % 6) as 0 | 1 | 2 | 3 | 4 | 5;
+  }
+
+  // Serviço de cada barbeiro, variando com o dia (i) e o slot (s):
+  //  - João: 1 em cada 3 atendimentos é combo, o resto Corte;
+  //  - Lucas: Corte apenas quando (i + 2s) ≡ 3 (mod 7) → pendência; senão
+  //    alterna combo e Barba;
+  //  - Rafael: Barba apenas quando (i + s) ≡ 2 (mod 5) → pendência; senão
+  //    alterna combo e Corte.
+  function servicoConcluido(barbeiro: 2 | 3 | 4, i: number, s: number): ServicoNome {
+    const k = i + s;
+    if (barbeiro === 2) return k % 3 === 0 ? 'Corte + Barba' : 'Corte';
+    if (barbeiro === 3) {
+      if ((i + s * 2) % 7 === 3) return 'Corte';
+      return k % 3 === 1 ? 'Corte + Barba' : 'Barba';
+    }
+    if (k % 5 === 2) return 'Barba';
+    return k % 3 === 0 ? 'Corte + Barba' : 'Corte';
+  }
+
   // ── Concluídos no mês ANTERIOR (histórico para comparativos) ────────────
-  // João alterna Corte (30%) / Corte + Barba (25%); Lucas faz Barba (20%) /
-  // Corte + Barba (25%); no dia 24 Lucas faz Corte (SEM %) → pendência 1.
-  const diasMesAnterior = [3, 5, 8, 10, 12, 15, 17, 19, 22, 24, 26, 28];
+  // 1 atendimento por barbeiro em 10 dias do mês anterior: mantém o histórico
+  // do Resumo (evolução mensal e comparativo de comissão) sem inflar a massa.
+  const diasMesAnterior = [3, 5, 8, 10, 12, 15, 17, 19, 22, 24];
   diasMesAnterior.forEach((dia, i) => {
     const data = diaMesAnterior(hoje, dia);
-    const servicoJoao: ServicoNome = i % 2 === 0 ? 'Corte' : 'Corte + Barba';
-    const servicoLucas: ServicoNome = dia === 24 ? 'Corte' : 'Barba';
-    AGENDAMENTOS.push([data, '09:00', 0, 2, servicoJoao, 'concluido']);
-    AGENDAMENTOS.push([data, '09:30', 1, 3, servicoLucas, 'concluido']);
+    BARBEIROS.forEach((barbeiro, j) => {
+      const hora = HORAS_DIA[(i + j * 3) % HORAS_DIA.length];
+      AGENDAMENTOS.push([data, hora, clienteDe(i + j), barbeiro, servicoConcluido(barbeiro, i, 0), 'concluido']);
+    });
   });
 
   // ── Concluídos no MÊS CORRENTE (incl. últimos 7 dias) ───────────────────
-  // Distribui nos dias 1,3,6,10,15 e nos 4 dias que terminam hoje (hoje e os
-  // três anteriores), sempre respeitando o dia atual. Assim o Painel do
-  // Barbeiro sempre encontra atendimentos no mês corrente e nos últimos 7 dias.
-  const candidatosMesAtual = [
-    1,
-    3,
-    6,
-    10,
-    15,
-    hojeDia - 3,
-    hojeDia - 2,
-    hojeDia - 1,
-    hojeDia,
-  ].filter((dia) => dia >= 1 && dia <= hojeDia);
-  const diasMesAtual = [...new Set(candidatosMesAtual)].sort((a, b) => a - b);
+  // Todos os dias úteis (seg–sáb) de 1 até hoje, com 3 slots por barbeiro:
+  // alimenta TODO o mês do Painel do Barbeiro, o Resumo do mês atual e o
+  // faturamento (concluídos) — base do lucro líquido positivo exigido.
+  const diasMesAtual: Array<{ dia: number; indice: number }> = [];
+  {
+    let indice = 0;
+    for (let dia = 1; dia <= hojeDia; dia++) {
+      if (!ehDiaUtil(new Date(hoje.getFullYear(), hoje.getMonth(), dia))) continue;
+      diasMesAtual.push({ dia, indice });
+      indice++;
+    }
+  }
 
-  const HORAS_DIA: Record<number, string> = {
-    0: '09:00',
-    1: '09:30',
-    2: '10:00',
-    3: '10:30',
-    4: '11:00',
-    5: '14:00',
-    6: '15:00',
-    7: '16:00',
-  };
-
-  diasMesAtual.forEach((dia, i) => {
+  diasMesAtual.forEach(({ dia, indice: i }) => {
     const data = diaDoMes(hoje, dia);
-    // João: serviços variados no mês (Corte / Corte + Barba) e horários
-    // distintos — alimenta servicosMaisFeitos e horariosMaisConcorridos.
-    const servicoJoao: ServicoNome = i % 3 === 0 ? 'Corte + Barba' : 'Corte';
-    const horaJoao = HORAS_DIA[i % 8] ?? '09:00';
-    AGENDAMENTOS.push([data, horaJoao, 0, 2, servicoJoao, 'concluido']);
-
-    // Lucas: Barba, exceto no dia "ontem" (hojeDia - 1), quando faz Corte
-    // (SEM %) → pendência 2. Se hoje for dia 1, cai no próprio hoje — a
-    // pendência do mês corrente continua garantida.
-    const diaPendenciaAtual = hojeDia >= 2 ? hojeDia - 1 : hojeDia;
-    const servicoLucas: ServicoNome = dia === diaPendenciaAtual ? 'Corte' : 'Barba';
-    const horaLucas = dia === hojeDia ? '10:00' : '09:30';
-    AGENDAMENTOS.push([data, horaLucas, 1, 3, servicoLucas, 'concluido']);
+    BARBEIROS.forEach((barbeiro, j) => {
+      for (let s = 0; s < SLOTS_POR_BARBEIRO_DIA; s++) {
+        const hora = HORAS_DIA[(i * SLOTS_POR_BARBEIRO_DIA + j * SLOTS_POR_BARBEIRO_DIA + s) % HORAS_DIA.length];
+        AGENDAMENTOS.push([data, hora, clienteDe(i + j + s), barbeiro, servicoConcluido(barbeiro, i, s), 'concluido']);
+      }
+    });
   });
 
-  // ── Confirmados (próximos dias úteis) ────────────────────────────────────
+  // ── Confirmados e pendentes (próximos dias úteis) ───────────────────────
+  // Dias úteis futuros, com horários dentro dos slots 09:00–18:00 do
+  // horario_trabalho. Confirmados nas manhãs/início da tarde; pendentes na
+  // parte da tarde — grupos com horários disjuntos (sem colisão no índice).
+  function proximosDiasUteis(quantidade: number): string[] {
+    const datas: string[] = [];
+    const d = new Date(hoje);
+    while (datas.length < quantidade) {
+      d.setDate(d.getDate() + 1);
+      if (ehDiaUtil(d)) datas.push(dataISO(d));
+    }
+    return datas;
+  }
+  const diasFuturos = proximosDiasUteis(5);
+
   AGENDAMENTOS.push(
-    [dataOffset(hoje, 1), '09:00', 1, 2, 'Corte', 'confirmado'],
-    [dataOffset(hoje, 1), '09:30', 0, 3, 'Barba', 'confirmado'],
-    [dataOffset(hoje, 2), '10:00', 0, 2, 'Corte + Barba', 'confirmado'],
-    [dataOffset(hoje, 2), '10:30', 1, 3, 'Barba', 'confirmado'],
-    [dataOffset(hoje, 3), '11:00', 1, 2, 'Corte', 'confirmado'],
-    [dataOffset(hoje, 3), '11:30', 0, 3, 'Barba', 'confirmado'],
+    [diasFuturos[0], '09:00', 2, 2, 'Corte', 'confirmado'],
+    [diasFuturos[0], '09:30', 3, 3, 'Barba', 'confirmado'],
+    [diasFuturos[0], '10:00', 4, 4, 'Corte + Barba', 'confirmado'],
+    [diasFuturos[1], '09:30', 0, 2, 'Corte + Barba', 'confirmado'],
+    [diasFuturos[1], '10:00', 5, 3, 'Barba', 'confirmado'],
+    [diasFuturos[1], '10:30', 1, 4, 'Corte', 'confirmado'],
+    [diasFuturos[2], '10:00', 4, 2, 'Corte', 'confirmado'],
+    [diasFuturos[2], '10:30', 2, 3, 'Corte + Barba', 'confirmado'],
+    [diasFuturos[3], '11:00', 5, 4, 'Barba', 'confirmado'],
+    [diasFuturos[4], '11:00', 1, 2, 'Corte + Barba', 'confirmado'],
   );
 
-  // ── Pendentes (aguardando confirmação) ──────────────────────────────────
   AGENDAMENTOS.push(
-    [dataOffset(hoje, 1), '13:00', 0, 2, 'Corte', 'pendente'],
-    [dataOffset(hoje, 1), '13:30', 1, 3, 'Barba', 'pendente'],
-    [dataOffset(hoje, 2), '14:00', 1, 2, 'Corte', 'pendente'],
-    [dataOffset(hoje, 2), '14:30', 0, 3, 'Barba', 'pendente'],
-    [dataOffset(hoje, 3), '15:00', 0, 2, 'Corte + Barba', 'pendente'],
+    [diasFuturos[0], '15:00', 0, 2, 'Corte', 'pendente'],
+    [diasFuturos[0], '16:00', 3, 3, 'Barba', 'pendente'],
+    [diasFuturos[1], '15:00', 5, 4, 'Corte', 'pendente'],
+    [diasFuturos[1], '16:00', 1, 2, 'Corte + Barba', 'pendente'],
+    [diasFuturos[2], '15:00', 2, 3, 'Corte + Barba', 'pendente'],
+    [diasFuturos[2], '16:00', 4, 4, 'Barba', 'pendente'],
+    [diasFuturos[3], '17:00', 3, 2, 'Corte', 'pendente'],
+    [diasFuturos[3], '18:00', 0, 3, 'Barba', 'pendente'],
   );
 
-  // ── Cancelados (passado recente) ─────────────────────────────────────────
-  AGENDAMENTOS.push(
-    [dataOffset(hoje, -1), '15:00', 0, 2, 'Corte', 'cancelado'],
-    [dataOffset(hoje, -1), '15:30', 1, 3, 'Barba', 'cancelado'],
-    [dataOffset(hoje, -2), '16:00', 1, 2, 'Corte + Barba', 'cancelado'],
-    [dataOffset(hoje, -2), '16:30', 0, 3, 'Barba', 'cancelado'],
-  );
+  // ── Cancelados (passado recente) ────────────────────────────────────────
+  // 5 dias úteis passados × 3 barbeiros = 15 cancelados; horários 12:00–13:00
+  // (fora dos slots de concluídos) para nunca colidir com linhas ativas.
+  const diasCancelados: string[] = [];
+  for (let offset = -1; diasCancelados.length < 5 && offset >= -6; offset--) {
+    const d = new Date(hoje);
+    d.setDate(d.getDate() + offset);
+    if (ehDiaUtil(d)) diasCancelados.push(dataISO(d));
+  }
+
+  const servicosCancelados: Array<[ServicoNome, ServicoNome, ServicoNome]> = [
+    ['Corte', 'Barba', 'Corte + Barba'],
+    ['Corte + Barba', 'Barba', 'Corte'],
+    ['Corte', 'Corte + Barba', 'Barba'],
+    ['Barba', 'Corte', 'Corte + Barba'],
+    ['Corte + Barba', 'Barba', 'Corte'],
+  ];
+
+  diasCancelados.forEach((data, i) => {
+    AGENDAMENTOS.push([data, '12:00', clienteDe(i), 2, servicosCancelados[i][0], 'cancelado']);
+    AGENDAMENTOS.push([data, '12:30', clienteDe(i + 2), 3, servicosCancelados[i][1], 'cancelado']);
+    AGENDAMENTOS.push([data, '13:00', clienteDe(i + 4), 4, servicosCancelados[i][2], 'cancelado']);
+  });
 
   const idsAgendamentos = await knex('agendamento')
     .insert(
@@ -407,6 +513,111 @@ export async function seed(knex: Knex): Promise<void> {
       status,
     }),
   );
+
+  // ── Pagamentos de demonstração (tabela `pagamento`) ─────────────────────
+  // Uma linha por agendamento com pagamento (regra simples; o modelo permite
+  // histórico, mas o seed não precisa dele). Respeita TODAS as constraints:
+  //  - chk_pagamento_forma_coerencia (bicondicional): presencial jamais tem
+  //    order id; mercadopago sempre tem;
+  //  - uq_pagamento_mercadopago_order_id: ORD-SEED-* sequenciais (únicos);
+  //  - uq_pagamento_agendamento_pendente / uq_pagamento_agendamento_aprovado:
+  //    no máximo UMA linha por agendamento → nunca há dois pendentes nem dois
+  //    aprovados para o mesmo agendamento;
+  //  - chk_pagamento_valor_centavos: snapshot do preço do serviço em centavos.
+  // Distribuição:
+  //  - concluídos: maioria aprovado MP (order+payment fakes), alguns aprovado
+  //    PRESENCIAL (registrados pela Ana no balcão — usuarios[1]) e os 2
+  //    últimos sem pagamento (atendido sem registro de pagamento — zero linha);
+  //  - cancelados: 9 aprovado MP (cancelado pago — cenário do faturamento),
+  //    4 cancelado MP (desistência/estorno inexistente) e 2 pendente MP
+  //    (checkout abandonado);
+  //  - confirmados: 8 pendente MP (checkout aberto) e 2 aprovado MP
+  //    (pagou antecipado);
+  //  - pendentes: 8 pendente MP (checkout aberto).
+  const PRECOS_CENTAVOS: Record<ServicoNome, number> = {
+    Corte: 4500,
+    Barba: 3500,
+    'Corte + Barba': 7000,
+  };
+
+  const pagamentos: Array<{
+    agendamento_id: string;
+    mercadopago_order_id: string | null;
+    mercadopago_payment_id: string | null;
+    valor_centavos: number;
+    status: 'pendente' | 'aprovado' | 'recusado' | 'cancelado' | 'expirado';
+    forma_pagamento: 'mercadopago' | 'presencial';
+    registrado_por_usuario_id: string | null;
+  }> = [];
+
+  let ordemSeq = 0;
+  let pagamentoSeq = 0;
+  const proximaOrdem = (): string => `ORD-SEED-${String(++ordemSeq).padStart(4, '0')}`;
+  const proximoPagamento = (): string => `PAY-SEED-${String(++pagamentoSeq).padStart(4, '0')}`;
+
+  function pagamentoMercadoPago(
+    agendamentoId: string,
+    servico: ServicoNome,
+    status: 'pendente' | 'aprovado' | 'cancelado',
+  ): void {
+    pagamentos.push({
+      agendamento_id: agendamentoId,
+      mercadopago_order_id: proximaOrdem(),
+      mercadopago_payment_id: status === 'aprovado' ? proximoPagamento() : null,
+      valor_centavos: PRECOS_CENTAVOS[servico],
+      status,
+      forma_pagamento: 'mercadopago',
+      registrado_por_usuario_id: null,
+    });
+  }
+
+  const concluidosOrdenados = agendamentosComId.filter((a) => a.status === 'concluido');
+  concluidosOrdenados.forEach((a, i) => {
+    // 1–2 concluídos no fim ficam SEM pagamento (atendido sem registro de
+    // pagamento — permitido pelo modelo: zero linha).
+    if (i >= concluidosOrdenados.length - 2) return;
+    if (i % 7 === 3) {
+      // Aprovado presencial registrado pela recepcionista Ana no balcão.
+      pagamentos.push({
+        agendamento_id: a.id,
+        mercadopago_order_id: null,
+        mercadopago_payment_id: null,
+        valor_centavos: PRECOS_CENTAVOS[a.servico],
+        status: 'aprovado',
+        forma_pagamento: 'presencial',
+        registrado_por_usuario_id: usuarios[1].id,
+      });
+    } else {
+      pagamentoMercadoPago(a.id, a.servico, 'aprovado');
+    }
+  });
+
+  const canceladosOrdenados = agendamentosComId.filter((a) => a.status === 'cancelado');
+  canceladosOrdenados.forEach((a, i) => {
+    if (i < 9) {
+      pagamentoMercadoPago(a.id, a.servico, 'aprovado'); // cancelado pago (antecipado no MP)
+    } else if (i < 13) {
+      pagamentoMercadoPago(a.id, a.servico, 'cancelado'); // desistência/estorno inexistente
+    } else {
+      pagamentoMercadoPago(a.id, a.servico, 'pendente'); // checkout abandonado
+    }
+  });
+
+  const confirmadosOrdenados = agendamentosComId.filter((a) => a.status === 'confirmado');
+  confirmadosOrdenados.forEach((a, i) => {
+    if (i < 2) {
+      pagamentoMercadoPago(a.id, a.servico, 'aprovado'); // pagou antecipado
+    } else {
+      pagamentoMercadoPago(a.id, a.servico, 'pendente'); // checkout aberto
+    }
+  });
+
+  const pendentesOrdenados = agendamentosComId.filter((a) => a.status === 'pendente');
+  for (const a of pendentesOrdenados) {
+    pagamentoMercadoPago(a.id, a.servico, 'pendente');
+  }
+
+  await knex('pagamento').insert(pagamentos);
 
   // ── Despesas manuais de demonstração (fixa / variavel / outro) ───────────
   // Distribuídas entre o mês corrente e o anterior, sempre em datas relativas
@@ -448,10 +659,24 @@ export async function seed(knex: Knex): Promise<void> {
       recorrente: false,
     },
     {
+      descricao: 'ÁGUA E ESGOTO',
+      tipo_despesa: 'fixa',
+      valor: 95.0,
+      data: dataOffset(hoje, -2),
+      recorrente: false,
+    },
+    {
       descricao: 'IMPULSIONAMENTO INSTAGRAM',
       tipo_despesa: 'outro',
       valor: 250.0,
       data: dataOffset(hoje, -7),
+      recorrente: false,
+    },
+    {
+      descricao: 'MANUTENÇÃO DE EQUIPAMENTOS',
+      tipo_despesa: 'outro',
+      valor: 120.0,
+      data: diaMesAnterior(hoje, 18),
       recorrente: false,
     },
     {
@@ -486,12 +711,16 @@ export async function seed(knex: Knex): Promise<void> {
     Barba: 35.0,
     'Corte + Barba': 70.0,
   };
-  const PERCENTUAIS_COMISSAO: Record<ServicoNome, Partial<Record<2 | 3, number>>> = {
-    Corte: { 2: 30, 3: undefined }, // Lucas SEM percentual para Corte → pendências abertas
-    Barba: { 3: 20 },
-    'Corte + Barba': { 2: 25, 3: 25 },
+  const PERCENTUAIS_COMISSAO: Record<ServicoNome, Partial<Record<2 | 3 | 4, number>>> = {
+    Corte: { 2: 30, 3: undefined, 4: 25 }, // Lucas SEM % para Corte → pendência
+    Barba: { 3: 20, 4: undefined }, // Rafael SEM % para Barba → pendência
+    'Corte + Barba': { 2: 25, 3: 25, 4: 22 },
   };
-  const NOME_FUNCIONARIO: Record<2 | 3, string> = { 2: 'João Pedro', 3: 'Lucas Mendes' };
+  const NOME_FUNCIONARIO: Record<2 | 3 | 4, string> = {
+    2: 'João Pedro',
+    3: 'Lucas Mendes',
+    4: 'Rafael Almeida',
+  };
 
   function valorComissao(preco: number, percentual: number): number {
     const precoCents = BigInt(Math.round(preco * 100));
