@@ -49,6 +49,16 @@ A versão atual do projeto está publicada e pode ser acessada em:
 - Para entrar como os perfis de demonstração, use as credenciais do seed (veja [Usuários de teste](#usuários-de-teste-seed)).
 - Os comandos deste README (`npm run dev:up`, `npm run dev`, etc.) servem para executar o projeto **localmente** e não afetam o ambiente publicado.
 
+### Versão com pagamento (servidor)
+
+Para publicar a versão **com pagamento** (Mercado Pago Checkout Pro), parta da branch
+[`developer-com-pagamento-servidor`](https://github.com/tahlly/barbearia-maraca/tree/developer-com-pagamento-servidor)
+e **leia o cabeçalho do arquivo `.env.servidor.example`** (na raiz do repositório) **antes de subir**:
+ele contém o passo a passo do deploy e as variáveis de ambiente do servidor
+(`API_BASE_URL`, `FRONTEND_URL_PUBLICA` e `FRONTEND_URL` apontando para
+`https://lab.alphaedtech.org.br/server02`, `VITE_API_BASE_URL=/server02/api` no build do
+frontend, Google OAuth e Mercado Pago em modo teste).
+
 ---
 
 ## <a name="arquitetura-do-projeto"></a>Arquitetura
