@@ -1,3 +1,5 @@
+import type { PagamentoStatus } from "./services/pagamento.js";
+
 export type ServiceIcon = "scissors" | "beard" | "layers" | "sparkle";
 
 export type UserRole = "admin" | "recepcionista" | "profissional" | "cliente";
@@ -47,6 +49,12 @@ export interface Appointment {
   status: AppointmentStatus;
   observacao?: string | null;
   criadoEm?: string;
+  /**
+   * Status do pagamento (aditivo do contrato): o backend pode preencher nas
+   * listagens ou omitir/null. Quando ausente, os fluxos de pagamento não são
+   * alterados e nenhum badge é renderizado.
+   */
+  pagamentoStatus?: PagamentoStatus | null;
 }
 
 /**

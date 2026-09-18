@@ -43,6 +43,7 @@ import { renderSettingsForm } from "../features/settingsForm.js";
 import { initBookingWizard } from "../features/bookingWizard.js";
 import { attachPercentMask, attachUppercaseMask } from "../ui/mask.js";
 import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
+import { pagamentoBadgeHtml } from "../ui/pagamentoBadge.js";
 import { totalDespesasFiltro } from "../services/despesas.js";
 import {
   atualizarComissoesFuncionario,
@@ -1224,7 +1225,7 @@ if (status === "cancelado") {
                   <td>${escapeHtml(funcionario)}</td>
                   <td>${escapeHtml(name)}</td>
                   <td>${formatDateMedium(a.data)} · ${a.hora}</td>
-                  <td>${statusBadge(a.status)}</td>
+                  <td><span class="status-badges">${statusBadge(a.status)} ${pagamentoBadgeHtml(a.pagamentoStatus)}</span></td>
                   <td><span class="cell-actions">${actions}</span></td>
                 </tr>`;
             })
@@ -1502,7 +1503,7 @@ if (status === "cancelado") {
           <button type="button" class="modal__close" data-close aria-label="Fechar">${icon("x", 18)}</button>
         </div>
         <div class="modal__body">
-          <div class="detail-status">${statusBadge(app.status)}</div>
+          <div class="detail-status status-badges">${statusBadge(app.status)} ${pagamentoBadgeHtml(app.pagamentoStatus)}</div>
           <dl class="detail-list">
             <div><dt>Cliente</dt><dd>${escapeHtml(app.clienteNome ?? "-")}</dd></div>
             <div><dt>Serviço</dt><dd>${escapeHtml(name)}</dd></div>
