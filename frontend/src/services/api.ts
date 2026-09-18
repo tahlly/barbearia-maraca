@@ -135,11 +135,14 @@ export async function httpJson<T>(path: string, init: RequestInit = {}): Promise
     throw new ApiError(serverMessage, 401);
   }
 
-  /* 401 em caminho autenticado → sessão expirada: limpa storage e vai ao login. */
+  /* 401 em caminho autenticado → sessão expirada: limpa storage e vai ao login.
+   * Regra de UX: cliente NUNCA cai na tela de login administrativo (`/login`).
+   * Usa o papel da sessão ANTES de limpá-la para escolher `/login-cliente`. */
   if (response.status === 401) {
     if (readTokenFromSession()) {
+      const role = readSessionRole();
       clearUserStorage();
-      navigateTo("/login");
+      navigateTo(role === "cliente" ? "/login-cliente" : "/login");
     }
     const serverMessage = (await readErrorMessage(response)) ?? "Sessão expirada. Faça login novamente.";
     throw new ApiError(serverMessage, 401);
