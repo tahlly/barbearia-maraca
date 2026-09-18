@@ -827,6 +827,26 @@ body.light-theme .pagination__select {
    .alert/.btn. Container estreito para o card de feedback não esticar em
    telas largas; 560px é intencional, com fallback responsivo via
    width:100% herdado de .container. */
+
+/* Rodapé no fim da tela: esta página é curta (um único card) e o .footer é o
+   último irmão de #app, então sem isto ele sobe para logo abaixo do conteúdo,
+   no meio da viewport. Com o escopo abaixo, header (sticky, no fluxo) + #app +
+   .footer dividem a altura da viewport e #app cresce absorvendo a sobra, o que
+   empurra o rodapé para a base — sem depender de altura fixa do rodapé.
+   Escopo por `:has(.pagamento-retorno)` (classe exclusiva desta página) para
+   não alterar nenhuma outra tela; `dvh` acompanha a barra de endereço no
+   mobile, como em auth.css/landing.css. Não interfere no modo painel, que
+   esconde header/footer, nem no card, que mantém a posição atual. */
+body:has(.pagamento-retorno) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+body:has(.pagamento-retorno) > #app {
+  flex: 1 1 auto;
+}
+
 .pagamento-retorno {
   max-width: 560px;
 }
