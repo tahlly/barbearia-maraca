@@ -361,6 +361,17 @@ body.light-theme textarea.input {
   color: var(--color-text-secondary);
 }
 
+/* ----- Grupo de badges lado a lado (ex.: status do agendamento +
+   status de pagamento em tabelas e modais de detalhe). Wrapper explícito
+   para espaçar badges adjacentes sem criar regra global `.badge + .badge`
+   que afetaria futuros usos em outras telas. */
+.status-badges {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .alert {
   display: flex;
   align-items: flex-start;
@@ -809,4 +820,21 @@ body.light-theme .pagination__select {
     flex: 1 1 100%;
     min-width: 0;
   }
+}
+
+/* ----- Página de retorno de pagamento (#/pagamento/retorno) -----
+   Página pública (fora do painel) que compõe .section/.container/.card/
+   .alert/.btn. Container estreito para o card de feedback não esticar em
+   telas largas; 560px é intencional, com fallback responsivo via
+   width:100% herdado de .container. */
+.pagamento-retorno {
+  max-width: 560px;
+}
+
+.pagamento-retorno__actions {
+  margin-top: var(--space-4);
+}
+
+.pagamento-retorno__retry {
+  margin-top: var(--space-3);
 }

@@ -265,6 +265,24 @@
 }
 
 /* ------------------------------------------------------------------ */
+/*  Checkout Bricks (Card Payment Brick) — pagamento do Cliente        */
+/*  O MP injeta os próprios estilos do formulário; aqui apenas o        */
+/*  contêiner garante largura total e altura mínima para o render.     */
+/* ------------------------------------------------------------------ */
+.card-payment-brick {
+  width: 100%;
+  min-height: 320px;
+  margin: var(--space-3) 0;
+}
+
+.card-pay__resumo {
+  font-size: 0.92rem;
+  color: var(--color-text-secondary);
+  text-align: center;
+  margin-bottom: var(--space-2);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Tabela de agendamentos do Cliente — coluna Ações sem sobreposição  */
 /*  ------------------------------------------------------------------ */
 /* O problema: com larguras originais (Ações 20% ≈ 120px em 600px),
