@@ -94,7 +94,7 @@ Regras centrais que impactam o frontend:
 - o frontend consome contratos públicos da API, não o schema relacional diretamente;
 - o projeto já usa Vite como build tool e um roteador client-side próprio baseado em hash (`frontend/src/router.ts`), sem biblioteca de terceiros;
 - a estrutura já está organizada em `pages/`, `views/`, `features/`, `services/` e `ui/`, com painéis de Cliente, Profissional e Recepcionista/Administrador já implementados; novas telas e ajustes devem seguir essa organização existente em vez de propor uma nova;
-- o login com Google já está implementado de ponta a ponta em `frontend/src/services/googleAuth.ts` (fluxo real via Google Identity Services) e `frontend/src/views/loginCliente.ts` (botão e tratamento de erro); porém `CONFIG.useMockApi` em `frontend/src/config.ts` está fixo em `true` no código-fonte, então o fluxo real só roda se esse valor for alterado manualmente — tornar esse toggle configurável por variável de ambiente é uma pendência, não uma decisão já tomada.
+- o login com Google já está implementado de ponta a ponta em `frontend/src/services/googleAuth.ts` (fluxo real via Google Identity Services) e `frontend/src/views/loginCliente.ts` (botão e tratamento de erro); não existe toggle `CONFIG.useMockApi` em `frontend/src/config.ts` — o frontend sempre consome a API real via `CONFIG.apiBaseUrl` (default `/api`). O nome `useMockApi` e a variável `VITE_USE_MOCK_API` já apareceram em documentação antiga, mas nunca foram lidos pelo código atual; nenhuma documentação deve orientar o agente a alterar um toggle inexistente.
 
 ## Fonte de verdade
 Considere como fonte de verdade, nesta ordem:
