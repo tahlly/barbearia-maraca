@@ -1,6 +1,7 @@
 import type { Knex } from 'knex';
 import db from '../database/connection';
 import type { AgendamentoStatus } from '../dtos/agendamento-dto';
+import { deCentavos, paraCentavos } from '../utils/dinheiro';
 
 export interface AgendamentoRow {
   id: string;
@@ -229,46 +230,128 @@ interface FaturamentoPorServicoRow {
   valorTotal: string | number | null;
 }
 
+/** Acumulador em JS para mesclar as duas bases do faturamento por serviço. */
+interface AgrupadoPorServico {
+  servicoId: string;
+  servicoNome: string;
+  quantidade: number;
+  valorCentavos: bigint;
+}
+
 /**
- * Resume o faturamento de agendamentos `concluido` em um período,
- * somando o preço do serviço do agendamento. Se `funcionarioId` for
- * informado, restringe ao barbeiro (usca do dashboard do profissional).
+ * Agrupa a base recebida por serviço, devolvendo linhas
+ * `FaturamentoPorServicoRow`. `soma` é a expressão de valor da base:
+ * `s.preco` para concluídos e `p.valor_centavos / 100.0` para cancelados
+ * com pagamento aprovado (valor realmente pago).
+ */
+async function agruparPorServico(
+  query: Knex.QueryBuilder,
+  soma: string | Knex.Raw,
+): Promise<FaturamentoPorServicoRow[]> {
+  const rows = await query
+    .clone()
+    .select('a.servico_id as servicoId', 's.nome as servicoNome')
+    .count({ quantidade: '*' })
+    .sum({ valorTotal: soma })
+    .groupBy('a.servico_id', 's.nome') as unknown as FaturamentoPorServicoRow[];
+  return rows;
+}
+
+/**
+ * Resume o faturamento em um período: agendamentos `concluido` (somados pelo
+ * preço do serviço, `s.preco`) + agendamentos `cancelado` com pagamento
+ * `aprovado` e NÃO estornado (somados pelo valor realmente pago,
+ * `p.valor_centavos / 100.0`, nunca `s.preco`). Pagamento feito e não
+ * estornado é receita da barbearia, independente de o agendamento ter sido
+ * concluído ou cancelado.
+ *
+ * O índice único parcial `uq_pagamento_agendamento_aprovado` garante UM
+ * pagamento aprovado por agendamento — o join de cancelados pagos não
+ * duplica linhas. Se `funcionarioId` for informado, restringe ao barbeiro
+ * (dashboard do profissional).
  */
 export async function resumirFaturamento(opcoes: {
   funcionarioId?: string;
   inicio: string;
   fim: string;
 }): Promise<FaturamentoResumoRow> {
-  const query = db('agendamento as a')
+  // Base 1: concluídos — mesmo comportamento de sempre (soma `s.preco`).
+  const queryConcluidos = db('agendamento as a')
     .join('servico as s', 's.id', 'a.servico_id')
     .where('a.status', 'concluido')
     .whereBetween('a.data', [opcoes.inicio, opcoes.fim]);
 
+  // Base 2: cancelados com pagamento aprovado (não estornado = receita).
+  const queryCanceladosPagos = db('agendamento as a')
+    .join('servico as s', 's.id', 'a.servico_id')
+    .join('pagamento as p', 'p.agendamento_id', 'a.id')
+    .where('a.status', 'cancelado')
+    .where('p.status', 'aprovado')
+    .whereBetween('a.data', [opcoes.inicio, opcoes.fim]);
+
   if (opcoes.funcionarioId) {
-    query.where('a.funcionario_id', opcoes.funcionarioId);
+    queryConcluidos.where('a.funcionario_id', opcoes.funcionarioId);
+    queryCanceladosPagos.where('a.funcionario_id', opcoes.funcionarioId);
   }
 
-  const totalRow = await query.clone().count({ quantidade: '*' }).first<FaturamentoTotalRow>();
-  const somaRow = await query.clone().sum({ valorTotal: 's.preco' }).first<FaturamentoSomaRow>();
+  const [
+    totalConcluidos,
+    somaConcluidos,
+    totalCanceladosPagos,
+    somaCanceladosPagos,
+    porServicoConcluidos,
+    porServicoCanceladosPagos,
+  ] = await Promise.all([
+    queryConcluidos.clone().count({ quantidade: '*' }).first<FaturamentoTotalRow>(),
+    queryConcluidos.clone().sum({ valorTotal: 's.preco' }).first<FaturamentoSomaRow>(),
+    queryCanceladosPagos.clone().count({ quantidade: '*' }).first<FaturamentoTotalRow>(),
+    queryCanceladosPagos
+      .clone()
+      .sum({ valorTotal: db.raw('p.valor_centavos / 100.0') })
+      .first<FaturamentoSomaRow>(),
+    agruparPorServico(queryConcluidos, 's.preco'),
+    agruparPorServico(queryCanceladosPagos, db.raw('p.valor_centavos / 100.0')),
+  ]);
 
-  const porServicoRows = await query
-    .clone()
-    .select('a.servico_id as servicoId', 's.nome as servicoNome')
-    .count({ quantidade: '*' })
-    .sum({ valorTotal: 's.preco' })
-    .groupBy('a.servico_id', 's.nome')
-    .orderBy('valorTotal', 'desc') as unknown as FaturamentoPorServicoRow[];
+  const quantidade =
+    Number(totalConcluidos?.quantidade ?? 0) + Number(totalCanceladosPagos?.quantidade ?? 0);
+  // Soma em centavos (BigInt) para não acumular imprecisão de ponto flutuante.
+  const valorTotal = deCentavos(
+    paraCentavos(String(somaConcluidos?.valorTotal ?? 0)) +
+      paraCentavos(String(somaCanceladosPagos?.valorTotal ?? 0)),
+  );
 
-  return {
-    quantidade: Number(totalRow?.quantidade ?? 0),
-    valorTotal: String(somaRow?.valorTotal ?? 0),
-    porServico: porServicoRows.map((r) => ({
+  // Mescla as duas bases por serviço (mesma chave `servicoId`), somando
+  // quantidade e valorTotal. A ordenação continua por valorTotal desc,
+  // mesmo padrão da consulta única anterior.
+  const porServicoMap = new Map<string, AgrupadoPorServico>();
+  for (const r of [...porServicoConcluidos, ...porServicoCanceladosPagos]) {
+    const existente = porServicoMap.get(r.servicoId);
+    if (existente) {
+      existente.quantidade += Number(r.quantidade);
+      existente.valorCentavos += paraCentavos(String(r.valorTotal ?? '0'));
+    } else {
+      porServicoMap.set(r.servicoId, {
+        servicoId: r.servicoId,
+        servicoNome: r.servicoNome,
+        quantidade: Number(r.quantidade),
+        valorCentavos: paraCentavos(String(r.valorTotal ?? '0')),
+      });
+    }
+  }
+
+  const porServico = [...porServicoMap.values()]
+    .sort((a, b) =>
+      a.valorCentavos < b.valorCentavos ? 1 : a.valorCentavos > b.valorCentavos ? -1 : 0,
+    )
+    .map((r) => ({
       servicoId: r.servicoId,
       servicoNome: r.servicoNome,
-      quantidade: Number(r.quantidade),
-      valorTotal: String(r.valorTotal ?? 0),
-    })),
-  };
+      quantidade: r.quantidade,
+      valorTotal: deCentavos(r.valorCentavos),
+    }));
+
+  return { quantidade, valorTotal, porServico };
 }
 
 export async function buscarHorariosOcupados(
@@ -298,7 +381,8 @@ interface ReceitaPorPeriodoRow {
  * agrupado por semana de calendário (segunda-feira, via `date_trunc('week')`).
  *
  * Usado pelo bloco "Receita realizada vs. prevista" do Resumo:
- * - realizada = `['concluido']` (mesma base do `resumirFaturamento`);
+ * - realizada = `['concluido']` (base PRÓPRIA do Resumo — NÃO inclui
+ *   cancelados com pagamento aprovado, ao contrário de `resumirFaturamento`);
  * - prevista = `['pendente', 'confirmado']` (agendados, ainda não concluídos).
  * A service completa as semanas sem dados com zero — aqui retorna apenas as
  * semanas com pelo menos um agendamento.

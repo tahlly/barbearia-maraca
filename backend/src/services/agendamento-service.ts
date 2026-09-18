@@ -530,7 +530,11 @@ export async function reverterConclusaoAgendamento(
 }
 
 /**
- * Resumo de faturamento (agendamentos `concluido`) para o período informado.
+ * Resumo de faturamento para o período informado: agendamentos `concluido`
+ * (somados pelo preço do serviço) + agendamentos `cancelado` com pagamento
+ * `aprovado` não estornado (somados pelo valor realmente pago). Pagamento
+ * feito e não estornado é receita da barbearia, independente de o agendamento
+ * ter sido concluído ou cancelado.
  *
  * - Profissional: sempre calcula sobre a própria agenda.
  * - Admin: calcula sobre todos os barbeiros.

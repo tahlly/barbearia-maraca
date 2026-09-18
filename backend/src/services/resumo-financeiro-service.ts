@@ -31,7 +31,10 @@ const TIPOS_DESPESA: TipoDespesa[] = ['fixa', 'variavel', 'comissao', 'outro'];
  * dentro de `obterFaturamento` — a fonte única do despesa/lucro/margem é o
  * próprio faturamento (um único DTO financeiro para a tela). O período
  * anterior é obtido chamando `obterFaturamento` com a janela equivalente
- * imediatamente anterior.
+ * imediatamente anterior. O KPI `receita` herda a decisão do faturamento:
+ * inclui cancelados com pagamento aprovado (não estornado). Os blocos
+ * agrupados (evolução mensal e realizada × prevista) usam base PRÓPRIA
+ * somente `concluido` — ver abaixo.
  *
  * DECISÃO DE PERÍODO ANTERIOR (comparativo): janela de mesmo tamanho (em dias)
  * imediatamente anterior ao período atual: se o atual é [inicio, fim], o
@@ -48,13 +51,18 @@ const TIPOS_DESPESA: TipoDespesa[] = ['fixa', 'variavel', 'comissao', 'outro'];
  * DECISÃO DE EVOLUÇÃO MENSAL: janela fixa de 12 meses terminando no mês
  * corrente — independente do `inicio`/`fim` informado (mesmo padrão do gráfico
  * de agendamentos por dia do Dashboard, que usa janela própria). Receita =
- * agendamentos concluídos; Despesa = despesas do mês; Lucro = receita − despesa.
+ * agendamentos concluídos (base PRÓPRIA via `somarReceitaPorMes` — NÃO inclui
+ * cancelados com pagamento aprovado); Despesa = despesas do mês; Lucro =
+ * receita − despesa.
  *
- * DECISÃO DE REALIZADA × PREVISTA: realizada = agendamentos `concluido`;
- * prevista = agendamentos `pendente` ou `confirmado` (agendados, ainda não
- * acontecidos). Agrupamento por semana de calendário (segunda-feira via
- * `date_trunc('week')`), cobrindo o período informado; as semanas que tocam o
- * período são listadas e as sem dados vêm zeradas (padrão do dashboard).
+ * DECISÃO DE REALIZADA × PREVISTA: realizada = agendamentos `concluido`
+ * (base PRÓPRIA do Resumo via `somarReceitaPorSemana` — NÃO inclui cancelados
+ * com pagamento aprovado, ao contrário do `resumirFaturamento`, que alimenta o
+ * KPI `receita` via `obterFaturamento`); prevista = agendamentos `pendente` ou
+ * `confirmado` (agendados, ainda não acontecidos). Agrupamento por semana de
+ * calendário (segunda-feira via `date_trunc('week')`), cobrindo o período
+ * informado; as semanas que tocam o período são listadas e as sem dados vêm
+ * zeradas (padrão do dashboard).
  *
  * ACESSO: permissão efetiva `ver_financeiro` no middleware E nesta service
  * (defesa em profundidade). IMPORTANTE: como o comparativo reusa

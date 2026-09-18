@@ -152,7 +152,7 @@ describe('obterFaturamento', () => {
     });
   });
 
-  it('retorna ticket médio zerado quando não há concluídos', async () => {
+  it('retorna ticket médio zerado quando não há faturamento (resumo vazio)', async () => {
     const resumo = await obterFaturamento(usuario('admin'), 'admin', {
       inicio: '2026-01-01',
       fim: '2026-12-31',

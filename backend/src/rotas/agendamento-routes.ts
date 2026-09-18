@@ -259,7 +259,7 @@ const agendamentoRoutes = Router();
  * /api/agendamentos/faturamento:
  *   get:
  *     tags: [Agendamentos]
- *     summary: Resumo de faturamento em um periodo (agendamentos concluidos). Profissional ve sua propria agenda; admin ve todos; recepcionista/cliente nao acessam.
+ *     summary: Resumo de faturamento em um periodo (agendamentos concluidos + cancelados com pagamento aprovado nao estornado). Profissional ve sua propria agenda; admin ve todos; recepcionista/cliente nao acessam.
  *     security:
  *       - bearerAuth: []
  *     parameters:

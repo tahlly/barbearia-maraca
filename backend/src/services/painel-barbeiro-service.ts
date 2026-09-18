@@ -184,7 +184,8 @@ export async function obterPainelBarbeiro(
   }));
 
   // Serviços mais feitos: reusa o porServico de resumirFaturamento
-  // (agendamentos concluídos do mês) e ordena por quantidade decrescente.
+  // (concluídos + cancelados com pagamento aprovado não estornado do mês) e
+  // ordena por quantidade decrescente.
   const servicosMaisFeitos: PainelBarbeiroServicoDTO[] = faturamento.porServico
     .map((item) => ({
       servicoId: item.servicoId,

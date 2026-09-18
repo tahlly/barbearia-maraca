@@ -64,7 +64,8 @@ function listarDatasEntre(inicio: string, fim: string): string[] {
  * - `horariosPico`: contagem por slot de 30 minutos da coluna `hora` (time),
  *   extraindo HH:MM real — sem arredondar para hora cheia.
  * - `servicosMaisVendidos`: reusa `resumirFaturamento` (agendamentos
- *   CONCLUÍDOS), contando por serviço e ordenando do mais vendido.
+ *   concluídos + cancelados com pagamento aprovado não estornado), contando
+ *   por serviço e ordenando do mais vendido.
  *
  * Acesso: permissão efetiva `ver_financeiro` (negação por padrão).
  * O período base (`inicio`/`fim`, default ano corrente) rege todos os
@@ -127,7 +128,7 @@ export async function obterGraficosDashboard(
   }));
 
   // Serviços mais vendidos: reusa o porServico de resumirFaturamento
-  // (já conta apenas agendamentos concluídos no período) e ordena por
+  // (concluídos + cancelados com pagamento aprovado não estornado) e ordena por
   // quantidade decrescente para o gráfico de barras horizontais.
   const servicosMaisVendidos: ServicoMaisVendidoDTO[] = faturamento.porServico
     .map((item) => ({
