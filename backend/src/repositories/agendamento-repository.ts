@@ -119,6 +119,9 @@ export async function criar(dados: {
 /**
  * Dados mínimos do serviço vinculado a um agendamento (para criar o pagamento
  * sem confiar no cliente, com o preço vindo do banco).
+ *
+ * `trx` é usado pelo fluxo de conclusão com pagamento presencial: o snapshot do
+ * preço precisa participar da MESMA transação do registro do pagamento.
  */
 export interface DadosServicoDoAgendamento {
   nome: string;
@@ -127,8 +130,10 @@ export interface DadosServicoDoAgendamento {
 
 export async function buscarDadosServicoDoAgendamento(
   agendamentoId: string,
+  trx?: Knex.Transaction,
 ): Promise<DadosServicoDoAgendamento | null> {
-  const row = await db('servico as s')
+  const base = trx ?? db;
+  const row = await base('servico as s')
     .join('agendamento as a', 'a.servico_id', 's.id')
     .select('s.nome', 's.preco')
     .where('a.id', agendamentoId)

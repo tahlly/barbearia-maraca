@@ -378,6 +378,38 @@ describe('obterPagamento', () => {
     expect(pagamento?.status).toBe('aprovado');
   });
 
+  it('devolve mercadopagoOrderId null em um pagamento presencial (contrato honesto no GET /pagamento)', async () => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow());
+    buscarClientePorUsuarioIdMock.mockResolvedValue({ id: 'cliente-1', usuario_id: 'user-1' });
+    // Linha presencial: forma presencial → sem ordem do MP (migration 20260913000003).
+    buscarPagamentoMaisRecenteMock.mockResolvedValue(
+      pagamentoRow({
+        mercadopago_order_id: null,
+        mercadopago_payment_id: null,
+        status: 'aprovado',
+      }),
+    );
+
+    const pagamento = await obterPagamento('user-1', 'cliente', 'ag-1');
+
+    expect(pagamento).not.toBeNull();
+    expect(pagamento?.mercadopagoOrderId).toBeNull();
+    expect(pagamento?.status).toBe('aprovado');
+    // O DTO continua sem expor forma/valor novos; o id da ordem é o ÚNICO
+    // campo de ordem que existe no contrato, e ele é honestamente null aqui.
+    expect(Object.keys(pagamento ?? {}).sort()).toEqual([
+      'agendamentoId',
+      'atualizadoEm',
+      'checkoutUrl',
+      'criadoEm',
+      'id',
+      'mercadopagoOrderId',
+      'mercadopagoPaymentId',
+      'status',
+      'valorCentavos',
+    ]);
+  });
+
   it('retorna null quando não existe pagamento (200 com pagamento null)', async () => {
     buscarPorIdMock.mockResolvedValue(agendamentoRow());
     buscarPagamentoMaisRecenteMock.mockResolvedValue(null);

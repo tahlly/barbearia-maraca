@@ -12,6 +12,7 @@ import {
 } from '../services/agendamento-service';
 import type { CreateAgendamentoRequest } from '../dtos/agendamento-dto';
 import type { AgendamentoRow } from '../repositories/agendamento-repository';
+import type { PagamentoRow } from '../repositories/pagamento-repository';
 
 // ── Mocks ─────────────────────────────────────────────────────
 
@@ -57,6 +58,7 @@ const buscarFuncionarioPorUsuarioIdMock = vi.fn();
 const funcionarioExisteAtivoMock = vi.fn();
 const servicoExisteAtivoMock = vi.fn();
 const resumirFaturamentoMock = vi.fn();
+const buscarDadosServicoDoAgendamentoMock = vi.fn();
 
 vi.mock('../repositories/agendamento-repository', () => ({
   criar: (...args: unknown[]) => criarMock(...args),
@@ -69,19 +71,27 @@ vi.mock('../repositories/agendamento-repository', () => ({
   funcionarioExisteAtivo: (...args: unknown[]) => funcionarioExisteAtivoMock(...args),
   servicoExisteAtivo: (...args: unknown[]) => servicoExisteAtivoMock(...args),
   resumirFaturamento: (...args: unknown[]) => resumirFaturamentoMock(...args),
+  buscarDadosServicoDoAgendamento: (...args: unknown[]) =>
+    buscarDadosServicoDoAgendamentoMock(...args),
 }));
 
 // pagamento-repository: funções importadas pelo agendamento-service. O
 // reagendamento preserva o pagamento da MESMA linha e devolve pagamentoStatus
-// no DTO; buscarStatusPagamentoPorAgendamentos entra no factory apenas para o
-// import do service não ficar undefined (não é chamado nestes testes).
+// no DTO; a conclusão com a flag da recepção registra o pagamento presencial
+// NA MESMA transação (buscarPendente/atualizarStatus/criarPresencial).
 const buscarPagamentoMaisRecenteMock = vi.fn();
 const buscarStatusPagamentoPorAgendamentosMock = vi.fn();
+const buscarPendentePorAgendamentoMock = vi.fn();
+const atualizarStatusPagamentoMock = vi.fn();
+const criarPagamentoPresencialMock = vi.fn();
 
 vi.mock('../repositories/pagamento-repository', () => ({
   buscarPorAgendamentoMaisRecente: (...args: unknown[]) => buscarPagamentoMaisRecenteMock(...args),
   buscarStatusPagamentoPorAgendamentos: (...args: unknown[]) =>
     buscarStatusPagamentoPorAgendamentosMock(...args),
+  buscarPendentePorAgendamento: (...args: unknown[]) => buscarPendentePorAgendamentoMock(...args),
+  atualizarStatus: (...args: unknown[]) => atualizarStatusPagamentoMock(...args),
+  criarPagamentoPresencial: (...args: unknown[]) => criarPagamentoPresencialMock(...args),
 }));
 
 // cliente-repository: buscarClientePorId usado no fluxo staff.
@@ -782,6 +792,199 @@ describe('concluirAgendamento — hook de comissão', () => {
     expect(atualizarStatusMock).toHaveBeenCalledWith('ag-1', 'concluido', trxObj);
     expect(criarDespesaComissaoAutomaticaMock).toHaveBeenCalledTimes(1);
     expect(transacaoCommitada).toBe(false);
+  });
+});
+
+// ── conclusão com pagamento presencial (flag EXCLUSIVA da recepção) ──
+
+function pagamentoRowMock(sobre: Partial<PagamentoRow> = {}): PagamentoRow {
+  return {
+    id: 'pag-1',
+    agendamento_id: 'ag-1',
+    mercadopago_order_id: 'tmp-ordem-1',
+    mercadopago_payment_id: null,
+    valor_centavos: 4500,
+    status: 'pendente',
+    checkoutUrl: null,
+    created_at: '2026-09-13T10:00:00.000Z',
+    updated_at: '2026-09-13T10:00:00.000Z',
+    ...sobre,
+  };
+}
+
+describe('concluirAgendamento — pagamento presencial (recepcionista)', () => {
+  beforeEach(() => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ status: 'confirmado' }));
+    atualizarStatusMock.mockResolvedValue(undefined);
+    buscarPagamentoMaisRecenteMock.mockResolvedValue(null);
+    buscarPendentePorAgendamentoMock.mockResolvedValue(null);
+    buscarDadosServicoDoAgendamentoMock.mockResolvedValue({ nome: 'Corte', preco: '45.00' });
+    criarPagamentoPresencialMock.mockResolvedValue(undefined);
+    // Comissão desligada por padrão neste describe (foco no pagamento); os
+    // testes específicos de comissão reativam o cenário explicitamente.
+    buscarConfiguracaoComissaoMock.mockResolvedValue(false);
+  });
+
+  it('recepção conclui com a flag: linha presencial/aprovado com o VALOR DO SERVIÇO e registrado_por_usuario_id, resposta pagamentoStatus aprovado', async () => {
+    const resultado = await concluirAgendamento('user-recep', 'recepcionista', 'ag-1', {
+      registrarPagamentoPresencial: true,
+    });
+
+    expect(resultado.status).toBe('concluido');
+    expect(resultado.pagamentoStatus).toBe('aprovado');
+    expect(transactionMock).toHaveBeenCalledTimes(1);
+    // Todas as consultas do fluxo participam da MESMA transação (trx).
+    expect(buscarPagamentoMaisRecenteMock).toHaveBeenCalledWith('ag-1', trxObj);
+    expect(buscarPendentePorAgendamentoMock).toHaveBeenCalledWith('ag-1', trxObj);
+    expect(buscarDadosServicoDoAgendamentoMock).toHaveBeenCalledWith('ag-1', trxObj);
+    expect(criarPagamentoPresencialMock).toHaveBeenCalledTimes(1);
+    expect(criarPagamentoPresencialMock).toHaveBeenCalledWith(
+      { agendamentoId: 'ag-1', valorCentavos: 4500, registradoPorUsuarioId: 'user-recep' },
+      trxObj,
+    );
+    expect(atualizarStatusMock).toHaveBeenCalledWith('ag-1', 'concluido', trxObj);
+    expect(transacaoCommitada).toBe(true);
+  });
+
+  it('recepção conclui SEM a flag: nenhuma linha de pagamento e resposta sem pagamentoStatus (comportamento atual preservado)', async () => {
+    const resultado = await concluirAgendamento('user-recep', 'recepcionista', 'ag-1');
+
+    expect(resultado.status).toBe('concluido');
+    expect(resultado.pagamentoStatus).toBeUndefined();
+    expect(criarPagamentoPresencialMock).not.toHaveBeenCalled();
+    expect(buscarPendentePorAgendamentoMock).not.toHaveBeenCalled();
+    expect(transactionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('flag enviada por ADMIN → 403 ANTES de qualquer consulta/persistência', async () => {
+    await expect(
+      concluirAgendamento('user-admin', 'admin', 'ag-1', { registrarPagamentoPresencial: true }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    expect(buscarPorIdMock).not.toHaveBeenCalled();
+    expect(transactionMock).not.toHaveBeenCalled();
+    expect(criarPagamentoPresencialMock).not.toHaveBeenCalled();
+  });
+
+  it('flag enviada por PROFISSIONAL → 403 e nada persistido', async () => {
+    await expect(
+      concluirAgendamento('user-prof', 'profissional', 'ag-1', { registrarPagamentoPresencial: true }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    expect(buscarPorIdMock).not.toHaveBeenCalled();
+    expect(transactionMock).not.toHaveBeenCalled();
+  });
+
+  it('flag enviada por CLIENTE → 403 e nada persistido', async () => {
+    await expect(
+      concluirAgendamento('user-cliente', 'cliente', 'ag-1', { registrarPagamentoPresencial: true }),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+
+    expect(buscarPorIdMock).not.toHaveBeenCalled();
+    expect(transactionMock).not.toHaveBeenCalled();
+  });
+
+  it('já existe pagamento APROVADO → ValidationError e agendamento NÃO é concluído (rollback total)', async () => {
+    buscarPagamentoMaisRecenteMock.mockResolvedValue(pagamentoRowMock({ status: 'aprovado' }));
+
+    await expect(
+      concluirAgendamento('user-recep', 'recepcionista', 'ag-1', { registrarPagamentoPresencial: true }),
+    ).rejects.toThrow('Pagamento já registrado para este agendamento');
+
+    expect(atualizarStatusMock).not.toHaveBeenCalled();
+    expect(criarPagamentoPresencialMock).not.toHaveBeenCalled();
+    expect(transacaoCommitada).toBe(false);
+  });
+
+  it('existe ordem MP PENDENTE → vira cancelado na MESMA transação do registro presencial', async () => {
+    buscarPendentePorAgendamentoMock.mockResolvedValue(
+      pagamentoRowMock({ id: 'pag-pend-1', status: 'pendente' }),
+    );
+
+    const resultado = await concluirAgendamento('user-recep', 'recepcionista', 'ag-1', {
+      registrarPagamentoPresencial: true,
+    });
+
+    expect(resultado.pagamentoStatus).toBe('aprovado');
+    expect(atualizarStatusPagamentoMock).toHaveBeenCalledWith('pag-pend-1', 'cancelado', { trx: trxObj });
+    expect(criarPagamentoPresencialMock).toHaveBeenCalledTimes(1);
+    expect(transacaoCommitada).toBe(true);
+  });
+
+  it('corrida (23505 do índice de aprovado) → ValidationError amigável, não 500', async () => {
+    criarPagamentoPresencialMock.mockRejectedValue({ code: '23505' });
+
+    await expect(
+      concluirAgendamento('user-recep', 'recepcionista', 'ag-1', { registrarPagamentoPresencial: true }),
+    ).rejects.toThrow('Pagamento já registrado para este agendamento');
+    expect(transacaoCommitada).toBe(false);
+  });
+
+  it('falha no MEIO da transação → rollback total (nenhuma linha de pagamento, status inalterado)', async () => {
+    // O INSERT do pagamento acontece e DEPOIS o hook de comissão falha: o Knex
+    // desfaz TUDO (o pagamento presencial também é desfeito) e o agendamento
+    // permanece confirmado.
+    buscarConfiguracaoComissaoMock.mockResolvedValue(true);
+    buscarDespesaComissaoPorAgendamentoMock.mockResolvedValue(false);
+    buscarDadosParaComissaoDeAgendamentoMock.mockResolvedValue(dadosComissaoHook());
+    buscarPercentualComissaoMock.mockResolvedValue('40.00');
+    criarDespesaComissaoAutomaticaMock.mockRejectedValue(new Error('falha simulada na comissão'));
+
+    await expect(
+      concluirAgendamento('user-recep', 'recepcionista', 'ag-1', { registrarPagamentoPresencial: true }),
+    ).rejects.toThrow('falha simulada na comissão');
+
+    expect(criarPagamentoPresencialMock).toHaveBeenCalledTimes(1);
+    expect(atualizarStatusMock).toHaveBeenCalledWith('ag-1', 'concluido', trxObj);
+    expect(transacaoCommitada).toBe(false);
+  });
+
+  it('comissão: conclusão com pagamento presencial gera a despesa de comissão normalmente', async () => {
+    buscarConfiguracaoComissaoMock.mockResolvedValue(true);
+    buscarDespesaComissaoPorAgendamentoMock.mockResolvedValue(false);
+    buscarDadosParaComissaoDeAgendamentoMock.mockResolvedValue(dadosComissaoHook());
+    buscarPercentualComissaoMock.mockResolvedValue('40.00');
+    criarDespesaComissaoAutomaticaMock.mockResolvedValue(undefined);
+
+    await concluirAgendamento('user-recep', 'recepcionista', 'ag-1', {
+      registrarPagamentoPresencial: true,
+    });
+
+    expect(criarPagamentoPresencialMock).toHaveBeenCalledTimes(1);
+    expect(criarDespesaComissaoAutomaticaMock).toHaveBeenCalledTimes(1);
+    expect(criarDespesaComissaoAutomaticaMock).toHaveBeenCalledWith(
+      {
+        descricao: 'Comissão Funcionario Teste',
+        valor: '18.00',
+        data: agendamentoRow().data,
+        funcionarioId: 'func-1',
+        agendamentoId: 'ag-1',
+      },
+      trxObj,
+    );
+  });
+
+  it('comissão: reverter a conclusão remove a despesa (comportamento atual mantido após presencial)', async () => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ status: 'concluido' }));
+    removerDespesaComissaoPorAgendamentoMock.mockResolvedValue(undefined);
+    removerPendenciaComissaoPorAgendamentoMock.mockResolvedValue(undefined);
+    atualizarStatusMock.mockResolvedValue(undefined);
+
+    const resultado = await reverterConclusaoAgendamento('user-recep', 'recepcionista', 'ag-1');
+
+    expect(resultado.status).toBe('confirmado');
+    expect(removerDespesaComissaoPorAgendamentoMock).toHaveBeenCalledWith('ag-1', trxObj);
+    expect(removerPendenciaComissaoPorAgendamentoMock).toHaveBeenCalledWith('ag-1', trxObj);
+  });
+
+  it('agendamento inexistente com a flag → 404 (sem tocar em pagamento)', async () => {
+    buscarPorIdMock.mockResolvedValue(null);
+
+    await expect(
+      concluirAgendamento('user-recep', 'recepcionista', 'ag-x', { registrarPagamentoPresencial: true }),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    expect(transactionMock).not.toHaveBeenCalled();
+    expect(criarPagamentoPresencialMock).not.toHaveBeenCalled();
   });
 });
 

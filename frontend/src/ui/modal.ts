@@ -113,18 +113,31 @@ interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /**
+   * Diálogo bloqueante: não pode ser fechado por X, backdrop ou Escape —
+   * somente pelos botões de ação retorna. Usado no fluxo da Recepção
+   * "O cliente pagou?", onde fechar sem resposta hoje equivale a "Não"
+   * (concluir o atendimento sem registrar o pagamento). Os demais chamadores
+   * não passam a opção e mantêm exatamente o comportamento atual.
+   */
+  blocking?: boolean;
 }
 
 export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
   return new Promise((resolve) => {
+    // Travamento condicionado ao chamador (`blocking: true`): o handler global
+    // de Escape em ui/modal.ts já respeita `overlay.dataset.blocking === "true"`
+    // (mesmo mecanismo do popup de primeiro acesso em login.ts).
+    const blocking = options.blocking === true;
     const overlay = document.createElement("div");
     overlay.className = "modal-overlay";
     overlay.setAttribute("aria-hidden", "true");
+    if (blocking) overlay.dataset.blocking = "true";
     overlay.innerHTML = `
       <div class="modal modal--sm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
         <div class="modal__header">
           <h2 class="modal__title" id="confirm-title"></h2>
-          <button type="button" class="modal__close" data-close aria-label="Fechar">${icon("x", 18)}</button>
+          ${blocking ? "" : `<button type="button" class="modal__close" data-close aria-label="Fechar">${icon("x", 18)}</button>`}
         </div>
         <div class="modal__body">
           <p class="confirm__message"></p>
@@ -150,9 +163,12 @@ export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
 
     confirmBtn.addEventListener("click", () => finish(true));
     cancelBtn.addEventListener("click", () => finish(false));
-    overlay.querySelector("[data-close]")!.addEventListener("click", () => finish(false));
+    // Em modo bloqueante o botão X não é renderizado; nos demais modos o
+    // listener é exatamente o de antes (fechar equivale a "Não").
+    const closeBtn = overlay.querySelector("[data-close]");
+    if (closeBtn) closeBtn.addEventListener("click", () => finish(false));
     overlay.addEventListener("mousedown", (event) => {
-      if (event.target === overlay) finish(false);
+      if (event.target === overlay && !blocking) finish(false);
     });
 
     document.body.appendChild(overlay);

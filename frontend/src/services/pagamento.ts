@@ -16,7 +16,7 @@ export interface PagamentoDTO {
   agendamentoId: string;
   status: PagamentoStatus;
   valorCentavos: number;
-  mercadopagoOrderId: string;
+  mercadopagoOrderId: string | null;
   mercadopagoPaymentId: string | null;
   checkoutUrl: string | null;
   criadoEm: string;

@@ -25,7 +25,7 @@ const pagamentoRoutes = Router();
  *         status:
  *           $ref: '#/components/schemas/PagamentoStatus'
  *         valorCentavos: { type: integer, example: 4500 }
- *         mercadopagoOrderId: { type: string }
+ *         mercadopagoOrderId: { type: string, nullable: true, description: 'Id da ordem no Mercado Pago. null quando o pagamento é presencial (sem ordem MP).' }
  *         mercadopagoPaymentId: { type: string, nullable: true }
  *         checkoutUrl: { type: string, nullable: true }
  *         criadoEm: { type: string }

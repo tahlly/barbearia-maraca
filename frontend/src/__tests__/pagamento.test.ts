@@ -8,7 +8,7 @@ import {
   getPayment,
 } from "../services/pagamento";
 import { pagamentoAcoesHtml } from "../features/pagamentoAcoes";
-import { pagamentoBadgeHtml } from "../ui/pagamentoBadge";
+import { pagamentoBadgeHtml, pagamentoIndicadorPagoHtml } from "../ui/pagamentoBadge";
 
 const dtoBase = {
   id: "a1",
@@ -336,6 +336,34 @@ describe("pagamentoBadgeHtml", () => {
   it("null/undefined → string vazia (não polui a UI)", () => {
     expect(pagamentoBadgeHtml(null)).toBe("");
     expect(pagamentoBadgeHtml(undefined)).toBe("");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  pagamentoIndicadorPagoHtml — indicador operacional da Recepção     */
+/* ------------------------------------------------------------------ */
+describe("pagamentoIndicadorPagoHtml — indicador operacional da Recepção", () => {
+  it("aprovado → texto na cor de sucesso com ícone e rótulo Pago", () => {
+    const html = pagamentoIndicadorPagoHtml("aprovado");
+    expect(html).toContain('class="text--success"');
+    expect(html).toContain("Pago");
+    // Ícone já existente no projeto (bx-check-circle).
+    expect(html).toContain("bx-check-circle");
+  });
+
+  it("não usa pílula/badge de fundo (estilo leve, não compete com os status)", () => {
+    expect(pagamentoIndicadorPagoHtml("aprovado")).not.toContain("badge");
+  });
+
+  it("demais status → string vazia (nada é exibido quando não está pago)", () => {
+    for (const status of ["pendente", "recusado", "cancelado", "expirado"] as const) {
+      expect(pagamentoIndicadorPagoHtml(status)).toBe("");
+    }
+  });
+
+  it("null/undefined → string vazia (sem pagamento não polui a UI)", () => {
+    expect(pagamentoIndicadorPagoHtml(null)).toBe("");
+    expect(pagamentoIndicadorPagoHtml(undefined)).toBe("");
   });
 });
 

@@ -18,7 +18,12 @@ export class ConflitoPagamentoPendente extends Error {
 export interface PagamentoRow {
   id: string;
   agendamento_id: string;
-  mercadopago_order_id: string;
+  /**
+   * Id da ordem no Mercado Pago. `null` quando o pagamento é PRESENCIAL
+   * (forma `presencial` não possui ordem MP) — a coluna é NULLABLE desde a
+   * migration 20260913000003.
+   */
+  mercadopago_order_id: string | null;
   mercadopago_payment_id: string | null;
   valor_centavos: number;
   status: PagamentoStatus;
@@ -65,10 +70,11 @@ function isUniqueViolation(error: unknown): boolean {
 
 /**
  * Cria um pagamento pendente com id temporário (`tmp-<uuid>`, 40 chars <
- * 64). O id real da preferência do MP só existe depois da chamada à API;
- * a coluna `mercadopago_order_id` é NOT NULL e o UUID evita colisão com o
- * índice único. O service atualiza para o id da preferência real logo depois
- * (ou cancela em erro).
+ * 64). A coluna `mercadopago_order_id` é NULLABLE desde a migration
+ * 20260913000003, mas o fluxo do Mercado Pago SEMPRE grava um id (o CHECK
+ * `chk_pagamento_forma_coerencia` exige ordem para forma `mercadopago`); o
+ * UUID evita colisão com o índice único. O service atualiza para o id da
+ * preferência real logo depois (ou cancela em erro).
  */
 export async function criar(dados: {
   agendamentoId: string;
@@ -115,8 +121,12 @@ export async function buscarPorId(id: string): Promise<PagamentoRow | null> {
   return row ? mapearRow(row) : null;
 }
 
-export async function buscarPorAgendamentoMaisRecente(agendamentoId: string): Promise<PagamentoRow | null> {
-  const row = await db<PagamentoDbRow>('pagamento')
+export async function buscarPorAgendamentoMaisRecente(
+  agendamentoId: string,
+  trx?: Knex.Transaction,
+): Promise<PagamentoRow | null> {
+  const base = trx ?? db;
+  const row = await base<PagamentoDbRow>('pagamento')
     .where('agendamento_id', agendamentoId)
     .orderBy('created_at', 'desc')
     .orderBy('id', 'desc')
@@ -124,12 +134,64 @@ export async function buscarPorAgendamentoMaisRecente(agendamentoId: string): Pr
   return row ? mapearRow(row) : null;
 }
 
-/** Retorna o pendente ativo do agendamento (índice único parcial garante 0 ou 1). */
-export async function buscarPendentePorAgendamento(agendamentoId: string): Promise<PagamentoRow | null> {
-  const row = await db<PagamentoDbRow>('pagamento')
+/**
+ * Retorna o pendente ativo do agendamento (índice único parcial garante 0 ou 1).
+ * `trx` é usado pelo fluxo de conclusão com pagamento presencial: a consulta e o
+ * cancelamento do pendente do Mercado Pago rodam na MESMA transação do registro.
+ */
+export async function buscarPendentePorAgendamento(
+  agendamentoId: string,
+  trx?: Knex.Transaction,
+): Promise<PagamentoRow | null> {
+  const base = trx ?? db;
+  const row = await base<PagamentoDbRow>('pagamento')
     .where({ agendamento_id: agendamentoId, status: 'pendente' })
     .first();
   return row ? mapearRow(row) : null;
+}
+
+/**
+ * Registra o pagamento PRESENCIAL aprovado (recebido no balcão) dentro da
+ * transação da conclusão do agendamento — chamado somente pelo fluxo de
+ * `PATCH /api/agendamentos/:id/concluir` com a flag
+ * `registrar_pagamento_presencial: true` (papel recepcionista).
+ *
+ * Regras estruturais (migration 20260913000003):
+ * - `forma_pagamento = 'presencial'` (sem ordem do Mercado Pago);
+ * - `mercadopago_order_id = NULL` (o CHECK `chk_pagamento_forma_coerencia`
+ *   exige order id apenas para `mercadopago`);
+ * - `status = 'aprovado'` — o índice único parcial
+ *   `uq_pagamento_agendamento_aprovado` garante no MÁXIMO UMA aprovação por
+ *   agendamento (proteção estrutural contra duplo registro de "pago");
+ * - `registrado_por_usuario_id` = usuário autenticado (auditoria);
+ * - `valor_centavos` = snapshot do preço do serviço lido do banco pelo service
+ *   (nunca do request).
+ *
+ * A violação do índice único (23505, corrida) propaga ao service, que converte
+ * em `ValidationError` amigável — nunca erro 500.
+ *
+ * NOTA de contrato: `PagamentoRow.mercadopago_order_id` é `string | null`
+ * (coluna NULLABLE desde 20260913000003) e o DTO público
+ * (`PagamentoDTO.mercadopagoOrderId`) espelha o mesmo — o JSON de um
+ * pagamento presencial devolve `mercadopagoOrderId: null`, nunca um valor
+ * inventado ou omitido.
+ */
+export async function criarPagamentoPresencial(
+  dados: {
+    agendamentoId: string;
+    valorCentavos: number;
+    registradoPorUsuarioId: string;
+  },
+  trx: Knex.Transaction,
+): Promise<void> {
+  await trx('pagamento').insert({
+    agendamento_id: dados.agendamentoId,
+    mercadopago_order_id: null,
+    forma_pagamento: 'presencial',
+    status: 'aprovado',
+    valor_centavos: dados.valorCentavos,
+    registrado_por_usuario_id: dados.registradoPorUsuarioId,
+  });
 }
 
 export async function buscarPorOrderId(orderId: string): Promise<PagamentoRow | null> {

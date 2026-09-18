@@ -123,14 +123,35 @@ export async function confirmAppointment(id: string): Promise<Appointment> {
   return mapAppointment(dto);
 }
 
+/** Opções extras do PATCH /api/agendamentos/:id/concluir (contrato aprovado). */
+export interface ConcludeAppointmentOptions {
+  /**
+   * Recepção: registra a linha de pagamento presencial aprovada (valor já
+   * existente no sistema) junto da conclusão. O backend recusa com erro de
+   * validação (4xx) e NÃO conclui quando o agendamento já possui pagamento
+   * aprovado (ex.: Mercado Pago) — o frontend re-renderiza a tabela nesse caso.
+   */
+  registrarPagamentoPresencial?: boolean;
+}
+
 /**
  * Conclui um agendamento (profissional/recep/admin).
  * PATCH /api/agendamentos/:id/concluir
+ * Corpo OPCIONAL: `{ "registrar_pagamento_presencial": true }` — sem o corpo a
+ * chamada mantém exatamente o comportamento atual (qualquer papel que conclui).
  */
-export async function concludeAppointment(id: string): Promise<Appointment> {
+export async function concludeAppointment(
+  id: string,
+  options: ConcludeAppointmentOptions = {},
+): Promise<Appointment> {
   const dto = await httpJson<AgendamentoDTO>(
     `/agendamentos/${encodeURIComponent(id)}/concluir`,
-    { method: "PATCH" },
+    {
+      method: "PATCH",
+      ...(options.registrarPagamentoPresencial
+        ? { body: JSON.stringify({ registrar_pagamento_presencial: true }) }
+        : {}),
+    },
   );
   return mapAppointment(dto);
 }

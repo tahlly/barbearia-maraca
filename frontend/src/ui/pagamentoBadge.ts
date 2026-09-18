@@ -1,4 +1,5 @@
 import type { PagamentoStatus } from "../services/pagamento.js";
+import { icon } from "./icons.js";
 
 /* ------------------------------------------------------------------ */
 /*  Badge de status de pagamento                                      */
@@ -31,4 +32,18 @@ const PAGAMENTO_VARIANT: Record<PagamentoStatus, string> = {
 export function pagamentoBadgeHtml(status: PagamentoStatus | null | undefined): string {
   if (!status) return "";
   return `<span class="badge badge--${PAGAMENTO_VARIANT[status]}">${PAGAMENTO_LABEL[status]}</span>`;
+}
+
+/**
+ * Indicador leve da coluna "Pagamento" (Recepção e Administração): "Pago" em
+ * texto na cor de sucesso do projeto (sem pílula de fundo), quando o pagamento
+ * foi confirmado, e nada nos demais casos. O status detalhado
+ * (pendente/recusado/cancelado/expirado) fica no selo do modal de detalhes —
+ * nunca empilhado com a badge do agendamento na mesma célula.
+ * Reaproveita o utilitário de texto `.text--success` e o ícone já existentes.
+ */
+export function pagamentoIndicadorPagoHtml(status: PagamentoStatus | null | undefined): string {
+  return status === "aprovado"
+    ? `<span class="text--success">${icon("check-circle", 16)} Pago</span>`
+    : "";
 }

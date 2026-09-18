@@ -10,8 +10,12 @@ export interface PagamentoDTO {
   status: PagamentoStatus;
   /** Valor do serviço em centavos (copiado do preço na criação do pagamento). */
   valorCentavos: number;
-  /** Id da ordem no Mercado Pago (mercadopago_order_id). */
-  mercadopagoOrderId: string;
+  /**
+   * Id da ordem no Mercado Pago (mercadopago_order_id). `null` quando o
+   * pagamento é PRESENCIAL (forma `presencial` não possui ordem MP — coluna
+   * NULLABLE desde a migration 20260913000003).
+   */
+  mercadopagoOrderId: string | null;
   /** Id do pagamento aprovado no Mercado Pago (mercadopago_payment_id). */
   mercadopagoPaymentId: string | null;
   /**

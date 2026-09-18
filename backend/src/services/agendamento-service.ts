@@ -1,3 +1,4 @@
+import type { Knex } from 'knex';
 import {
   criar,
   buscarPorId,
@@ -9,6 +10,7 @@ import {
   funcionarioExisteAtivo,
   servicoExisteAtivo,
   resumirFaturamento,
+  buscarDadosServicoDoAgendamento,
   type AgendamentoRow,
 } from '../repositories/agendamento-repository';
 import db from '../database/connection';
@@ -23,6 +25,9 @@ import { somarDespesasPeriodo } from '../repositories/despesa-repository';
 import {
   buscarStatusPagamentoPorAgendamentos,
   buscarPorAgendamentoMaisRecente as buscarPagamentoMaisRecente,
+  buscarPendentePorAgendamento,
+  atualizarStatus as atualizarStatusPagamento,
+  criarPagamentoPresencial,
 } from '../repositories/pagamento-repository';
 import { exigirPermissao, temPermissao } from './permissao-service';
 import { formatarData, formatarHora } from '../utils/formatadores';
@@ -358,13 +363,90 @@ export async function reagendarAgendamento(
   return toDTO(rowAtualizada, pagamento?.status ?? null);
 }
 
+/**
+ * Opções da conclusão de agendamento (PATCH /:id/concluir).
+ *
+ * `registrarPagamentoPresencial` (flag `registrar_pagamento_presencial: true`
+ * no corpo): SOMENTE recepcionista. Registra, na MESMA transação da conclusão,
+ * a linha de pagamento presencial aprovada — valor NUNCA vem do request, é o
+ * snapshot do preço do serviço do agendamento lido do banco (a recepção não
+ * vê valores, PRD sem acesso financeiro).
+ */
+export interface ConcluirOpcoes {
+  registrarPagamentoPresencial?: boolean;
+}
+
+async function registrarPagamentoPresencialNaConclusao(
+  input: {
+    agendamentoId: string;
+    usuarioId: string;
+    trx: Knex.Transaction;
+  },
+): Promise<void> {
+  const { agendamentoId, usuarioId, trx } = input;
+
+  // Guarda de idempotência/duplicidade: já existe pagamento aprovado para o
+  // agendamento → erro de validação e rollback total (o agendamento NÃO é
+  // concluído). O índice único parcial `uq_pagamento_agendamento_aprovado` é a
+  // proteção estrutural para a corrida; esta checagem dá a mensagem amigável.
+  const maisRecente = await buscarPagamentoMaisRecente(agendamentoId, trx);
+  if (maisRecente?.status === 'aprovado') {
+    throw new ValidationError('Pagamento já registrado para este agendamento');
+  }
+
+  // Cliente já pagou no balcão: cancela o pendente do Mercado Pago na MESMA
+  // transação, para ele não pagar duas vezes (nem concluir com pendente vivo).
+  const pendente = await buscarPendentePorAgendamento(agendamentoId, trx);
+  if (pendente) {
+    await atualizarStatusPagamento(pendente.id, 'cancelado', { trx });
+  }
+
+  // Preço vem do banco (decimal(10,2)); converte para centavos (int da coluna).
+  // Mesma regra do pagamento-service: nunca confiar em valor do request.
+  const servico = await buscarDadosServicoDoAgendamento(agendamentoId, trx);
+  if (!servico) {
+    throw new NotFoundError('Serviço do agendamento não encontrado');
+  }
+  const valorCentavos = Number(paraCentavos(servico.preco));
+
+  try {
+    await criarPagamentoPresencial(
+      {
+        agendamentoId,
+        valorCentavos,
+        registradoPorUsuarioId: usuarioId,
+      },
+      trx,
+    );
+  } catch (error) {
+    // Corrida: outra requisição registrou a aprovação entre a checagem e o
+    // INSERT (23505 do uq_pagamento_agendamento_aprovado). Mensagem amigável,
+    // rollback total — nunca erro 500.
+    if (isUniqueViolation(error)) {
+      throw new ValidationError('Pagamento já registrado para este agendamento');
+    }
+    throw error;
+  }
+}
+
 async function alterarStatusOperacional(
   usuarioId: string,
   role: string,
   id: string,
   destino: 'confirmado' | 'concluido',
+  opcoes: ConcluirOpcoes = {},
 ): Promise<AgendamentoDTO> {
   if (!isRole(role)) {
+    throw new ForbiddenError('Acesso negado');
+  }
+
+  const registrarPagamentoPresencial =
+    destino === 'concluido' && opcoes.registrarPagamentoPresencial === true;
+
+  // Flag de pagamento presencial é EXCLUSIVA da recepcionista (contrato
+  // congelado): qualquer outro papel que a envie → 403 ANTES de qualquer
+  // consulta/persistência (negação por padrão; sem vazar existência do recurso).
+  if (registrarPagamentoPresencial && role !== 'recepcionista') {
     throw new ForbiddenError('Acesso negado');
   }
 
@@ -388,7 +470,20 @@ async function alterarStatusOperacional(
   // 'concluido') remove a despesa vinculada. Se a transação falhar, NADA é
   // persistido — nunca fica agendamento concluído sem despesa correspondente,
   // nem despesa para agendamento não concluído.
+  //
+  // PAGAMENTO PRESENCIAL (decisão da usuária): quando a recepcionista marca
+  // "Sim, o cliente pagou", o registro da linha `presencial`/`aprovado`
+  // também acontece DENTRO desta transação — se qualquer passo falhar, nem o
+  // pagamento nem a conclusão são persistidos.
   await db.transaction(async (trx) => {
+    if (registrarPagamentoPresencial) {
+      await registrarPagamentoPresencialNaConclusao({
+        agendamentoId: id,
+        usuarioId,
+        trx,
+      });
+    }
+
     await atualizarStatus(id, destino, trx);
 
     if (destino === 'concluido') {
@@ -400,7 +495,13 @@ async function alterarStatusOperacional(
     }
   });
 
-  return toDTO({ ...row, status: destino });
+  // Com a flag, o estado do pagamento na resposta é deterministicamente
+  // 'aprovado' (acabamos de inserir a linha). Sem a flag, o campo é omitido
+  // do JSON — comportamento atual preservado.
+  const pagamentoStatus: PagamentoStatus | undefined = registrarPagamentoPresencial
+    ? 'aprovado'
+    : undefined;
+  return toDTO({ ...row, status: destino }, pagamentoStatus);
 }
 
 export async function confirmarAgendamento(
@@ -415,8 +516,9 @@ export async function concluirAgendamento(
   usuarioId: string,
   role: string,
   id: string,
+  opcoes: ConcluirOpcoes = {},
 ): Promise<AgendamentoDTO> {
-  return alterarStatusOperacional(usuarioId, role, id, 'concluido');
+  return alterarStatusOperacional(usuarioId, role, id, 'concluido', opcoes);
 }
 
 export async function reverterConclusaoAgendamento(

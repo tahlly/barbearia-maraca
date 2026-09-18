@@ -44,6 +44,10 @@ import { initBookingWizard } from "../features/bookingWizard.js";
 import { attachPercentMask, attachUppercaseMask } from "../ui/mask.js";
 import { isSenhaForte, SENHA_FORTE_MESSAGE } from "../ui/password.js";
 import { pagamentoBadgeHtml } from "../ui/pagamentoBadge.js";
+import {
+  devePerguntarPagamentoPresencial,
+  opcoesDialogoPagamentoPresencial,
+} from "../ui/concluirPagamento.js";
 import { totalDespesasFiltro } from "../services/despesas.js";
 import {
   atualizarComissoesFuncionario,
@@ -112,6 +116,20 @@ function statusBadge(status: Appointment["status"]): string {
           ? "warning"
           : "neutral";
   return `<span class="badge badge--${variant}">${STATUS_LABEL[status]}</span>`;
+}
+
+/**
+ * Selo financeiro de pagamento exibido no grupo de status (Administração/Recepção).
+ * Apenas o Administrador recebe o selo; a Recepção vê o pagamento na coluna
+ * própria "Pagamento" (indicador leve "Pago"), nunca o status financeiro
+ * detalhado (PRD: recepcionista não tem acesso financeiro). Qualquer outro papel
+ * cai no caminho restrito — o default é o menos privilegiado.
+ */
+function pagamentoBadgePainel(
+  status: Appointment["pagamentoStatus"],
+  isAdmin: boolean,
+): string {
+  return isAdmin ? pagamentoBadgeHtml(status) : "";
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -1108,6 +1126,23 @@ export function renderManage(container: HTMLElement): () => void {
     });
   }
 
+  /**
+   * Re-lê o agendamento pela listagem no momento do clique, seguindo o
+   * precedente dos handlers de REAGENDAR (`data-reagendar-app`) e da linha de
+   * detalhes (`data-row-detail`): `await listAppointments()` + `find` pelo id.
+   * Devolve `null` (com toast) quando o agendamento não existe ou a leitura
+   * falha — o chamador aborta em vez de decidir com estado obsoleto.
+   */
+  async function buscarAgendamentoAtual(id: string): Promise<Appointment | null> {
+    try {
+      const appts = await listAppointments();
+      return appts.find((a) => a.id === id) ?? null;
+    } catch (error) {
+      showToast(errorMessage(error, "Não foi possível carregar o agendamento."), "error");
+      return null;
+    }
+  }
+
   async function handleSetStatus(id: string, status: Appointment["status"]): Promise<void> {
 if (status === "cancelado") {
       const confirmed = await confirmDialog({
@@ -1139,19 +1174,54 @@ if (status === "cancelado") {
       }
       showToast("Presença confirmada.");
     } else if (status === "concluido") {
-      const confirmed = await confirmDialog({
-        title: "Concluir atendimento",
-        message: "Marcar este atendimento como concluído? Essa ação libera o horário como finalizado.",
-        confirmLabel: "Concluir",
-      });
-      if (!confirmed) return;
+// RECEPÇÃO: quando o agendamento ainda NÃO tem pagamento aprovado no
+      // momento do clique, a pergunta "O cliente pagou?" substitui o diálogo
+      // padrão — "Sim" conclui E registra um pagamento presencial aprovado;
+      // "Não" conclui normalmente, sem marcar como pago. Este diálogo é
+      // BLOQUEANTE (`blocking: true`): X/ESC/backdrop não fecham, a única
+      // saída é Sim ou Não (fechar sem resposta equivaleria a concluir sem
+      // registrar o pagamento). Qualquer outro papel, ou pagamento já
+      // aprovado (Mercado Pago/presencial), mantém EXATAMENTE o diálogo e a
+      // chamada atuais (sem flag).
+      let concluirComPagamento = false;
+      if (session.role === "recepcionista") {
+        const app = await buscarAgendamentoAtual(id);
+        if (!app) return;
+        if (devePerguntarPagamentoPresencial(session.role, app.pagamentoStatus)) {
+          const pagou = await confirmDialog(opcoesDialogoPagamentoPresencial());
+          concluirComPagamento = pagou;
+        } else {
+          const confirmed = await confirmDialog({
+            title: "Concluir atendimento",
+            message: "Marcar este atendimento como concluído? Essa ação libera o horário como finalizado.",
+            confirmLabel: "Concluir",
+          });
+          if (!confirmed) return;
+        }
+      } else {
+        const confirmed = await confirmDialog({
+          title: "Concluir atendimento",
+          message: "Marcar este atendimento como concluído? Essa ação libera o horário como finalizado.",
+          confirmLabel: "Concluir",
+        });
+        if (!confirmed) return;
+      }
       try {
-        await concludeAppointment(id);
+        if (concluirComPagamento) {
+          await concludeAppointment(id, { registrarPagamentoPresencial: true });
+          showToast("Atendimento concluído e pagamento registrado como pago.");
+        } else {
+          await concludeAppointment(id);
+          showToast("Atendimento concluído.");
+        }
       } catch (error) {
         showToast(errorMessage(error, "Não foi possível concluir o atendimento."), "error");
+        // Re-renderiza a tabela mesmo em erro: ex.: o backend recusou a flag
+        // porque o pagamento foi aprovado no meio do caminho — a coluna
+        // "Pagamento" passa a refletir o estado real ("Pago").
+        await renderAgendamentos();
         return;
       }
-      showToast("Atendimento concluído.");
     }
     await renderAgendamentos();
   }
@@ -1503,7 +1573,7 @@ if (status === "cancelado") {
           <button type="button" class="modal__close" data-close aria-label="Fechar">${icon("x", 18)}</button>
         </div>
         <div class="modal__body">
-          <div class="detail-status status-badges">${statusBadge(app.status)} ${pagamentoBadgeHtml(app.pagamentoStatus)}</div>
+          <div class="detail-status status-badges">${statusBadge(app.status)} ${pagamentoBadgePainel(app.pagamentoStatus, isAdmin)}</div>
           <dl class="detail-list">
             <div><dt>Cliente</dt><dd>${escapeHtml(app.clienteNome ?? "-")}</dd></div>
             <div><dt>Serviço</dt><dd>${escapeHtml(name)}</dd></div>
