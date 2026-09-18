@@ -75,6 +75,8 @@ import servicoRoutes from './rotas/servico-routes';
 import clienteRoutes from './rotas/cliente-routes';
 import funcionarioRoutes from './rotas/funcionario-routes';
 import agendamentoRoutes from './rotas/agendamento-routes';
+import pagamentoRoutes from './rotas/pagamento-routes';
+import webhookRoutes from './rotas/webhook-routes';
 import horarioRoutes from './rotas/horario-routes';
 import categoriaRoutes from './rotas/categoria-routes';
 import horarioExcecaoRoutes from './rotas/horario-excecao-routes';
@@ -134,6 +136,10 @@ app.use('/api/servicos', servicoRoutes);
 app.use('/api/clientes', clienteRoutes);
 app.use('/api/funcionarios', funcionarioRoutes);
 app.use('/api/agendamentos', agendamentoRoutes);
+// Endpoints de pagamento compartilham o prefixo de agendamentos
+// (POST/GET /api/agendamentos/:id/pagamento). Montagem segura: o
+// `get('/:id')` de agendamento-routes não captura segmento extra `pagamento`.
+app.use('/api/agendamentos', pagamentoRoutes);
 app.use('/api/horarios', horarioRoutes);
 app.use('/api/categorias', categoriaRoutes);
 app.use('/api/permissoes', permissaoRoutes);
@@ -142,6 +148,10 @@ app.use('/api/despesas', despesaRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/financeiro', financeiroRoutes);
 app.use('/api/painel-barbeiro', painelBarbeiroRoutes);
+
+// Webhooks são públicos (sem authenticate) — a segurança vem da assinatura
+// HMAC validada no service. Mantido antes do 404.
+app.use('/api/webhooks', webhookRoutes);
 
 // ── 404 para rotas /api não mapeadas ────────────────────────────────
 app.use('/api/{*path}', (_req: Request, _res: Response, next: NextFunction) => {
