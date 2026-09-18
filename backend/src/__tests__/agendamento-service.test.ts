@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ForbiddenError } from '../errors/ForbiddenError';
+import { NotFoundError } from '../errors/NotFoundError';
 import { ValidationError } from '../errors/ValidationError';
 import {
   criarAgendamento,
   cancelarAgendamento,
+  reagendarAgendamento,
   confirmarAgendamento,
   concluirAgendamento,
   reverterConclusaoAgendamento,
@@ -49,6 +51,7 @@ const criarMock = vi.fn();
 const buscarPorIdMock = vi.fn();
 const listarMock = vi.fn();
 const atualizarStatusMock = vi.fn();
+const atualizarDataHoraMock = vi.fn();
 const buscarClientePorUsuarioIdMock = vi.fn();
 const buscarFuncionarioPorUsuarioIdMock = vi.fn();
 const funcionarioExisteAtivoMock = vi.fn();
@@ -60,11 +63,25 @@ vi.mock('../repositories/agendamento-repository', () => ({
   buscarPorId: (...args: unknown[]) => buscarPorIdMock(...args),
   listar: (...args: unknown[]) => listarMock(...args),
   atualizarStatus: (...args: unknown[]) => atualizarStatusMock(...args),
+  atualizarDataHora: (...args: unknown[]) => atualizarDataHoraMock(...args),
   buscarClientePorUsuarioId: (...args: unknown[]) => buscarClientePorUsuarioIdMock(...args),
   buscarFuncionarioPorUsuarioId: (...args: unknown[]) => buscarFuncionarioPorUsuarioIdMock(...args),
   funcionarioExisteAtivo: (...args: unknown[]) => funcionarioExisteAtivoMock(...args),
   servicoExisteAtivo: (...args: unknown[]) => servicoExisteAtivoMock(...args),
   resumirFaturamento: (...args: unknown[]) => resumirFaturamentoMock(...args),
+}));
+
+// pagamento-repository: funções importadas pelo agendamento-service. O
+// reagendamento preserva o pagamento da MESMA linha e devolve pagamentoStatus
+// no DTO; buscarStatusPagamentoPorAgendamentos entra no factory apenas para o
+// import do service não ficar undefined (não é chamado nestes testes).
+const buscarPagamentoMaisRecenteMock = vi.fn();
+const buscarStatusPagamentoPorAgendamentosMock = vi.fn();
+
+vi.mock('../repositories/pagamento-repository', () => ({
+  buscarPorAgendamentoMaisRecente: (...args: unknown[]) => buscarPagamentoMaisRecenteMock(...args),
+  buscarStatusPagamentoPorAgendamentos: (...args: unknown[]) =>
+    buscarStatusPagamentoPorAgendamentosMock(...args),
 }));
 
 // cliente-repository: buscarClientePorId usado no fluxo staff.
@@ -462,6 +479,189 @@ describe('cancelarAgendamento', () => {
       cancelarAgendamento('user-x', 'fantasma', 'ag-1'),
     ).rejects.toBeInstanceOf(ForbiddenError);
     expect(atualizarStatusMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── reagendarAgendamento ─────────────────────────────────────
+
+function dadosReagendamento(
+  overrides: Partial<{ data: string; hora: string; timezone_offset_minutes?: number | null }> = {},
+) {
+  return {
+    data: diaFuturo(),
+    hora: '14:00',
+    ...overrides,
+  };
+}
+
+describe('reagendarAgendamento', () => {
+  it('cliente dono reagenda com sucesso: nova data/hora E pagamento aprovado preservado', async () => {
+    const novaData = diaFuturo();
+    const novaHora = '14:00';
+    buscarPorIdMock
+      .mockResolvedValueOnce(agendamentoRow({ status: 'pendente' }))
+      .mockResolvedValueOnce(agendamentoRow({ status: 'pendente', data: novaData, hora: novaHora }));
+    buscarClientePorUsuarioIdMock.mockResolvedValue({ id: 'cliente-1', usuario_id: 'user-cliente' });
+    atualizarDataHoraMock.mockResolvedValue(undefined);
+    buscarPagamentoMaisRecenteMock.mockResolvedValue({ status: 'aprovado' });
+
+    const resultado = await reagendarAgendamento(
+      'user-cliente',
+      'cliente',
+      'ag-1',
+      dadosReagendamento({ data: novaData, hora: novaHora }),
+    );
+
+    // Altera SOMENTE data/hora na MESMA linha (stay, não recria linha).
+    expect(atualizarDataHoraMock).toHaveBeenCalledTimes(1);
+    expect(atualizarDataHoraMock).toHaveBeenCalledWith('ag-1', novaData, novaHora);
+    expect(resultado.id).toBe('ag-1');
+    expect(resultado.data).toBe(novaData);
+    expect(resultado.hora).toBe(novaHora);
+    // Status e pagamento permanecem intactos (pagamento não se perde).
+    expect(resultado.status).toBe('pendente');
+    expect(resultado.pagamentoStatus).toBe('aprovado');
+  });
+
+  it('reagendamento sem pagamento mantém pagamentoStatus null (não pago preservado)', async () => {
+    const novaData = diaFuturo();
+    const novaHora = '14:00';
+    buscarPorIdMock
+      .mockResolvedValueOnce(agendamentoRow({ status: 'pendente' }))
+      .mockResolvedValueOnce(agendamentoRow({ status: 'pendente', data: novaData, hora: novaHora }));
+    buscarClientePorUsuarioIdMock.mockResolvedValue({ id: 'cliente-1', usuario_id: 'user-cliente' });
+    atualizarDataHoraMock.mockResolvedValue(undefined);
+    buscarPagamentoMaisRecenteMock.mockResolvedValue(null);
+
+    const resultado = await reagendarAgendamento(
+      'user-cliente',
+      'cliente',
+      'ag-1',
+      dadosReagendamento({ data: novaData, hora: novaHora }),
+    );
+
+    expect(resultado.pagamentoStatus).toBe(null);
+  });
+
+  it('cliente que NÃO é dono → ForbiddenError', async () => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ cliente_id: 'cliente-9', status: 'pendente' }));
+    buscarClientePorUsuarioIdMock.mockResolvedValue({ id: 'cliente-1', usuario_id: 'user-cliente' });
+
+    await expect(
+      reagendarAgendamento('user-cliente', 'cliente', 'ag-1', dadosReagendamento()),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(atualizarDataHoraMock).not.toHaveBeenCalled();
+  });
+
+  it('staff sem permissão agendar_para_cliente (override negado) → ForbiddenError', async () => {
+    listarPermissoesPorUsuariosMock.mockResolvedValue(overridePermissaoNegada('user-recep'));
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ status: 'pendente' }));
+
+    await expect(
+      reagendarAgendamento('user-recep', 'recepcionista', 'ag-1', dadosReagendamento()),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(atualizarDataHoraMock).not.toHaveBeenCalled();
+  });
+
+  it('profissional com permissão reagenda na PRÓPRIA agenda', async () => {
+    const novaData = diaFuturo();
+    const novaHora = '14:00';
+    buscarPorIdMock
+      .mockResolvedValueOnce(agendamentoRow({ status: 'pendente' }))
+      .mockResolvedValueOnce(agendamentoRow({ status: 'pendente', data: novaData, hora: novaHora }));
+    buscarFuncionarioPorUsuarioIdMock.mockResolvedValue({
+      id: 'func-1',
+      usuario_id: 'user-prof',
+      ativo: true,
+    });
+    atualizarDataHoraMock.mockResolvedValue(undefined);
+
+    const resultado = await reagendarAgendamento(
+      'user-prof',
+      'profissional',
+      'ag-1',
+      dadosReagendamento({ data: novaData, hora: novaHora }),
+    );
+
+    expect(resultado.data).toBe(novaData);
+    expect(resultado.hora).toBe(novaHora);
+    expect(atualizarDataHoraMock).toHaveBeenCalledWith('ag-1', novaData, novaHora);
+  });
+
+  it('profissional tenta reagendar agenda de OUTRO funcionário → ForbiddenError', async () => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ funcionario_id: 'func-9', status: 'pendente' }));
+    buscarFuncionarioPorUsuarioIdMock.mockResolvedValue({
+      id: 'func-1',
+      usuario_id: 'user-prof',
+      ativo: true,
+    });
+
+    await expect(
+      reagendarAgendamento('user-prof', 'profissional', 'ag-1', dadosReagendamento()),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(atualizarDataHoraMock).not.toHaveBeenCalled();
+  });
+
+  it('agendamento cancelado não pode ser reagendado → ValidationError', async () => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ status: 'cancelado' }));
+    buscarClientePorUsuarioIdMock.mockResolvedValue({ id: 'cliente-1', usuario_id: 'user-cliente' });
+
+    await expect(
+      reagendarAgendamento('user-cliente', 'cliente', 'ag-1', dadosReagendamento()),
+    ).rejects.toThrow('Agendamento cancelado não pode ser reagendado');
+    expect(atualizarDataHoraMock).not.toHaveBeenCalled();
+  });
+
+  it('agendamento concluído não pode ser reagendado → ValidationError', async () => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ status: 'concluido' }));
+    buscarClientePorUsuarioIdMock.mockResolvedValue({ id: 'cliente-1', usuario_id: 'user-cliente' });
+
+    await expect(
+      reagendarAgendamento('user-cliente', 'cliente', 'ag-1', dadosReagendamento()),
+    ).rejects.toThrow('Agendamento concluído não pode ser reagendado');
+    expect(atualizarDataHoraMock).not.toHaveBeenCalled();
+  });
+
+  it('horário passado → ValidationError', async () => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ status: 'pendente' }));
+    buscarClientePorUsuarioIdMock.mockResolvedValue({ id: 'cliente-1', usuario_id: 'user-cliente' });
+
+    await expect(
+      reagendarAgendamento(
+        'user-cliente',
+        'cliente',
+        'ag-1',
+        dadosReagendamento({ data: '2020-01-01', hora: '10:00' }),
+      ),
+    ).rejects.toThrow('Não é possível agendar em horário passado');
+    expect(atualizarDataHoraMock).not.toHaveBeenCalled();
+  });
+
+  it('violação de unicidade (23505) no update → ValidationError Horário indisponível', async () => {
+    buscarPorIdMock.mockResolvedValue(agendamentoRow({ status: 'pendente' }));
+    buscarClientePorUsuarioIdMock.mockResolvedValue({ id: 'cliente-1', usuario_id: 'user-cliente' });
+    atualizarDataHoraMock.mockRejectedValue({ code: '23505' });
+
+    await expect(
+      reagendarAgendamento('user-cliente', 'cliente', 'ag-1', dadosReagendamento()),
+    ).rejects.toThrow('Horário indisponível');
+    expect(atualizarDataHoraMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('agendamento inexistente → NotFoundError', async () => {
+    buscarPorIdMock.mockResolvedValue(null);
+
+    await expect(
+      reagendarAgendamento('user-cliente', 'cliente', 'ag-1', dadosReagendamento()),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    expect(atualizarDataHoraMock).not.toHaveBeenCalled();
+  });
+
+  it('role inválido → ForbiddenError', async () => {
+    await expect(
+      reagendarAgendamento('user-x', 'fantasma', 'ag-1', dadosReagendamento()),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+    expect(atualizarDataHoraMock).not.toHaveBeenCalled();
   });
 });
 

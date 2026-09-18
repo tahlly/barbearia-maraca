@@ -3,6 +3,7 @@ import {
   buscarPorId,
   listar,
   atualizarStatus,
+  atualizarDataHora,
   buscarClientePorUsuarioId,
   buscarFuncionarioPorUsuarioId,
   funcionarioExisteAtivo,
@@ -19,10 +20,15 @@ import { NotFoundError } from '../errors/NotFoundError';
 import { ValidationError } from '../errors/ValidationError';
 import { buscarClientePorId } from '../repositories/cliente-repository';
 import { somarDespesasPeriodo } from '../repositories/despesa-repository';
+import {
+  buscarStatusPagamentoPorAgendamentos,
+  buscarPorAgendamentoMaisRecente as buscarPagamentoMaisRecente,
+} from '../repositories/pagamento-repository';
 import { exigirPermissao, temPermissao } from './permissao-service';
 import { formatarData, formatarHora } from '../utils/formatadores';
 import { paraCentavos, deCentavos, normalizarDecimal } from '../utils/dinheiro';
 import { validarIntervaloData } from '../utils/validadores';
+import type { PagamentoStatus } from '../dtos/pagamento-dto';
 
 type Role = 'admin' | 'recepcionista' | 'profissional' | 'cliente';
 
@@ -37,7 +43,7 @@ function isRole(value: string): value is Role {
   return value === 'admin' || value === 'recepcionista' || value === 'profissional' || value === 'cliente';
 }
 
-function toDTO(row: AgendamentoRow): AgendamentoDTO {
+function toDTO(row: AgendamentoRow, pagamentoStatus?: PagamentoStatus | null): AgendamentoDTO {
   return {
     id: row.id,
     clienteId: row.cliente_id,
@@ -51,6 +57,10 @@ function toDTO(row: AgendamentoRow): AgendamentoDTO {
     status: row.status,
     observacao: row.observacao,
     criadoEm: row.created_at ?? undefined,
+    // Quando `pagamentoStatus` é undefined (fluxos não relacionados a
+    // pagamento), a chave é omitida pelo JSON.stringify — exatamente o
+    // comportamento aditivo do contrato.
+    pagamentoStatus,
   };
 }
 
@@ -199,7 +209,10 @@ export async function listarAgendamentos(
   }
 
   const rows = await listar(opcoes);
-  return rows.map(toDTO);
+  // Status do pagamento mais recente por agendamento em UM batch (distinctOn),
+  // evitando N+1. Chave sempre presente (null quando não há pagamento).
+  const statusPorAgendamento = await buscarStatusPagamentoPorAgendamentos(rows.map((r) => r.id));
+  return rows.map((row) => toDTO(row, statusPorAgendamento.get(row.id) ?? null));
 }
 
 async function verificarOwnership(
@@ -235,7 +248,8 @@ export async function obterAgendamento(
   }
 
   await verificarOwnership(usuarioId, role, row);
-  return toDTO(row);
+  const pagamento = await buscarPagamentoMaisRecente(id);
+  return toDTO(row, pagamento?.status ?? null);
 }
 
 export async function cancelarAgendamento(
@@ -270,6 +284,78 @@ export async function cancelarAgendamento(
   validarTransicao(row.status, 'cancelado');
   await atualizarStatus(id, 'cancelado');
   return toDTO({ ...row, status: 'cancelado' });
+}
+
+/**
+ * Reagendamento: altera SOMENTE `data` e `hora` da MESMA linha de
+ * `agendamento`. Pagamento, status, serviço, funcionário, observação e
+ * created_at permanecem intactos — o pagamento vinculado ao agendamento
+ * nunca é perdido (diferente do fluxo antigo "cancelar + criar", que gerava
+ * linha nova e fazia o PAGAR reaparecer com risco de cobrança dupla).
+ *
+ * Autorização idêntica a `cancelarAgendamento`:
+ * - cliente: somente os próprios agendamentos;
+ * - recepcionista/admin: exigem a permissão efetiva `agendar_para_cliente`;
+ * - profissional: exige `agendar_para_cliente` E somente a própria agenda.
+ */
+export async function reagendarAgendamento(
+  usuarioId: string,
+  role: string,
+  id: string,
+  dados: { data: string; hora: string; timezone_offset_minutes?: number | null },
+): Promise<AgendamentoDTO> {
+  if (!isRole(role)) {
+    throw new ForbiddenError('Acesso negado');
+  }
+
+  const row = await buscarPorId(id);
+  if (!row) {
+    throw new NotFoundError('Agendamento não encontrado');
+  }
+
+  if (role === 'cliente') {
+    const cliente = await buscarClientePorUsuarioId(usuarioId);
+    if (!cliente || cliente.id !== row.cliente_id) {
+      throw new ForbiddenError('Acesso negado');
+    }
+  } else {
+    await exigirPermissao({ id: usuarioId, role }, 'agendar_para_cliente');
+    if (role === 'profissional') {
+      const funcionario = await buscarFuncionarioPorUsuarioId(usuarioId);
+      if (!funcionario || funcionario.id !== row.funcionario_id) {
+        throw new ForbiddenError('Acesso negado');
+      }
+    }
+  }
+
+  // Reagendamento só faz sentido para agendamentos ainda ativos
+  // (`pendente` ou `confirmado`). Cada caso inválido tem mensagem própria.
+  if (row.status === 'cancelado') {
+    throw new ValidationError('Agendamento cancelado não pode ser reagendado');
+  }
+  if (row.status === 'concluido') {
+    throw new ValidationError('Agendamento concluído não pode ser reagendado');
+  }
+
+  validarDataHora(dados.data, dados.hora, dados.timezone_offset_minutes);
+
+  try {
+    await atualizarDataHora(id, dados.data, dados.hora);
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new ValidationError('Horário indisponível');
+    }
+    throw error;
+  }
+
+  // Re-consulta a linha atualizada para montar o DTO com os dados corretos e
+  // refletir o pagamento mais recente (preservado no reagendamento).
+  const rowAtualizada = await buscarPorId(id);
+  if (!rowAtualizada) {
+    throw new NotFoundError('Agendamento não encontrado');
+  }
+  const pagamento = await buscarPagamentoMaisRecente(id);
+  return toDTO(rowAtualizada, pagamento?.status ?? null);
 }
 
 async function alterarStatusOperacional(

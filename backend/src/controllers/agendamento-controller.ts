@@ -5,6 +5,7 @@ import {
   listarAgendamentos,
   obterAgendamento,
   cancelarAgendamento,
+  reagendarAgendamento,
   confirmarAgendamento,
   concluirAgendamento,
   reverterConclusaoAgendamento,
@@ -30,6 +31,14 @@ const criarSchema = z.object({
 const listarSchema = z.object({
   data: z.string().optional(),
   status: z.enum(['pendente', 'confirmado', 'cancelado', 'concluido']).optional(),
+});
+
+// Reagendamento altera somente data/hora; timezone_offset_minutes segue o
+// mesmo contrato de criarSchema (offset do navegador para checagem de passado).
+const reagendarSchema = z.object({
+  data: z.string(),
+  hora: z.string(),
+  timezone_offset_minutes: z.number().int().min(-840).max(840).nullable().optional(),
 });
 
 const faturamentoSchema = z.object({
@@ -72,6 +81,14 @@ export async function cancelarHandler(req: Request, res: Response): Promise<void
   const user = exigirUsuario(req);
   const id = idSchema.parse(req.params.id);
   const agendamento = await cancelarAgendamento(user.id, user.role, id);
+  res.json(agendamento);
+}
+
+export async function reagendarHandler(req: Request, res: Response): Promise<void> {
+  const user = exigirUsuario(req);
+  const id = idSchema.parse(req.params.id);
+  const dados = reagendarSchema.parse(req.body);
+  const agendamento = await reagendarAgendamento(user.id, user.role, id, dados);
   res.json(agendamento);
 }
 

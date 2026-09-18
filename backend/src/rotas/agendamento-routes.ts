@@ -6,6 +6,7 @@ import {
   listarHandler,
   obterHandler,
   cancelarHandler,
+  reagendarHandler,
   confirmarHandler,
   concluirHandler,
   reverterHandler,
@@ -37,6 +38,11 @@ const agendamentoRoutes = Router();
  *           $ref: '#/components/schemas/AgendamentoStatus'
  *         observacao: { type: string, nullable: true }
  *         criadoEm: { type: string }
+ *         pagamentoStatus:
+ *           description: Status do pagamento mais recente do agendamento (aditivo do experimento de pagamento). Presente em listar/obter; null quando não existe.
+ *           nullable: true
+ *           allOf:
+ *             - $ref: '#/components/schemas/PagamentoStatus'
  *     CreateAgendamentoRequest:
  *       type: object
  *       required: [funcionario_id, servico_id, data, hora]
@@ -196,6 +202,46 @@ const agendamentoRoutes = Router();
  *       '403':
  *         $ref: '#/components/responses/Erro403'
  *
+ * /api/agendamentos/{id}/reagendar:
+ *   patch:
+ *     tags: [Agendamentos]
+ *     summary: Reagenda um agendamento (altera SOMENTE data/hora da MESMA linha; status, pagamento e demais dados permanecem intactos)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [data, hora]
+ *             properties:
+ *               data: { type: string, format: date }
+ *               hora: { type: string, example: '09:00' }
+ *               timezone_offset_minutes:
+ *                 type: integer
+ *                 minimum: -840
+ *                 maximum: 840
+ *                 nullable: true
+ *                 description: Offset do navegador em minutos (ex.: -180 para UTC-3); usado na checagem de horario passado.
+ *     responses:
+ *       '200':
+ *         description: Agendamento reagendado (mesma linha, mesmo pagamento)
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Agendamento' }
+ *       '400':
+ *         $ref: '#/components/responses/Erro400'
+ *       '403':
+ *         $ref: '#/components/responses/Erro403'
+ *       '404':
+ *         $ref: '#/components/responses/Erro404'
+ *
  * /api/agendamentos/faturamento:
  *   get:
  *     tags: [Agendamentos]
@@ -261,6 +307,7 @@ agendamentoRoutes.get(
 );
 agendamentoRoutes.get('/:id', authenticate, obterHandler);
 agendamentoRoutes.patch('/:id/cancelar', authenticate, cancelarHandler);
+agendamentoRoutes.patch('/:id/reagendar', authenticate, reagendarHandler);
 agendamentoRoutes.patch(
   '/:id/confirmar',
   authorize('profissional', 'recepcionista', 'admin'),

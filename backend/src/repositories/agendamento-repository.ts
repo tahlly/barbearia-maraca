@@ -116,6 +116,26 @@ export async function criar(dados: {
   return row;
 }
 
+/**
+ * Dados mínimos do serviço vinculado a um agendamento (para criar o pagamento
+ * sem confiar no cliente, com o preço vindo do banco).
+ */
+export interface DadosServicoDoAgendamento {
+  nome: string;
+  preco: string;
+}
+
+export async function buscarDadosServicoDoAgendamento(
+  agendamentoId: string,
+): Promise<DadosServicoDoAgendamento | null> {
+  const row = await db('servico as s')
+    .join('agendamento as a', 'a.servico_id', 's.id')
+    .select('s.nome', 's.preco')
+    .where('a.id', agendamentoId)
+    .first<unknown>();
+  return row as DadosServicoDoAgendamento | null;
+}
+
 export async function buscarPorId(id: string): Promise<AgendamentoRow | null> {
   const rows = await baseQuery().where('a.id', id);
   const row = rows[0];
@@ -161,6 +181,16 @@ export async function atualizarStatus(
 ): Promise<void> {
   const base = trx ?? db;
   await base('agendamento').where('id', id).update({ status });
+}
+
+/**
+ * Reagendamento: altera SOMENTE `data` e `hora` da MESMA linha de
+ * `agendamento`. Nada mais é tocado — nem status, nem pagamento, nem serviço,
+ * nem funcionário, nem observação, nem created_at. A violação do índice único
+ * parcial `uq_agendamento_funcionario_data_hora` (23505) é tratada na service.
+ */
+export async function atualizarDataHora(id: string, data: string, hora: string): Promise<void> {
+  await db('agendamento').where('id', id).update({ data, hora });
 }
 
 /**
